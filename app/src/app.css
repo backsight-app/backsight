@@ -1,0 +1,224 @@
+/* Backsight design tokens. Brand reference: docs/design/brand-and-voice.md */
+:root {
+  color-scheme: dark;
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+
+  --bg: #0b0f1a;
+  --bg-elev: #10162a;
+  --bg-card: #141b30;
+  --bg-input: #0f1526;
+  --bg-hover: #1e2843;
+  --bg-pop: #161e36;
+  --border: #212b45;
+  --border-strong: #2e3a5c;
+
+  --text: #e9edf7;
+  --text-dim: #a3adc6;
+  --text-faint: #6f7a96;
+
+  --accent: #7c5cff;
+  --accent-2: #38d6f0;
+  --accent-grad: linear-gradient(135deg, #8b5cf6 0%, #6366f1 50%, #22d3ee 100%);
+  --accent-soft: rgb(124 92 255 / 0.14);
+  --focus: rgb(124 92 255 / 0.45);
+  --rec: #ff4d6d;
+  --ok: #34d399;
+  --warn: #fbbf24;
+
+  --radius: 14px;
+  --radius-sm: 9px;
+  --shadow: 0 18px 48px rgb(0 0 0 / 0.5), 0 2px 8px rgb(0 0 0 / 0.3);
+
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  overflow: hidden;
+  user-select: none;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0;
+}
+
+.muted {
+  color: var(--text-dim);
+}
+
+.card {
+  padding: 6px 22px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 0 6px;
+}
+
+.card > header h2 {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.card > header p {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.stack {
+  display: grid;
+  gap: 18px;
+}
+
+.notice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgb(251 191 36 / 0.3);
+  background: rgb(251 191 36 / 0.08);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.notice.info {
+  border-color: rgb(56 214 240 / 0.3);
+  background: rgb(56 214 240 / 0.07);
+}
+
+.notice :is(svg) {
+  margin-top: 1px;
+  color: var(--warn);
+}
+
+.notice.info :is(svg) {
+  color: var(--accent-2);
+}
+
+/* Number and text inputs */
+.number,
+.text-input {
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-input);
+}
+
+.number:focus-within,
+.text-input:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+.number input,
+.text-input input {
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.number input {
+  width: 96px;
+  padding: 0 4px 0 12px;
+}
+
+.text-input input {
+  width: 300px;
+  padding: 0 12px;
+}
+
+.text-input input::placeholder {
+  color: var(--text-faint);
+}
+
+.unit {
+  padding: 0 12px 0 2px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+/* Range slider */
+input[type="range"] {
+  width: 260px;
+  accent-color: var(--accent);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background: var(--border-strong) padding-box;
+}
+
+/* Plain outlined button used across pages (Home notices, General, Library). */
+.btn {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  font: 600 13px/32px var(--font);
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.btn:hover {
+  background: var(--bg-hover);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+}

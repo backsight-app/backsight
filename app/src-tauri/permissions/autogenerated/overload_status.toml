@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-overload-status"
+description = "Enables the overload_status command without any pre-configured scope."
+commands.allow = ["overload_status"]
+
+[[permission]]
+identifier = "deny-overload-status"
+description = "Denies the overload_status command without any pre-configured scope."
+commands.deny = ["overload_status"]

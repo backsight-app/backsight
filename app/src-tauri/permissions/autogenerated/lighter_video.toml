@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-lighter-video"
+description = "Enables the lighter_video command without any pre-configured scope."
+commands.allow = ["lighter_video"]
+
+[[permission]]
+identifier = "deny-lighter-video"
+description = "Denies the lighter_video command without any pre-configured scope."
+commands.deny = ["lighter_video"]

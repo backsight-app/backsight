@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hud-poll"
+description = "Enables the hud_poll command without any pre-configured scope."
+commands.allow = ["hud_poll"]
+
+[[permission]]
+identifier = "deny-hud-poll"
+description = "Denies the hud_poll command without any pre-configured scope."
+commands.deny = ["hud_poll"]

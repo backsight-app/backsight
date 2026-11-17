@@ -1,0 +1,87 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Backsight",
+  "version": "0.1.0",
+  "identifier": "app.backsight.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Backsight",
+        "width": 1180,
+        "height": 700,
+        "minWidth": 980,
+        "minHeight": 640,
+        "center": true,
+        "create": false,
+        "backgroundColor": "#0B0F1A"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data: blob: asset: http://asset.localhost; media-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'",
+      "assetProtocol": {
+        "enable": true
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "category": "Video",
+    "shortDescription": "Instant replay, recording and screenshots for Windows.",
+    "copyright": "Copyright (C) 2026 Backsight contributors",
+    "license": "GPL-3.0-or-later",
+    "homepage": "https://github.com/backsight-app/backsight",
+    "icon": ["icons/desktop/32x32.png", "icons/desktop/128x128.png", "icons/desktop/128x128@2x.png", "icons/desktop/icon.ico"],
+    "resources": {
+      "../../third_party/ffmpeg/bin/*.dll": "",
+      "../../LICENSE": "LICENSE.txt",
+      "../../THIRD-PARTY-NOTICES.txt": "THIRD-PARTY-NOTICES.txt",
+      "../../third_party/ffmpeg/BUILDINFO.txt": "FFMPEG-BUILDINFO.txt",
+      "windows/FFMPEG-SOURCE.txt": "FFMPEG-SOURCE.txt",
+      "../../third_party/ffmpeg/licenses/amf/LICENSE.txt": "LICENSE-amf-LICENSE.txt",
+      "../../third_party/ffmpeg/licenses/aom/LICENSE": "LICENSE-aom-LICENSE.txt",
+      "../../third_party/ffmpeg/licenses/aom/PATENTS": "LICENSE-aom-PATENTS.txt",
+      "../../third_party/ffmpeg/licenses/dav1d/COPYING": "LICENSE-dav1d-COPYING.txt",
+      "../../third_party/ffmpeg/licenses/ffmpeg/COPYING.GPLv2": "LICENSE-ffmpeg-COPYING-GPLv2.txt",
+      "../../third_party/ffmpeg/licenses/ffmpeg/COPYING.GPLv3": "LICENSE-ffmpeg-COPYING-GPLv3.txt",
+      "../../third_party/ffmpeg/licenses/ffmpeg/COPYING.LGPLv2.1": "LICENSE-ffmpeg-COPYING-LGPLv2-1.txt",
+      "../../third_party/ffmpeg/licenses/ffmpeg/COPYING.LGPLv3": "LICENSE-ffmpeg-COPYING-LGPLv3.txt",
+      "../../third_party/ffmpeg/licenses/ffmpeg/LICENSE.md": "LICENSE-ffmpeg-LICENSE.txt",
+      "../../third_party/ffmpeg/licenses/libvpl/LICENSE": "LICENSE-libvpl-LICENSE.txt",
+      "../../third_party/ffmpeg/licenses/libwebp/COPYING": "LICENSE-libwebp-COPYING.txt",
+      "../../third_party/ffmpeg/licenses/libwebp/PATENTS": "LICENSE-libwebp-PATENTS.txt",
+      "../../third_party/ffmpeg/licenses/mingw-w64/copyright": "LICENSE-mingw-w64-copyright.txt",
+      "../../third_party/ffmpeg/licenses/nv-codec-headers/LICENSE.txt": "LICENSE-nv-codec-headers-LICENSE.txt",
+      "../../third_party/ffmpeg/licenses/opus/COPYING": "LICENSE-opus-COPYING.txt",
+      "../../third_party/ffmpeg/licenses/svt-av1/LICENSE.md": "LICENSE-svt-av1-LICENSE.txt",
+      "../../third_party/ffmpeg/licenses/svt-av1/PATENTS.md": "LICENSE-svt-av1-PATENTS.txt",
+      "../../third_party/ffmpeg/licenses/x264/COPYING": "LICENSE-x264-COPYING.txt",
+      "../../third_party/ffmpeg/licenses/x265/COPYING": "LICENSE-x265-COPYING.txt",
+      "../../third_party/ffmpeg/licenses/zlib/LICENSE": "LICENSE-zlib-LICENSE.txt"
+    },
+    "windows": {
+      "webviewInstallMode": { "type": "embedBootstrapper", "silent": true },
+      "nsis": {
+        "installMode": "currentUser",
+        "template": "windows/installer.nsi",
+        "installerHooks": "windows/hooks.nsh",
+        "installerIcon": "icons/desktop/icon.ico",
+        "languages": ["English"]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkxODUzODBCRUE3RjczNkIKUldScmMzL3FDemlGa1JMbS9ya0VlTVFVVnl2dnkxTUowRG9tTldvTXphbDRwVmJpSDlnSFhyK1QK",
+      "endpoints": ["https://github.com/backsight-app/backsight/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
+    }
+  }
+}

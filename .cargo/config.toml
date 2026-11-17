@@ -1,0 +1,6 @@
+# FFmpeg dev files fetched by scripts/fetch-ffmpeg.ps1, read by rusty_ffmpeg's build script.
+# LIBCLANG_PATH (for bindgen) is per machine; set it in your shell, see docs/DEVELOPMENT.md.
+[env]
+FFMPEG_INCLUDE_DIR = { value = "third_party/ffmpeg/include", relative = true }
+FFMPEG_LIBS_DIR = { value = "third_party/ffmpeg/lib", relative = true }
+FFMPEG_LINK_MODE = "dynamic"

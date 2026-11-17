@@ -1,0 +1,399 @@
+name: FFmpeg slim build
+
+# Cross-compiles Backsight's slim FFmpeg (win64, GPL, shared) with mingw-w64, packages it with
+# its corresponding sources (every pinned archive, the two git checkouts and this file, which
+# holds the build steps and patches), and checks it on Windows. Publishing as a prerelease asset
+# needs both jobs to pass and a `tag` (manual run) or "[release]" in the pushed commit message;
+# then pin the asset's SHA-256 in scripts/fetch-ffmpeg.ps1.
+on:
+  push:
+    branches: [ffmpeg-slim]
+    paths: [.github/workflows/ffmpeg.yml, scripts/fetch-ffmpeg.ps1, scripts/fetch-ffmpeg.check.ps1]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish under (empty = artifacts only)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  FFMPEG_VERSION: 8.1.3
+  NAME: ffmpeg-8.1.3-backsight-slim-win64-gpl-shared
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7 # only this workflow, which ships with the sources as the build steps
+        with:
+          sparse-checkout: .github/workflows/ffmpeg.yml
+          sparse-checkout-cone-mode: false
+      - name: Install the mingw-w64 toolchain
+        run: |
+          sudo apt-get update -q
+          # Win32 GCC threads. Libraries that use pthreads link the static MinGW archive below.
+          sudo apt-get install -y -q --no-install-recommends \
+            gcc-mingw-w64-x86-64-win32 g++-mingw-w64-x86-64-win32 binutils-mingw-w64-x86-64 \
+            mingw-w64-x86-64-dev nasm meson ninja-build cmake pkg-config autoconf automake libtool make
+          x86_64-w64-mingw32-gcc -v 2>&1 | grep -E "Thread model|gcc version"
+          P=$RUNNER_TEMP/prefix; S=$RUNNER_TEMP/src
+          mkdir -p "$P/lib/pkgconfig" "$P/include" "$S/dl" "$RUNNER_TEMP/licenses"
+          # The MinGW runtime pieces linked into the DLLs (winpthreads, CRT startup) come from Ubuntu's
+          # mingw-w64 source package: ship its exact source with the others.
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get update -q
+          (cd "$S/dl" && apt-get source --download-only -q "mingw-w64=$(dpkg-query -W -f='${Version}' mingw-w64-x86-64-dev)")
+          ls "$S/dl"/mingw-w64_*.dsc
+          {
+            echo "P=$P"; echo "S=$S"; echo "L=$RUNNER_TEMP/licenses"
+            echo "PKG_CONFIG_LIBDIR=$P/lib/pkgconfig"; echo "PKG_CONFIG_PATH="
+            echo "CFLAGS=-O2 -pipe"; echo "CXXFLAGS=-O2 -pipe"
+            echo "TC=$RUNNER_TEMP/mingw.cmake"
+          } >> "$GITHUB_ENV"
+          cat > "$RUNNER_TEMP/mingw.cmake" <<EOF
+          set(CMAKE_SYSTEM_NAME Windows)
+          set(CMAKE_SYSTEM_PROCESSOR x86_64)
+          set(CMAKE_C_COMPILER x86_64-w64-mingw32-gcc)
+          set(CMAKE_CXX_COMPILER x86_64-w64-mingw32-g++)
+          set(CMAKE_RC_COMPILER x86_64-w64-mingw32-windres)
+          set(CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32 $P)
+          set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+          EOF
+          cat > "$RUNNER_TEMP/fetch.sh" <<'EOF'
+          set -euo pipefail
+          # fetch <dir> <url> <sha256>: download, verify, unpack into $S/<dir>
+          fetch() {
+            curl -fsSL --retry 3 -o "$S/dl/$1" "$2"
+            echo "$3  $S/dl/$1" | sha256sum -c -
+            mkdir -p "$S/$1"; tar -xf "$S/dl/$1" -C "$S/$1" --strip-components=1
+          }
+          # gitget <dir> <repo> <commit>: shallow checkout of exactly that commit
+          gitget() {
+            git init -q "$S/$1"; git -C "$S/$1" fetch -q --depth 1 "$2" "$3"; git -C "$S/$1" checkout -q FETCH_HEAD
+            test "$(git -C "$S/$1" rev-parse HEAD)" = "$3"
+          }
+          cmk() { # cmk <dir> <source subdir> [cmake args]: static release build and install
+            local d=$1 src=$2; shift 2
+            cmake -S "$S/$d/$src" -B "$S/$d/build" -G Ninja -DCMAKE_TOOLCHAIN_FILE="$TC" \
+              -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$P" -DCMAKE_INSTALL_LIBDIR=lib \
+              -DBUILD_SHARED_LIBS=OFF "$@"
+            ninja -C "$S/$d/build" install
+          }
+          EOF
+
+      - name: zlib 1.3.1
+        run: |
+          . "$RUNNER_TEMP/fetch.sh"
+          fetch zlib https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz 9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
+          make -C "$S/zlib" -f win32/Makefile.gcc -j"$(nproc)" PREFIX=x86_64-w64-mingw32- libz.a
+          cp "$S/zlib/libz.a" "$P/lib/"; cp "$S/zlib"/zlib.h "$S/zlib"/zconf.h "$P/include/"
+          mkdir -p "$L/zlib"; cp "$S/zlib/LICENSE" "$L/zlib/"
+
+      - name: x264 (stable, 8-bit)
+        run: |
+          . "$RUNNER_TEMP/fetch.sh"
+          gitget x264 https://code.videolan.org/videolan/x264.git b35605ace3ddf7c1a5d67a2eb553f034aef41d55
+          cd "$S/x264"
+          ./configure --host=x86_64-w64-mingw32 --cross-prefix=x86_64-w64-mingw32- --prefix="$P" \
+            --enable-static --disable-cli --enable-pic --bit-depth=8 --disable-lavf --disable-swscale --disable-ffms --disable-gpac --disable-lsmash
+          make -j"$(nproc)" && make install
+          mkdir -p "$L/x264"; cp COPYING "$L/x264/"
+
+      - name: x265 4.1 (8-bit and Main 10)
+        run: |
+          . "$RUNNER_TEMP/fetch.sh"
+          fetch x265 https://bitbucket.org/multicoreware/x265_git/downloads/x265_4.1.tar.gz a31699c6a89806b74b0151e5e6a7df65de4b49050482fe5ebf8a4379d7af8f29
+          # Use x265's multilib layout so FFmpeg can open both Main and Main 10.
+          cmake -S "$S/x265/source" -B "$S/x265/build-10bit" -G Ninja -DCMAKE_TOOLCHAIN_FILE="$TC" \
+            -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DENABLE_ASSEMBLY=ON \
+            -DHIGH_BIT_DEPTH=ON -DEXPORT_C_API=OFF
+          ninja -C "$S/x265/build-10bit" x265-static
+          cmk x265 source -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DENABLE_ASSEMBLY=ON -DEXTRA_LIB=x265_main10.a -DLINKED_10BIT=ON
+          (
+            cd "$P/lib"
+            x86_64-w64-mingw32-ar -M <<EOF
+          CREATE libx265-multilib.a
+          ADDLIB $S/x265/build/libx265.a
+          ADDLIB $S/x265/build-10bit/libx265.a
+          SAVE
+          END
+          EOF
+            mv libx265-multilib.a libx265.a
+          )
+          sed -i -e 's/ -lgcc_s//g' -e 's/ -lgcc//g' -e 's/-lstdc++/-l:libstdc++.a/g' "$P/lib/pkgconfig/x265.pc"
+          cat "$P/lib/pkgconfig/x265.pc"
+          mkdir -p "$L/x265"; cp "$S/x265/COPYING" "$L/x265/"
+
+      - name: SVT-AV1 3.1.2
+        run: |
+          . "$RUNNER_TEMP/fetch.sh"
+          gitget svtav1 https://gitlab.com/AOMediaCodec/SVT-AV1.git b33dcc56cc64fcb3b3569094af8ab1d0d81ab4c1
+          cmk svtav1 . -DBUILD_APPS=OFF -DBUILD_TESTING=OFF -DSVT_AV1_LTO=OFF
+          cat "$P/lib/pkgconfig/SvtAv1Enc.pc"
+          mkdir -p "$L/svt-av1"; cp "$S/svtav1/LICENSE.md" "$S/svtav1/PATENTS.md" "$L/svt-av1/"
+
+      - name: libaom 3.15.3 (encoder only, 8-bit)
+        run: |
+          . "$RUNNER_TEMP/fetch.sh"
+          fetch aom https://storage.googleapis.com/aom-releases/libaom-3.15.3.tar.gz 12c01dc731ed7b5a999e28120b45bf58a002ba3435a4ba2cfbc1e084a27c9c04
+          cmk aom . -DAOM_TARGET_CPU=x86_64 -DCONFIG_AV1_DECODER=0 -DCONFIG_AV1_HIGHBITDEPTH=0 \
+            -DENABLE_DOCS=OFF -DENABLE_EXAMPLES=OFF -DENABLE_TESTS=OFF -DENABLE_TESTDATA=OFF -DENABLE_TOOLS=OFF
+          mkdir -p "$L/aom"; cp "$S/aom/LICENSE" "$S/aom/PATENTS" "$L/aom/"
+
+      - name: dav1d 1.5.2 (AV1 decoder for library thumbnails)
+        run: |
+          . "$RUNNER_TEMP/fetch.sh"
+          fetch dav1d https://downloads.videolan.org/pub/videolan/dav1d/1.5.2/dav1d-1.5.2.tar.xz cce88ebcffd3f790bde49caa75f97b9cc2dd54ca8f57e38c62707266ec71bc4e
+          cd "$S/dav1d"
+          meson setup build --cross-file package/crossfiles/x86_64-w64-mingw32.meson --prefix="$P" --libdir=lib \
+            --buildtype=release --default-library=static -Denable_tools=false -Denable_tests=false
+          ninja -C build install
+          mkdir -p "$L/dav1d"; cp COPYING "$L/dav1d/"
+
+      - name: Opus 1.5.2
+        run: |
+          . "$RUNNER_TEMP/fetch.sh"
+          fetch opus https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz 65c1d2f78b9f2fb20082c38cbe47c951ad5839345876e46941612ee87f9a7ce1
+          cd "$S/opus"
+          ./configure --host=x86_64-w64-mingw32 --prefix="$P" --enable-static --disable-shared --disable-doc --disable-extra-programs
+          make -j"$(nproc)" && make install
+          mkdir -p "$L/opus"; cp COPYING "$L/opus/"
+
+      - name: libwebp 1.6.0
+        run: |
+          . "$RUNNER_TEMP/fetch.sh"
+          fetch webp https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564
+          cmk webp . -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF -DWEBP_BUILD_GIF2WEBP=OFF \
+            -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF -DWEBP_BUILD_WEBPINFO=OFF -DWEBP_BUILD_WEBPMUX=OFF -DWEBP_BUILD_EXTRAS=OFF
+          mkdir -p "$L/libwebp"; cp "$S/webp/COPYING" "$S/webp/PATENTS" "$L/libwebp/"
+
+      - name: NVENC, AMF and oneVPL (Quick Sync) headers and dispatcher
+        run: |
+          . "$RUNNER_TEMP/fetch.sh"
+          # AV1 UHQ requires SDK 13.0 (NVIDIA driver 570 or newer).
+          fetch nvcodec-13.0.19.0 https://github.com/FFmpeg/nv-codec-headers/releases/download/n13.0.19.0/nv-codec-headers-13.0.19.0.tar.gz 13da39edb3a40ed9713ae390ca89faa2f1202c9dda869ef306a8d4383e242bee
+          make -C "$S/nvcodec-13.0.19.0" PREFIX="$P" install
+          mkdir -p "$L/nv-codec-headers"
+          head -n 30 "$S/nvcodec-13.0.19.0/include/ffnvcodec/nvEncodeAPI.h" > "$L/nv-codec-headers/LICENSE.txt"
+
+          fetch amf https://github.com/GPUOpen-LibrariesAndSDKs/AMF/releases/download/v1.4.36/AMF-headers-v1.4.36.tar.gz ec07ee21b820a73f5bae224e92fd3c492f52732d4885f0637f48189afdd87564
+          core=$(dirname "$(find "$S/amf" -path '*core/Factory.h' | head -n 1)")
+          cp -r "$(dirname "$core")" "$P/include/AMF"
+          mkdir -p "$L/amf"; find "$S/amf" -iname 'LICENSE*' -exec cp {} "$L/amf/" \;
+          [ -n "$(ls "$L/amf")" ] || head -n 32 "$core/Factory.h" > "$L/amf/LICENSE.txt"
+
+          fetch vpl https://github.com/intel/libvpl/archive/refs/tags/v2.15.0.tar.gz 7218c3b8206b123204c3827ce0cf7c008d5c693c1f58ab461958d05fe6f847b3
+          cmk vpl . -DBUILD_TESTS=OFF -DBUILD_EXAMPLES=OFF -DINSTALL_EXAMPLES=OFF -DBUILD_TOOLS=OFF -DBUILD_EXPERIMENTAL=OFF -DENABLE_WARNING_AS_ERROR=OFF
+          # The static oneVPL dispatcher uses C++, which its pkg-config file omits.
+          sed -i 's/^Libs.private:.*/& -l:libstdc++.a/' "$P/lib/pkgconfig/vpl.pc"
+          cat "$P/lib/pkgconfig/vpl.pc"
+          mkdir -p "$L/libvpl"; cp "$S/vpl/LICENSE" "$L/libvpl/"
+
+      - name: Static library sizes (what each adds at most)
+        run: |
+          cd "$P/lib"
+          for a in libx264.a libx265.a libSvtAv1Enc.a libaom.a libdav1d.a libopus.a libwebp.a libsharpyuv.a libvpl.a libz.a; do
+            [ -f "$a" ] && printf '%-18s %8d KB code+data\n' "$a" $(( $(x86_64-w64-mingw32-size -t "$a" | tail -n 1 | awk '{print $1+$2}') / 1024 ))
+          done
+
+      - name: Configure FFmpeg
+        run: |
+          . "$RUNNER_TEMP/fetch.sh"
+          fetch ffmpeg "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" 7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3
+          cd "$S/ffmpeg"
+          # FFmpeg 8.1.3's metadata filter uses AVIO but omits avformat from the DLL link.
+          sed -i '/^enabled movie_filter/i enabled metadata_filter \&\& prepend avfilter_deps "avformat"' configure
+          # AOM and WebP advertise pthreads even with the Win32 compiler.
+          sed -i 's/-lpthread/-l:libwinpthread.a/g' "$P"/lib/pkgconfig/{aom,libwebp,libsharpyuv}.pc
+          mkdir -p "$L/mingw-w64"
+          cp /usr/share/doc/mingw-w64-x86-64-dev/copyright "$L/mingw-w64/"
+          # What Backsight uses: content/encoders.json's encoders and muxers, the decoders and
+          # demuxers behind library probes, thumbnails, previews, remux and recovery, and the
+          # few filters, devices and formats the tests run through ffmpeg.exe / ffprobe.exe.
+          enc=h264_nvenc,hevc_nvenc,av1_nvenc,h264_amf,hevc_amf,av1_amf,h264_qsv,hevc_qsv,av1_qsv
+          enc=$enc,libx264,libx265,libsvtav1,libaom_av1,aac,libopus,flac,alac,pcm_s16le,pcm_s24le,pcm_f32le
+          enc=$enc,png,mjpeg,libwebp,rawvideo,wrapped_avframe,srt,subrip
+          dec=h264,hevc,libdav1d,aac,opus,flac,alac,pcm_s16le,pcm_s24le,pcm_f32le,png,mjpeg,webp
+          dec=$dec,rawvideo,wrapped_avframe,srt,subrip
+          # Other apps' files in the Library: VP8/VP9 (WebM), MPEG-4 Part 2, MPEG-1/2. Native decoders, about 1 MB.
+          dec=$dec,vp8,vp9,mpeg4,mpeg1video,mpeg2video
+          mux=mp4,mov,matroska,webm,mpegts,flv,null,rawvideo,image2
+          demux=mov,matroska,mpegts,flv,image2,image_png_pipe,image_jpeg_pipe,image_webp_pipe,srt
+          parse=h264,hevc,av1,aac,opus,flac,mjpeg,png,webp,vp8,vp9,mpeg4video,mpegvideo
+          filt=format,aformat,scale,aresample,null,anull,copy
+          filt=$filt,trim,atrim,setpts,asetpts,fps,crop,transpose,hflip,vflip,split,asplit
+          filt=$filt,color,signalstats,metadata,silencedetect
+          # Colour and quality tests (colour.rs, quality.rs); without libvmaf they score PSNR and SSIM only.
+          filt=$filt,testsrc2,gradients,noise,concat,settb,select,psnr,ssim
+          ./configure --prefix="$RUNNER_TEMP/out" --target-os=mingw32 --arch=x86_64 \
+            --cross-prefix=x86_64-w64-mingw32- --pkg-config=pkg-config --pkg-config-flags=--static \
+            --extra-cflags="-I$P/include" --extra-ldflags="-L$P/lib -static-libgcc -static-libstdc++" \
+            --enable-gpl --enable-shared --disable-static --disable-debug --disable-doc --disable-network \
+            --disable-ffplay --disable-autodetect --enable-w32threads --enable-zlib \
+            --enable-d3d11va --enable-dxva2 --enable-ffnvcodec --enable-nvenc --enable-amf --enable-libvpl \
+            --enable-libx264 --enable-libx265 --enable-libsvtav1 --enable-libaom --enable-libdav1d \
+            --enable-libopus --enable-libwebp \
+            --disable-everything --enable-bsfs \
+            --enable-encoder=$enc --enable-decoder=$dec --enable-muxer=$mux --enable-demuxer=$demux \
+            --enable-parser=$parse --enable-filter=$filt --enable-protocol=file,pipe --enable-indev=lavfi \
+            || { tail -n 80 ffbuild/config.log; exit 1; }
+          require_config() {
+            local suffix=$1 names=$2 component key
+            for component in ${names//,/ }; do
+              key="${component^^}${suffix}"
+              grep -Fxq "CONFIG_$key=yes" ffbuild/config.mak || { echo "::error::missing $key"; return 1; }
+            done
+          }
+          require_config _ENCODER "$enc"
+          require_config _DECODER "$dec"
+          require_config _MUXER "$mux"
+          require_config _DEMUXER "$demux"
+          require_config _PARSER "$parse"
+          require_config _FILTER "$filt"
+          require_config _PROTOCOL file,pipe
+          require_config _INDEV lavfi
+          require_config "" d3d11va,dxva2,nvenc,amf,qsv,libvpl
+          grep -Fxq "HAVE_W32THREADS=yes" ffbuild/config.mak
+
+      - name: Build FFmpeg
+        run: |
+          cd "$S/ffmpeg"
+          make -j"$(nproc)"
+          make install
+          cd "$RUNNER_TEMP/out"
+          mv bin/*.lib lib/
+          for lib in avcodec avdevice avfilter avformat avutil swresample swscale; do
+            test -s "lib/$lib.lib"
+            test -s "include/lib$lib/$lib.h"
+          done
+          test -s bin/ffmpeg.exe
+          test -s bin/ffprobe.exe
+          x86_64-w64-mingw32-strip --strip-unneeded bin/*.dll bin/*.exe
+          rm -rf share lib/pkgconfig
+
+      - name: Check the DLLs need nothing beyond Windows
+        run: |
+          cd "$RUNNER_TEMP/out/bin"
+          bad=0
+          for f in *.dll *.exe; do
+            deps=$(x86_64-w64-mingw32-objdump -p "$f" | awk '/DLL Name:/ {print $3}' | tr '\n' ' ')
+            echo "$f: $deps"
+            for d in $deps; do
+              case "$d" in
+                av*.dll|sw*.dll) test -s "$d" || { echo "::error::$f imports missing $d"; bad=1; } ;;
+                lib*|zlib*|*pthread*|*gcc*|*stdc++*) echo "::error::$f imports $d"; bad=1 ;;
+              esac
+            done
+          done
+          ls -l --block-size=K "$RUNNER_TEMP/out/bin"
+          exit $bad
+
+      - name: Package
+        run: |
+          d="$RUNNER_TEMP/pkg/$NAME"
+          mkdir -p "$d"
+          cp -r "$RUNNER_TEMP/out/." "$d/"
+          mkdir -p "$d/licenses/ffmpeg"
+          cp -r "$L/." "$d/licenses/"
+          cp "$S/ffmpeg"/COPYING.* "$S/ffmpeg/LICENSE.md" "$d/licenses/ffmpeg/"
+          cp "$S/ffmpeg/COPYING.GPLv2" "$d/LICENSE.txt"
+          {
+            echo "FFmpeg $FFMPEG_VERSION, slim build for Backsight (win64, GPL, shared)."
+            echo "Built by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID from commit $GITHUB_SHA"
+            echo "with .github/workflows/ffmpeg.yml, which pins source archives by SHA-256 and Git sources by commit."
+            echo; echo "toolchain (Ubuntu packages; the mingw-w64 source package is in the sources tar):"
+            dpkg-query -W gcc-mingw-w64-x86-64-win32 g++-mingw-w64-x86-64-win32 binutils-mingw-w64-x86-64 mingw-w64-x86-64-dev
+            x86_64-w64-mingw32-gcc --version | head -n 1
+            echo; echo "configure:"; sed -n 's/^FFMPEG_CONFIGURATION=//p' "$S/ffmpeg/ffbuild/config.mak"
+          } > "$d/BUILDINFO.txt"
+          cd "$RUNNER_TEMP/pkg"
+          zip -9 -r -q "$NAME.zip" "$NAME"
+          sha256sum "$NAME.zip" | tee "$NAME.zip.sha256"
+          # Corresponding source (GPL): the verified archives as downloaded, the pinned git commits, the build steps.
+          src="$NAME-sources"; mkdir -p "$src"
+          cp "$S"/dl/* "$src/"
+          git -C "$S/x264" archive --prefix=x264/ -o "$PWD/$src/x264-$(git -C "$S/x264" rev-parse HEAD).tar" HEAD
+          git -C "$S/svtav1" archive --prefix=SVT-AV1/ -o "$PWD/$src/SVT-AV1-$(git -C "$S/svtav1" rev-parse HEAD).tar" HEAD
+          cp "$GITHUB_WORKSPACE/.github/workflows/ffmpeg.yml" "$src/build-steps-ffmpeg.yml"
+          tar -cf "$src.tar" "$src"
+          sha256sum "$src.tar" | tee "$src.tar.sha256"
+          echo "### $NAME.zip" >> "$GITHUB_STEP_SUMMARY"
+          echo "SHA-256: \`$(cut -c1-64 "$NAME.zip.sha256")\`, $(stat -c%s "$NAME.zip") bytes" >> "$GITHUB_STEP_SUMMARY"
+          ( cd "$NAME/bin" && ls -l --block-size=K *.dll ) | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.NAME }}
+          path: |
+            ${{ runner.temp }}/pkg/${{ env.NAME }}.zip
+            ${{ runner.temp }}/pkg/${{ env.NAME }}.zip.sha256
+            ${{ runner.temp }}/pkg/${{ env.NAME }}-sources.tar
+            ${{ runner.temp }}/pkg/${{ env.NAME }}-sources.tar.sha256
+          if-no-files-found: error
+
+  verify-windows:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - run: ./scripts/fetch-ffmpeg.check.ps1
+        shell: pwsh
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.NAME }}
+          path: candidate
+      - name: Verify and install this run's candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path 'candidate' "$env:NAME.zip"
+          $receipt = (Get-Content "$zip.sha256" -Raw).Trim()
+          if ($receipt -notmatch ('^([0-9a-f]{64})  ' + [regex]::Escape("$env:NAME.zip") + '$')) {
+            throw 'Invalid candidate checksum receipt.'
+          }
+          ./scripts/fetch-ffmpeg.ps1 -SlimArchive $zip -SlimSha256 $Matches[1]
+          if ($LASTEXITCODE) { throw 'Candidate extraction failed.' }
+          New-Item -ItemType Directory -Force third_party | Out-Null
+          Move-Item -LiteralPath target/ffmpeg-slim -Destination third_party/ffmpeg
+          & ./third_party/ffmpeg/bin/ffprobe.exe -version
+          if ($LASTEXITCODE) { throw 'Candidate ffprobe failed to load.' }
+          & ./third_party/ffmpeg/bin/ffmpeg.exe -v error -f lavfi -i 'color=red:s=128x72:r=30' -frames:v 3 -c:v libx265 -pix_fmt yuv420p10le -y target/main10.mp4
+          if ($LASTEXITCODE) { throw 'Candidate x265 Main 10 encode failed.' }
+          $media = & ./third_party/ffmpeg/bin/ffprobe.exe -v error -show_streams -of json target/main10.mp4 | ConvertFrom-Json
+          if ($LASTEXITCODE -or $media.streams[0].profile -ne 'Main 10' -or $media.streams[0].pix_fmt -ne 'yuv420p10le') {
+            throw 'Candidate did not produce Main 10 video.'
+          }
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run media tests against the candidate
+        shell: pwsh
+        run: |
+          cargo test -p backsight-encode -p backsight-engine --lib --tests
+          if ($LASTEXITCODE) { throw 'Candidate media tests failed.' }
+
+  publish:
+    needs: [build, verify-windows]
+    if: inputs.tag != '' || contains(github.event.head_commit.message, '[release]')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.NAME }}
+          path: pkg
+      - name: Publish the binaries and their sources as a prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || format('ffmpeg-{0}-slim-r{1}', env.FFMPEG_VERSION, github.run_number) }}
+        run: |
+          cd pkg
+          sha256sum -c "$NAME.zip.sha256" "$NAME-sources.tar.sha256"
+          gh release create "$TAG" "$NAME.zip" "$NAME.zip.sha256" "$NAME-sources.tar" "$NAME-sources.tar.sha256"             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease             --title "FFmpeg $FFMPEG_VERSION slim for Backsight ($TAG)"             --notes "Slim FFmpeg $FFMPEG_VERSION (win64, GPL, shared) from run $GITHUB_RUN_ID, checked on Windows. SHA-256 of $NAME.zip: $(cut -c1-64 "$NAME.zip.sha256"). Corresponding source: $NAME-sources.tar."

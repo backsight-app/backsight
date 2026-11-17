@@ -1,0 +1,64 @@
+# Frozen: a settings.toml as the version-1 build wrote it. Never regenerate; if this stops loading, an installed file would break.
+version = 1
+
+[general]
+video_folder = 'D:\Clips'
+screenshot_folder = ""
+start_with_windows = false
+minimize_to_tray = true
+notifications = true
+sounds = true
+recording_indicator = true
+name_after_game = true
+folder_per_game = false
+
+[video]
+container = "mp4-fragmented"
+encoder = "nvenc-h264"
+resolution = "1080p"
+fps = 30
+capture_cursor = true
+hdr = false
+split_minutes = 0
+remux_to_mp4 = true
+capture_target = "monitor"
+capture_monitor = ""
+
+[video.encoder_options.nvenc-h264]
+bitrate = 40000
+
+[replay]
+enabled = true
+length_seconds = 300
+
+[audio]
+encoder = "aac"
+desktop = true
+microphone = false
+microphone_device = "default"
+game_audio_only = false
+separate_tracks = false
+
+[audio.encoder_options]
+
+[screenshot]
+format = "png"
+quality = 90
+capture_cursor = false
+copy_to_clipboard = true
+
+[hotkeys]
+save-replay = "Ctrl+F10"
+toggle-replay = "Alt+Shift+F10"
+toggle-recording = "Alt+F9"
+pause-recording = "Alt+Shift+F9"
+screenshot = "Alt+F1"
+screenshot-window = "Alt+Shift+F1"
+screenshot-region = "Ctrl+Alt+F1"
+toggle-mic = "Alt+F8"
+push-to-talk = ""
+add-marker = "Alt+F7"
+open-app = "Alt+Shift+C"
+
+[setup]
+done = true

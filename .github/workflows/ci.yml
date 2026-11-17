@@ -1,0 +1,72 @@
+name: CI
+
+# Jobs skip in a private fork; run them by hand there with
+# `gh workflow run ci.yml --ref <branch>`.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust (fmt, clippy, test)
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      # The Tauri crate embeds the built UI, so build it first.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+      - run: npm run build
+        working-directory: app
+      # Offline self-checks: Library filters/grouping, NVIDIA key clashes and the FPS-cost CSV parser.
+      - run: node --experimental-strip-types src/lib/library.check.ts
+        working-directory: app
+      - run: node --experimental-strip-types src/lib/nvidia.check.ts
+        working-directory: app
+      - run: node --experimental-strip-types src/lib/hdr.check.ts
+        working-directory: app
+      - run: ./scripts/hardware-metrics.check.ps1
+        shell: pwsh
+      - run: ./scripts/replay-gpu-cost.check.ps1
+        shell: pwsh
+      - run: ./scripts/fetch-ffmpeg.check.ps1
+        shell: pwsh
+      # FFmpeg dev files for rsmpeg; LLVM (for bindgen) is preinstalled on windows-latest.
+      - uses: actions/cache@v6
+        with:
+          path: third_party/ffmpeg
+          key: ffmpeg-${{ hashFiles('scripts/fetch-ffmpeg.ps1') }}
+      - run: ./scripts/fetch-ffmpeg.ps1
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }} # the slim FFmpeg is a release asset of this repository
+      # THIRD-PARTY-NOTICES.txt must list what the app is built from now (needs app/node_modules).
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3
+      - run: ./scripts/third-party-notices.ps1 -Check
+        shell: pwsh
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      # Already part of the run above; named on its own so a failure reads as what it is: a
+      # per-frame heap allocation crept into the capture -> encode -> mux path (hard rule 8, DEVELOPMENT.md).
+      - run: cargo test -p backsight-engine --test hot_path_allocations

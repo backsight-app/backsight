@@ -1,0 +1,266 @@
+{
+  "limits": {
+    "replayLength": { "min": 15, "max": 1200, "step": 15 },
+    "splitMinutes": { "min": 0, "max": 720 },
+    "screenshotQuality": { "min": 50, "max": 100 }
+  },
+  "containers": [
+    { "id": "mp4-fragmented", "label": "Crash-safe MP4", "ext": "mp4", "muxer": "mp4", "muxerOptions": { "movflags": "frag_keyframe+empty_moov+delay_moov+default_base_moof" }, "crashSafe": true, "clipMuxerOptions": {}, "glossary": "mp4-fragmented", "videoCodecs": ["h264", "hevc", "av1"], "audioEncoders": ["aac", "opus", "flac", "alac"] },
+    { "id": "mp4", "label": "MP4", "ext": "mp4", "muxer": "mp4", "muxerOptions": { "movflags": "+faststart" }, "crashSafe": false, "glossary": "mp4", "videoCodecs": ["h264", "hevc", "av1"], "audioEncoders": ["aac", "opus", "flac", "alac"] },
+    { "id": "mkv", "label": "MKV", "ext": "mkv", "muxer": "matroska", "crashSafe": true, "glossary": "mkv", "videoCodecs": ["h264", "hevc", "av1"], "audioEncoders": ["aac", "opus", "flac", "alac", "pcm-16", "pcm-24", "pcm-32f"] },
+    { "id": "mov", "label": "MOV", "ext": "mov", "muxer": "mov", "crashSafe": false, "glossary": "mov", "videoCodecs": ["h264", "hevc"], "audioEncoders": ["aac", "alac", "pcm-16", "pcm-24", "pcm-32f"] },
+    { "id": "mov-fragmented", "label": "Crash-safe MOV", "ext": "mov", "muxer": "mov", "muxerOptions": { "movflags": "frag_keyframe+empty_moov+delay_moov+default_base_moof" }, "crashSafe": true, "clipMuxerOptions": {}, "glossary": "mov-fragmented", "videoCodecs": ["h264", "hevc"], "audioEncoders": ["aac", "alac", "pcm-16", "pcm-24", "pcm-32f"] },
+    { "id": "mpegts", "label": "MPEG-TS", "ext": "ts", "muxer": "mpegts", "crashSafe": true, "glossary": "mpegts", "videoCodecs": ["h264", "hevc"], "audioEncoders": ["aac", "opus"] },
+    { "id": "webm", "label": "WebM", "ext": "webm", "muxer": "webm", "crashSafe": true, "glossary": "webm", "videoCodecs": ["av1"], "audioEncoders": ["opus"] },
+    { "id": "flv", "label": "FLV", "ext": "flv", "muxer": "flv", "crashSafe": false, "glossary": "flv", "videoCodecs": ["h264"], "audioEncoders": ["aac"] }
+  ],
+
+  "videoCodecs": [
+    { "id": "h264", "label": "H.264", "glossary": "h264" },
+    { "id": "hevc", "label": "HEVC", "glossary": "hevc" },
+    { "id": "av1", "label": "AV1", "glossary": "av1" }
+  ],
+
+  "families": {
+    "nvenc": [
+      { "id": "rc", "label": "Rate control", "glossary": "rate-control", "kind": "select", "default": "vbr", "ffmpeg": "rc",
+        "choices": [
+          { "value": "vbr", "label": "Variable bitrate", "glossary": "vbr" },
+          { "value": "cbr", "label": "Constant bitrate", "glossary": "cbr" },
+          { "value": "cq", "label": "Constant quality", "glossary": "cqp" }
+        ] },
+      { "id": "bitrate", "label": "Bitrate", "glossary": "bitrate", "kind": "number", "default": 20000, "min": 1000, "max": 150000, "step": 500, "unit": "Kbps", "ffmpeg": "b", "showIf": { "option": "rc", "in": ["cbr", "vbr"] } },
+      { "id": "max_bitrate", "label": "Maximum bitrate", "glossary": "max-bitrate", "kind": "number", "default": 30000, "min": 1000, "max": 200000, "step": 500, "unit": "Kbps", "ffmpeg": "maxrate", "advanced": true, "showIf": { "option": "rc", "in": ["vbr"] } },
+      { "id": "cq", "label": "Quality level", "glossary": "quality-level", "kind": "number", "default": 21, "min": 1, "max": 51, "step": 1, "ffmpeg": "cq", "showIf": { "option": "rc", "in": ["cq"] } },
+      { "id": "preset", "label": "Preset", "glossary": "preset", "kind": "select", "default": "p1", "ffmpeg": "preset",
+        "choices": [
+          { "value": "p1", "label": "P1 · Fastest", "hint": "Lightest on your GPU, recommended" },
+          { "value": "p2", "label": "P2 · Faster" },
+          { "value": "p3", "label": "P3 · Fast" },
+          { "value": "p4", "label": "P4 · Balanced", "hint": "A little sharper, about twice the encoder work" },
+          { "value": "p5", "label": "P5 · Slow", "hint": "Slightly sharper, more encoder work" },
+          { "value": "p6", "label": "P6 · Slower", "hint": "Better quality" },
+          { "value": "p7", "label": "P7 · Slowest", "hint": "Best quality, most encoder work" }
+        ] },
+      { "id": "tune", "label": "Tuning", "glossary": "tuning", "kind": "select", "default": "hq", "ffmpeg": "tune", "advanced": true,
+        "choices": [
+          { "value": "hq", "label": "High quality", "glossary": "tune-hq" },
+          { "value": "ll", "label": "Low latency", "glossary": "tune-ll" },
+          { "value": "ull", "label": "Ultra low latency", "glossary": "tune-ull" },
+          { "value": "lossless", "label": "Lossless", "glossary": "tune-lossless" }
+        ] },
+      { "id": "multipass", "label": "Multipass", "glossary": "multipass", "kind": "select", "default": "disabled", "ffmpeg": "multipass", "advanced": true,
+        "choices": [
+          { "value": "disabled", "label": "Off", "glossary": "multipass-off" },
+          { "value": "qres", "label": "Two passes (quarter resolution)", "glossary": "multipass-quarter" },
+          { "value": "fullres", "label": "Two passes (full resolution)", "glossary": "multipass-full" }
+        ] },
+      { "id": "profile", "label": "Profile", "glossary": "profile", "kind": "select", "default": "high", "ffmpeg": "profile", "advanced": true,
+        "choices": [
+          { "value": "baseline", "label": "Baseline", "hint": "Ancient devices only" },
+          { "value": "main", "label": "Main" },
+          { "value": "high", "label": "High", "hint": "Recommended" }
+        ] },
+      { "id": "keyint_sec", "label": "Keyframe interval", "glossary": "keyframe-interval", "kind": "number", "default": 0, "min": 0, "max": 10, "step": 1, "unit": "s", "ffmpeg": "g", "advanced": true },
+      { "id": "lookahead", "label": "Look-ahead", "glossary": "lookahead", "kind": "toggle", "default": false, "ffmpeg": "rc-lookahead", "advanced": true },
+      { "id": "spatial_aq", "label": "Adaptive quantization", "glossary": "spatial-aq", "kind": "toggle", "default": false, "ffmpeg": "spatial-aq", "advanced": true },
+      { "id": "temporal_aq", "label": "Temporal AQ", "glossary": "temporal-aq", "kind": "toggle", "default": false, "ffmpeg": "temporal-aq", "advanced": true },
+      { "id": "bframes", "label": "B-frames", "glossary": "b-frames", "kind": "number", "default": 0, "min": 0, "max": 4, "step": 1, "ffmpeg": "bf", "advanced": true, "limitedNote": "Your graphics card can't use B-frames with this encoder." }
+    ],
+
+    "amf": [
+      { "id": "rc", "label": "Rate control", "glossary": "rate-control", "kind": "select", "default": "vbr", "ffmpeg": "rc",
+        "choices": [
+          { "value": "vbr", "label": "Variable bitrate", "glossary": "vbr" },
+          { "value": "cbr", "label": "Constant bitrate", "glossary": "cbr" },
+          { "value": "cq", "label": "Constant quality", "glossary": "cqp" }
+        ] },
+      { "id": "bitrate", "label": "Bitrate", "glossary": "bitrate", "kind": "number", "default": 20000, "min": 1000, "max": 150000, "step": 500, "unit": "Kbps", "ffmpeg": "b", "showIf": { "option": "rc", "in": ["cbr", "vbr"] } },
+      { "id": "cq", "label": "Quality level", "glossary": "quality-level", "kind": "number", "default": 23, "min": 1, "max": 51, "step": 1, "ffmpeg": "qvbr_quality_level", "showIf": { "option": "rc", "in": ["cq"] } },
+      { "id": "quality", "label": "Preset", "glossary": "preset", "kind": "select", "default": "speed", "ffmpeg": "quality",
+        "choices": [
+          { "value": "speed", "label": "Speed", "hint": "Recommended" },
+          { "value": "balanced", "label": "Balanced" },
+          { "value": "quality", "label": "Quality", "hint": "Best quality, most encoder work" }
+        ] },
+      { "id": "usage", "label": "Usage", "glossary": "encoder-usage", "kind": "select", "default": "transcoding", "ffmpeg": "usage", "advanced": true,
+        "choices": [
+          { "value": "transcoding", "label": "Recording", "glossary": "tune-hq" },
+          { "value": "lowlatency", "label": "Low latency", "glossary": "tune-ll" },
+          { "value": "ultralowlatency", "label": "Ultra low latency", "glossary": "tune-ull" }
+        ] },
+      { "id": "profile", "label": "Profile", "glossary": "profile", "kind": "select", "default": "high", "ffmpeg": "profile", "advanced": true,
+        "choices": [
+          { "value": "main", "label": "Main" },
+          { "value": "high", "label": "High", "hint": "Recommended" }
+        ] },
+      { "id": "keyint_sec", "label": "Keyframe interval", "glossary": "keyframe-interval", "kind": "number", "default": 0, "min": 0, "max": 10, "step": 1, "unit": "s", "ffmpeg": "g", "advanced": true },
+      { "id": "preanalysis", "label": "Pre-analysis", "glossary": "lookahead", "kind": "toggle", "default": false, "ffmpeg": "preanalysis", "advanced": true },
+      { "id": "bframes", "label": "B-frames", "glossary": "b-frames", "kind": "number", "default": 0, "min": 0, "max": 3, "step": 1, "ffmpeg": "bf", "advanced": true }
+    ],
+
+    "qsv": [
+      { "id": "rc", "label": "Rate control", "glossary": "rate-control", "kind": "select", "default": "vbr", "ffmpeg": "rc",
+        "choices": [
+          { "value": "vbr", "label": "Variable bitrate", "glossary": "vbr" },
+          { "value": "cbr", "label": "Constant bitrate", "glossary": "cbr" },
+          { "value": "cq", "label": "Constant quality", "glossary": "cqp" }
+        ] },
+      { "id": "bitrate", "label": "Bitrate", "glossary": "bitrate", "kind": "number", "default": 20000, "min": 1000, "max": 150000, "step": 500, "unit": "Kbps", "ffmpeg": "b", "showIf": { "option": "rc", "in": ["cbr", "vbr"] } },
+      { "id": "cq", "label": "Quality level", "glossary": "quality-level", "kind": "number", "default": 23, "min": 1, "max": 51, "step": 1, "ffmpeg": "global_quality", "showIf": { "option": "rc", "in": ["cq"] } },
+      { "id": "preset", "label": "Preset", "glossary": "preset", "kind": "select", "default": "veryfast", "ffmpeg": "preset",
+        "choices": [
+          { "value": "veryfast", "label": "Very fast", "hint": "Recommended" },
+          { "value": "faster", "label": "Faster" },
+          { "value": "fast", "label": "Fast" },
+          { "value": "medium", "label": "Medium" },
+          { "value": "slow", "label": "Slow" },
+          { "value": "slower", "label": "Slower" },
+          { "value": "veryslow", "label": "Very slow", "hint": "Best quality" }
+        ] },
+      { "id": "profile", "label": "Profile", "glossary": "profile", "kind": "select", "default": "high", "ffmpeg": "profile", "advanced": true,
+        "choices": [
+          { "value": "main", "label": "Main" },
+          { "value": "high", "label": "High", "hint": "Recommended" }
+        ] },
+      { "id": "keyint_sec", "label": "Keyframe interval", "glossary": "keyframe-interval", "kind": "number", "default": 0, "min": 0, "max": 10, "step": 1, "unit": "s", "ffmpeg": "g", "advanced": true },
+      { "id": "bframes", "label": "B-frames", "glossary": "b-frames", "kind": "number", "default": 2, "min": 0, "max": 4, "step": 1, "ffmpeg": "bf", "advanced": true }
+    ],
+
+    "x26x": [
+      { "id": "rc", "label": "Rate control", "glossary": "rate-control", "kind": "select", "default": "cq", "ffmpeg": "rc",
+        "choices": [
+          { "value": "cq", "label": "Constant quality (CRF)", "glossary": "cqp" },
+          { "value": "vbr", "label": "Variable bitrate", "glossary": "vbr" },
+          { "value": "cbr", "label": "Constant bitrate", "glossary": "cbr" }
+        ] },
+      { "id": "bitrate", "label": "Bitrate", "glossary": "bitrate", "kind": "number", "default": 15000, "min": 1000, "max": 150000, "step": 500, "unit": "Kbps", "ffmpeg": "b", "showIf": { "option": "rc", "in": ["cbr", "vbr"] } },
+      { "id": "cq", "label": "Quality level (CRF)", "glossary": "quality-level", "kind": "number", "default": 21, "min": 0, "max": 51, "step": 1, "ffmpeg": "crf", "showIf": { "option": "rc", "in": ["cq"] } },
+      { "id": "preset", "label": "Preset", "glossary": "preset", "kind": "select", "default": "veryfast", "ffmpeg": "preset",
+        "choices": [
+          { "value": "ultrafast", "label": "Ultrafast", "hint": "Lightest on CPU, biggest files" },
+          { "value": "superfast", "label": "Superfast" },
+          { "value": "veryfast", "label": "Very fast", "hint": "Recommended for live capture" },
+          { "value": "faster", "label": "Faster" },
+          { "value": "fast", "label": "Fast" },
+          { "value": "medium", "label": "Medium", "hint": "Needs a strong CPU" },
+          { "value": "slow", "label": "Slow", "hint": "Usually too heavy while gaming" }
+        ] },
+      { "id": "tune", "label": "Tuning", "glossary": "tuning", "kind": "select", "default": "none", "ffmpeg": "tune", "advanced": true,
+        "choices": [
+          { "value": "none", "label": "None" },
+          { "value": "film", "label": "Film", "hint": "Realistic games" },
+          { "value": "animation", "label": "Animation", "hint": "Cartoon and cel-shaded games" },
+          { "value": "zerolatency", "label": "Zero latency", "glossary": "tune-ull" }
+        ] },
+      { "id": "profile", "label": "Profile", "glossary": "profile", "kind": "select", "default": "high", "ffmpeg": "profile", "advanced": true,
+        "choices": [
+          { "value": "baseline", "label": "Baseline", "hint": "Ancient devices only" },
+          { "value": "main", "label": "Main" },
+          { "value": "high", "label": "High", "hint": "Recommended" }
+        ] },
+      { "id": "keyint_sec", "label": "Keyframe interval", "glossary": "keyframe-interval", "kind": "number", "default": 0, "min": 0, "max": 10, "step": 1, "unit": "s", "ffmpeg": "g", "advanced": true },
+      { "id": "bframes", "label": "B-frames", "glossary": "b-frames", "kind": "number", "default": 2, "min": 0, "max": 8, "step": 1, "ffmpeg": "bf", "advanced": true }
+    ],
+
+    "svtav1": [
+      { "id": "rc", "label": "Rate control", "glossary": "rate-control", "kind": "select", "default": "cq", "ffmpeg": "rc",
+        "choices": [
+          { "value": "cq", "label": "Constant quality (CRF)", "glossary": "cqp" },
+          { "value": "vbr", "label": "Variable bitrate", "glossary": "vbr" }
+        ] },
+      { "id": "bitrate", "label": "Bitrate", "glossary": "bitrate", "kind": "number", "default": 10000, "min": 1000, "max": 100000, "step": 500, "unit": "Kbps", "ffmpeg": "b", "showIf": { "option": "rc", "in": ["vbr"] } },
+      { "id": "cq", "label": "Quality level (CRF)", "glossary": "quality-level", "kind": "number", "default": 32, "min": 1, "max": 63, "step": 1, "ffmpeg": "crf", "showIf": { "option": "rc", "in": ["cq"] } },
+      { "id": "preset", "label": "Preset (higher = faster)", "glossary": "preset", "kind": "number", "default": 10, "min": 0, "max": 13, "step": 1, "ffmpeg": "preset" },
+      { "id": "keyint_sec", "label": "Keyframe interval", "glossary": "keyframe-interval", "kind": "number", "default": 0, "min": 0, "max": 10, "step": 1, "unit": "s", "ffmpeg": "g", "advanced": true }
+    ],
+
+    "aom": [
+      { "id": "rc", "label": "Rate control", "glossary": "rate-control", "kind": "select", "default": "cq", "ffmpeg": "rc",
+        "choices": [
+          { "value": "cq", "label": "Constant quality (CRF)", "glossary": "cqp" },
+          { "value": "vbr", "label": "Variable bitrate", "glossary": "vbr" }
+        ] },
+      { "id": "bitrate", "label": "Bitrate", "glossary": "bitrate", "kind": "number", "default": 10000, "min": 1000, "max": 100000, "step": 500, "unit": "Kbps", "ffmpeg": "b", "showIf": { "option": "rc", "in": ["vbr"] } },
+      { "id": "cq", "label": "Quality level (CRF)", "glossary": "quality-level", "kind": "number", "default": 32, "min": 0, "max": 63, "step": 1, "ffmpeg": "crf", "showIf": { "option": "rc", "in": ["cq"] } },
+      { "id": "cpu_used", "label": "Preset (higher = faster)", "glossary": "preset", "kind": "number", "default": 8, "min": 0, "max": 8, "step": 1, "ffmpeg": "cpu-used" },
+      { "id": "row_mt", "label": "Row multithreading", "glossary": "row-mt", "kind": "toggle", "default": true, "ffmpeg": "row-mt", "advanced": true },
+      { "id": "keyint_sec", "label": "Keyframe interval", "glossary": "keyframe-interval", "kind": "number", "default": 0, "min": 0, "max": 10, "step": 1, "unit": "s", "ffmpeg": "g", "advanced": true }
+    ]
+  },
+
+  "videoEncoders": [
+    { "id": "nvenc-h264", "label": "NVIDIA NVENC H.264", "ffmpeg": "h264_nvenc", "codec": "h264", "family": "nvenc", "vendor": "nvidia", "hardware": true, "requires": "Needs an NVIDIA graphics card and an up-to-date NVIDIA driver.", "glossary": "nvenc-h264" },
+    { "id": "nvenc-hevc", "label": "NVIDIA NVENC HEVC", "ffmpeg": "hevc_nvenc", "codec": "hevc", "family": "nvenc", "vendor": "nvidia", "hardware": true, "hdr": true, "requires": "Needs an NVIDIA graphics card and an up-to-date NVIDIA driver.", "glossary": "nvenc-hevc",
+      "overrides": {
+        "profile": { "default": "main", "choices": [ { "value": "main", "label": "Main" }, { "value": "main10", "label": "Main 10", "hint": "10-bit / HDR" } ] },
+        "tune": { "choices": [ { "value": "hq", "label": "High quality", "glossary": "tune-hq" }, { "value": "uhq", "label": "Ultra high quality", "glossary": "tune-uhq" }, { "value": "ll", "label": "Low latency", "glossary": "tune-ll" }, { "value": "ull", "label": "Ultra low latency", "glossary": "tune-ull" }, { "value": "lossless", "label": "Lossless", "glossary": "tune-lossless" } ] }
+      } },
+    { "id": "nvenc-av1", "label": "NVIDIA NVENC AV1", "ffmpeg": "av1_nvenc", "codec": "av1", "family": "nvenc", "vendor": "nvidia", "hardware": true, "requires": "Needs an NVIDIA RTX 40-series graphics card or newer.", "glossary": "nvenc-av1",
+      "overrides": {
+        "profile": { "omit": true },
+        "tune": { "choices": [ { "value": "hq", "label": "High quality", "glossary": "tune-hq" }, { "value": "uhq", "label": "Ultra high quality", "glossary": "tune-uhq" }, { "value": "ll", "label": "Low latency", "glossary": "tune-ll" }, { "value": "ull", "label": "Ultra low latency", "glossary": "tune-ull" } ] }
+      } },
+    { "id": "amf-h264", "label": "AMD H.264", "ffmpeg": "h264_amf", "codec": "h264", "family": "amf", "vendor": "amd", "hardware": true, "requires": "Needs an AMD Radeon graphics card and an up-to-date AMD driver.", "glossary": "amf-h264" },
+    { "id": "amf-hevc", "label": "AMD HEVC", "ffmpeg": "hevc_amf", "codec": "hevc", "family": "amf", "vendor": "amd", "hardware": true, "requires": "Needs an AMD Radeon graphics card and an up-to-date AMD driver.", "glossary": "amf-hevc",
+      "overrides": { "profile": { "default": "main", "choices": [ { "value": "main", "label": "Main" }, { "value": "main10", "label": "Main 10", "hint": "10-bit / HDR" } ] } } },
+    { "id": "amf-av1", "label": "AMD AV1", "ffmpeg": "av1_amf", "codec": "av1", "family": "amf", "vendor": "amd", "hardware": true, "requires": "Needs an AMD Radeon RX 7000-series graphics card or newer.", "glossary": "amf-av1",
+      "overrides": { "profile": { "default": "main", "choices": [ { "value": "main", "label": "Main" } ] } } },
+    { "id": "qsv-h264", "label": "Intel Quick Sync H.264", "ffmpeg": "h264_qsv", "codec": "h264", "family": "qsv", "vendor": "intel", "hardware": true, "requires": "Needs Intel graphics with Quick Sync and an up-to-date Intel driver.", "glossary": "qsv-h264" },
+    { "id": "qsv-hevc", "label": "Intel Quick Sync HEVC", "ffmpeg": "hevc_qsv", "codec": "hevc", "family": "qsv", "vendor": "intel", "hardware": true, "requires": "Needs Intel graphics with Quick Sync and an up-to-date Intel driver.", "glossary": "qsv-hevc",
+      "overrides": { "profile": { "default": "main", "choices": [ { "value": "main", "label": "Main" }, { "value": "main10", "label": "Main 10", "hint": "10-bit / HDR" } ] } } },
+    { "id": "qsv-av1", "label": "Intel Quick Sync AV1", "ffmpeg": "av1_qsv", "codec": "av1", "family": "qsv", "vendor": "intel", "hardware": true, "requires": "Needs Intel Arc graphics or an Intel Core Ultra processor or newer.", "glossary": "qsv-av1",
+      "overrides": { "profile": { "default": "main", "choices": [ { "value": "main", "label": "Main" } ] } } },
+    { "id": "x264", "label": "x264 (CPU)", "ffmpeg": "libx264", "codec": "h264", "family": "x26x", "vendor": "cpu", "hardware": false, "glossary": "x264" },
+    { "id": "x265", "label": "x265 (CPU)", "ffmpeg": "libx265", "codec": "hevc", "family": "x26x", "vendor": "cpu", "hardware": false, "glossary": "x265",
+      "overrides": {
+        "preset": { "default": "superfast" },
+        "tune": { "choices": [ { "value": "none", "label": "None" }, { "value": "animation", "label": "Animation", "hint": "Cartoon and cel-shaded games" }, { "value": "zerolatency", "label": "Zero latency", "glossary": "tune-ull" } ] },
+        "profile": { "default": "main", "choices": [ { "value": "main", "label": "Main" }, { "value": "main10", "label": "Main 10", "hint": "10-bit / HDR" } ] }
+      } },
+    { "id": "svt-av1", "label": "SVT-AV1 (CPU)", "ffmpeg": "libsvtav1", "codec": "av1", "family": "svtav1", "vendor": "cpu", "hardware": false, "glossary": "svt-av1" },
+    { "id": "aom-av1", "label": "AOM AV1 (CPU)", "ffmpeg": "libaom-av1", "codec": "av1", "family": "aom", "vendor": "cpu", "hardware": false, "glossary": "aom-av1" }
+  ],
+
+  "audioEncoders": [
+    { "id": "aac", "label": "AAC", "ffmpeg": "aac", "glossary": "aac", "options": [
+      { "id": "bitrate", "label": "Audio bitrate", "glossary": "audio-bitrate", "kind": "select", "default": 192, "unit": "Kbps", "ffmpeg": "b",
+        "choices": [ { "value": 128, "label": "128 kbps" }, { "value": 160, "label": "160 kbps" }, { "value": 192, "label": "192 kbps", "hint": "Recommended" }, { "value": 256, "label": "256 kbps" }, { "value": 320, "label": "320 kbps" } ] }
+    ] },
+    { "id": "opus", "label": "Opus", "ffmpeg": "libopus", "glossary": "opus", "options": [
+      { "id": "bitrate", "label": "Audio bitrate", "glossary": "audio-bitrate", "kind": "select", "default": 160, "unit": "Kbps", "ffmpeg": "b",
+        "choices": [ { "value": 96, "label": "96 kbps" }, { "value": 128, "label": "128 kbps" }, { "value": 160, "label": "160 kbps", "hint": "Recommended" }, { "value": 192, "label": "192 kbps" }, { "value": 256, "label": "256 kbps" } ] }
+    ] },
+    { "id": "flac", "label": "FLAC (lossless)", "ffmpeg": "flac", "glossary": "flac", "options": [
+      { "id": "compression_level", "label": "Compression level", "glossary": "compression-level", "kind": "number", "default": 5, "min": 0, "max": 12, "step": 1, "ffmpeg": "compression_level", "advanced": true }
+    ] },
+    { "id": "alac", "label": "ALAC (lossless)", "ffmpeg": "alac", "glossary": "alac", "options": [] },
+    { "id": "pcm-16", "label": "PCM 16-bit", "ffmpeg": "pcm_s16le", "glossary": "pcm-16", "options": [] },
+    { "id": "pcm-24", "label": "PCM 24-bit", "ffmpeg": "pcm_s24le", "glossary": "pcm-24", "options": [] },
+    { "id": "pcm-32f", "label": "PCM 32-bit float", "ffmpeg": "pcm_f32le", "glossary": "pcm-32f", "options": [] }
+  ],
+
+  "screenshotFormats": [
+    { "id": "png", "label": "PNG", "ext": "png", "ffmpeg": "png", "glossary": "png", "lossy": false, "hdr": false },
+    { "id": "jpeg", "label": "JPEG", "ext": "jpg", "ffmpeg": "mjpeg", "glossary": "jpeg", "lossy": true, "hdr": false },
+    { "id": "webp", "label": "WebP", "ext": "webp", "ffmpeg": "libwebp", "glossary": "webp", "lossy": true, "hdr": false },
+    { "id": "jxr", "label": "JPEG XR (HDR)", "ext": "jxr", "glossary": "jxr", "lossy": false, "hdr": true }
+  ],
+  "resolutions": [
+    { "value": "source", "label": "Same as source", "glossary": "resolution-source" },
+    { "value": "2160p", "label": "2160p (4K)", "glossary": "resolution-2160p" },
+    { "value": "1440p", "label": "1440p", "glossary": "resolution-1440p" },
+    { "value": "1080p", "label": "1080p", "glossary": "resolution-1080p", "hint": "Recommended" },
+    { "value": "720p", "label": "720p", "glossary": "resolution-720p" }
+  ],
+  "frameRates": [
+    { "value": 30, "label": "30 FPS", "glossary": "fps-30" },
+    { "value": 60, "label": "60 FPS", "glossary": "fps-60", "hint": "Recommended" },
+    { "value": 120, "label": "120 FPS", "glossary": "fps-120" },
+    { "value": 144, "label": "144 FPS", "glossary": "fps-144" }
+  ],
+  "captureTargets": [
+    { "value": "monitor", "label": "Whole monitor", "glossary": "capture-target-monitor", "hint": "Recommended" },
+    { "value": "window", "label": "Game window only", "glossary": "capture-target-window" }
+  ]
+}

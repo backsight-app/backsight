@@ -1,0 +1,49 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "app/src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/backsight-app/backsight"
+authors = ["Backsight contributors"]
+
+[workspace.dependencies]
+backsight-config = { path = "crates/backsight-config" }
+backsight-encode = { path = "crates/backsight-encode" }
+backsight-engine = { path = "crates/backsight-engine" }
+
+directories = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+toml = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+# Same version Tauri uses, so it compiles once.
+windows = "0.62"
+rsmpeg = { version = "0.18", default-features = false, features = ["ffmpeg8"] }
+
+tauri = { version = "~2.12", features = ["tray-icon", "protocol-asset"] }
+tauri-build = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-dialog = "~2.8" # match @tauri-apps/plugin-dialog: tauri build refuses a major.minor mismatch
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+# A PDB next to the exe (file and line per address) decodes freeze reports' `backsight.exe+0x…`
+# lines. On Windows the debug info only goes in the PDB; the exe names just `backsight.pdb`.
+debug = "line-tables-only"
+strip = false

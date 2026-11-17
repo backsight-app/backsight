@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-region-show"
+description = "Enables the region_show command without any pre-configured scope."
+commands.allow = ["region_show"]
+
+[[permission]]
+identifier = "deny-region-show"
+description = "Denies the region_show command without any pre-configured scope."
+commands.deny = ["region_show"]

@@ -1,0 +1,763 @@
+{
+  "container": {
+    "term": "File format",
+    "short": "The box your video is stored in.",
+    "eli5": "Think of it as the box, not the toy. The box doesn't change how good your video looks. It decides which apps can open the file and what happens if your PC crashes while recording."
+  },
+  "mp4": {
+    "term": "MP4",
+    "short": "The format almost everything can play.",
+    "eli5": "The most common video box in the world. Phones, Discord, YouTube and every video editor understand it.",
+    "pros": ["Plays basically everywhere", "Starts playing sooner when streamed from the web"],
+    "cons": ["If your PC crashes or loses power mid-recording, the file can be lost"],
+    "pickIf": "You make short recordings and share them straight away. Replay clips are a regular MP4 either way."
+  },
+  "mp4-fragmented": {
+    "term": "Crash-safe MP4",
+    "short": "An MP4 that survives crashes.",
+    "eli5": "A normal MP4 writes its table of contents at the very end, so a crash means no table of contents and a broken file. Crash-safe MP4 writes small self-contained chunks as it goes, so a crash only loses the last second or two.",
+    "pros": ["Still a .mp4 file", "A crash won't ruin a long recording", "Replay clips save as a regular MP4"],
+    "cons": ["A few older editors seek through it a little slower"],
+    "pickIf": "You record long sessions and want MP4 without the risk. This is a great default."
+  },
+  "mkv": {
+    "term": "MKV",
+    "short": "The \"holds anything, survives anything\" format.",
+    "eli5": "A very flexible box that accepts any video or audio type and lots of separate audio tracks. If your PC crashes, everything recorded up to that moment is still playable.",
+    "pros": ["Crash-safe", "Holds any codec and many audio tracks"],
+    "cons": ["Some phones, social sites and older editors won't accept it"],
+    "pickIf": "You edit before you share. Turn on \"Convert to MP4 when done\" to get the best of both."
+  },
+  "mov": {
+    "term": "MOV",
+    "short": "Apple's video format, loved by editors.",
+    "eli5": "Apple's version of the video box. Final Cut and DaVinci Resolve like it, especially with uncompressed audio.",
+    "pros": ["Editor-friendly", "Works well on Apple devices"],
+    "cons": ["Not crash-safe", "Files get large with uncompressed audio"],
+    "pickIf": "You edit in DaVinci Resolve or on a Mac."
+  },
+  "mov-fragmented": {
+    "term": "Crash-safe MOV",
+    "short": "A MOV that survives crashes.",
+    "eli5": "The same chunk-by-chunk trick as crash-safe MP4, applied to MOV.",
+    "pros": ["Editor-friendly and crash-safe", "Replay clips save as a regular MOV"],
+    "cons": ["Some players handle long recordings a little worse than regular MOV"]
+  },
+  "mpegts": {
+    "term": "MPEG-TS",
+    "short": "A format built for live TV.",
+    "eli5": "Designed for broadcast, where the signal can drop at any time. Every piece of the file stands on its own, so it never really breaks.",
+    "pros": ["Extremely crash-safe", "Can be cut anywhere"],
+    "cons": ["Slightly larger files", "Not every editor imports it smoothly"],
+    "pickIf": "A specific tool or workflow asks for it."
+  },
+  "webm": {
+    "term": "WebM",
+    "short": "The web's open video format.",
+    "eli5": "A box made for web browsers. It only holds AV1 video and Opus audio here, which keeps files small and plays right inside Chrome, Edge or Firefox.",
+    "pros": ["Plays in browsers", "Small files"],
+    "cons": ["Only works with AV1 video and Opus audio", "Many editors don't like it"]
+  },
+  "flv": {
+    "term": "FLV",
+    "short": "An old streaming format.",
+    "eli5": "A leftover from the Flash days. It's only here for old tools that still expect it.",
+    "pros": ["Some legacy tools need it"],
+    "cons": ["Outdated", "Only H.264 video and AAC audio", "Not crash-safe"],
+    "pickIf": "Only if an old tool requires it."
+  },
+  "remux": {
+    "term": "Convert to MP4 when done",
+    "short": "Rewraps an MKV into an MP4 after you stop.",
+    "eli5": "Record into the crash-safe MKV box, then move the video into an MP4 box when you're done. Nothing is re-compressed, so it takes seconds and loses zero quality.",
+    "pros": ["Crash safety while recording, easy sharing afterwards"],
+    "cons": ["Briefly uses extra disk space while converting"]
+  },
+
+  "h264": {
+    "term": "H.264 (AVC)",
+    "short": "The video language everyone speaks.",
+    "eli5": "The most compatible codec there is. Anything made in the last 15 years can play it.",
+    "pros": ["Plays everywhere", "Fast to encode and edit"],
+    "cons": ["Biggest files of the three for the same quality", "No HDR"],
+    "pickIf": "You never want to think about compatibility."
+  },
+  "hevc": {
+    "term": "HEVC (H.265)",
+    "short": "Smaller files than H.264, same quality.",
+    "eli5": "The successor to H.264. It squeezes the same picture into roughly a third less space and supports HDR.",
+    "pros": ["About 30–40% smaller than H.264", "Supports HDR and 10-bit color"],
+    "cons": ["Some browsers and Discord previews struggle with it", "Windows may need the free HEVC extension to play it"],
+    "pickIf": "You keep lots of footage or record HDR games."
+  },
+  "av1": {
+    "term": "AV1",
+    "short": "The newest, smallest video language.",
+    "eli5": "A modern, royalty-free codec backed by YouTube, Netflix and friends. It makes the smallest files of the three at the same quality.",
+    "pros": ["Smallest files", "Great for uploading to YouTube", "Supports HDR"],
+    "cons": ["Hardware AV1 needs a newer GPU (RTX 40+, Intel Arc, Radeon RX 7000+)", "Older devices can't play it"],
+    "pickIf": "Your graphics card supports it."
+  },
+
+  "encoder": {
+    "term": "Encoder",
+    "short": "The worker that compresses your video.",
+    "eli5": "Hardware encoders are tiny dedicated chips on your graphics card, separate from the part that runs your game, so they barely cost any FPS. Software encoders run on your CPU: they can look great, but they can steal performance from your game.",
+    "pickIf": "Pick a hardware encoder (NVIDIA, AMD or Intel) unless you have a strong reason not to."
+  },
+  "nvenc-h264": {
+    "term": "NVIDIA NVENC H.264",
+    "short": "NVIDIA's built-in encoder, in the most compatible format.",
+    "eli5": "Your GeForce card has a separate chip just for video. It records while your game keeps the rest of the GPU. This is what ShadowPlay uses.",
+    "pros": ["Almost no FPS cost", "Plays everywhere", "Excellent quality on RTX cards"],
+    "cons": ["NVIDIA GPUs only", "Bigger files than HEVC or AV1"],
+    "pickIf": "You have an NVIDIA card and want maximum compatibility."
+  },
+  "nvenc-hevc": {
+    "term": "NVIDIA NVENC HEVC",
+    "short": "NVIDIA's built-in encoder, smaller files.",
+    "eli5": "The same dedicated NVIDIA video chip, speaking the more efficient HEVC language.",
+    "pros": ["Almost no FPS cost", "Smaller files than H.264", "HDR support"],
+    "cons": ["NVIDIA GPUs only", "Slightly less compatible than H.264"],
+    "pickIf": "You have an NVIDIA card and want better quality per megabyte."
+  },
+  "nvenc-av1": {
+    "term": "NVIDIA NVENC AV1",
+    "short": "NVIDIA's built-in encoder, smallest files.",
+    "eli5": "The newest NVIDIA video chips can speak AV1, the most efficient codec available.",
+    "pros": ["Almost no FPS cost", "Smallest files"],
+    "cons": ["Needs an RTX 40-series card or newer", "Older devices can't play AV1"],
+    "pickIf": "You have an RTX 40-series or newer card."
+  },
+  "amf-h264": {
+    "term": "AMD H.264",
+    "short": "AMD's built-in encoder, most compatible format.",
+    "eli5": "Radeon cards have their own dedicated video chip too. This uses it to make H.264 files.",
+    "pros": ["Almost no FPS cost on AMD", "Plays everywhere"],
+    "cons": ["AMD GPUs only", "H.264 quality trails NVIDIA a little at low bitrates"],
+    "pickIf": "You have an AMD card and want compatibility."
+  },
+  "amf-hevc": {
+    "term": "AMD HEVC",
+    "short": "AMD's built-in encoder, smaller files.",
+    "eli5": "AMD's video chip, speaking HEVC. This is where AMD's encoder really shines.",
+    "pros": ["Almost no FPS cost on AMD", "Smaller files", "HDR support"],
+    "cons": ["AMD GPUs only"],
+    "pickIf": "You have an AMD card. This is usually the best AMD choice."
+  },
+  "amf-av1": {
+    "term": "AMD AV1",
+    "short": "AMD's built-in encoder, smallest files.",
+    "eli5": "Newer Radeon cards can encode AV1 in hardware.",
+    "pros": ["Almost no FPS cost", "Smallest files"],
+    "cons": ["Needs a Radeon RX 7000-series card or newer"]
+  },
+  "qsv-h264": {
+    "term": "Intel Quick Sync H.264",
+    "short": "Intel's built-in encoder, most compatible format.",
+    "eli5": "Most Intel CPUs have built-in graphics with a video chip called Quick Sync. Using it leaves your main graphics card completely free for the game.",
+    "pros": ["Free if your CPU has it", "Doesn't touch your gaming GPU at all", "Great on laptops"],
+    "cons": ["Quality trails NVENC a little on older chips"],
+    "pickIf": "You have an Intel CPU with graphics and want your GPU 100% on the game."
+  },
+  "qsv-hevc": {
+    "term": "Intel Quick Sync HEVC",
+    "short": "Intel's built-in encoder, smaller files.",
+    "eli5": "Intel's video chip, speaking HEVC.",
+    "pros": ["Doesn't touch your gaming GPU", "Smaller files"],
+    "cons": ["Intel graphics only"]
+  },
+  "qsv-av1": {
+    "term": "Intel Quick Sync AV1",
+    "short": "Intel's built-in encoder, smallest files.",
+    "eli5": "Intel Arc cards and newer Intel CPUs can make AV1 files in hardware.",
+    "pros": ["Smallest files", "Very good quality"],
+    "cons": ["Needs Intel Arc or a recent Intel Core Ultra CPU"]
+  },
+  "x264": {
+    "term": "x264 (CPU)",
+    "short": "The classic software H.264 encoder.",
+    "eli5": "Runs on your processor instead of a video chip. At slow settings it squeezes out excellent quality, but it works your CPU hard and can lower your FPS.",
+    "pros": ["Excellent quality at slower presets", "Works on any PC"],
+    "cons": ["Heavy CPU use", "Can cause stutter in CPU-hungry games"],
+    "pickIf": "You have lots of spare CPU cores or no hardware encoder."
+  },
+  "x265": {
+    "term": "x265 (CPU)",
+    "short": "Software HEVC encoder.",
+    "eli5": "The CPU version of HEVC. Very efficient files, but very demanding.",
+    "pros": ["Very efficient files", "Works on any PC"],
+    "cons": ["Very heavy CPU use: often too slow for live gameplay"],
+    "pickIf": "Rarely, for live recording. Prefer a hardware HEVC encoder."
+  },
+  "svt-av1": {
+    "term": "SVT-AV1 (CPU)",
+    "short": "The fastest software AV1 encoder.",
+    "eli5": "A software AV1 encoder built by Intel and Netflix to be quick. Still a lot of CPU work, but usable on strong processors.",
+    "pros": ["AV1 without an AV1-capable GPU", "Small files"],
+    "cons": ["Heavy CPU use"],
+    "pickIf": "You want AV1, your GPU can't do it, and you have a strong CPU."
+  },
+  "aom-av1": {
+    "term": "AOM AV1 (CPU)",
+    "short": "The reference AV1 encoder. Very slow.",
+    "eli5": "The original AV1 encoder. Great quality, but far too slow for most live recording.",
+    "pros": ["Very high quality"],
+    "cons": ["Extremely slow", "Will likely hurt game performance"],
+    "pickIf": "Almost never for live capture. Use SVT-AV1 or a hardware encoder instead."
+  },
+
+  "rate-control": {
+    "term": "Rate control",
+    "short": "How the encoder decides how much data to spend.",
+    "eli5": "Every second of video gets a data budget. Rate control is the rule for spending it: the same amount every second, more on busy moments, or whatever a chosen quality level needs."
+  },
+  "cbr": {
+    "term": "Constant bitrate (CBR)",
+    "short": "The same amount of data every second.",
+    "eli5": "Like a tap stuck on one setting: a steady flow no matter what's on screen.",
+    "pros": ["Predictable file size", "What streaming sites expect"],
+    "cons": ["Wastes space on calm scenes", "Can get blurry in chaotic scenes"],
+    "pickIf": "You need a predictable file size."
+  },
+  "vbr": {
+    "term": "Variable bitrate (VBR)",
+    "short": "More data for action, less for menus.",
+    "eli5": "Spends extra data on explosions and fast camera turns, and saves it during calm moments. Same average size, better-looking video.",
+    "pros": ["Better quality for the same average size"],
+    "cons": ["Final file size is less predictable"],
+    "pickIf": "You record to disk. A great default."
+  },
+  "cqp": {
+    "term": "Constant quality",
+    "short": "Pick a quality; the file is as big as it needs to be.",
+    "eli5": "Instead of a data budget, you pick how good it should look and the encoder spends whatever it takes. Calm scenes stay tiny, intense scenes get big.",
+    "pros": ["Consistently good-looking video"],
+    "cons": ["Unpredictable size: fast action can make huge files"],
+    "pickIf": "You record locally and have plenty of disk space."
+  },
+  "bitrate": {
+    "term": "Bitrate",
+    "short": "How much data each second of video gets.",
+    "eli5": "More megabits per second means a sharper picture and bigger files. A good starting point for 1080p at 60 FPS is 15–25 Mbps for H.264; HEVC and AV1 look just as good with about 30% less.",
+    "pros": ["Higher = sharper, especially in fast motion"],
+    "cons": ["Higher = bigger files and more RAM for Instant Replay"]
+  },
+  "max-bitrate": {
+    "term": "Maximum bitrate",
+    "short": "The ceiling for busy moments.",
+    "eli5": "With variable bitrate, this is the most data any single second is allowed to use. It stops sudden spikes from making the file huge."
+  },
+  "quality-level": {
+    "term": "Quality level",
+    "short": "Lower number = better quality, bigger file.",
+    "eli5": "A quality dial where smaller numbers look better. Around 18–23 looks great for gameplay; below 16 is usually wasted space.",
+    "pros": ["Lower values look better"],
+    "cons": ["Each step down makes files noticeably bigger"]
+  },
+  "keyframe-interval": {
+    "term": "Keyframe interval",
+    "short": "How often a complete picture is saved.",
+    "eli5": "Most frames only store what changed since the last one. A keyframe is a full picture. More frequent keyframes make clips start exactly where you want and make scrubbing smoother; less frequent ones save a little space. 0 lets Backsight choose (2 seconds).",
+    "pros": ["1–2 seconds: precise Instant Replay cuts, easy editing"],
+    "cons": ["Very short intervals waste space"]
+  },
+  "preset": {
+    "term": "Preset",
+    "short": "The speed-versus-quality dial.",
+    "eli5": "Slower presets make the encoder think harder about every frame: better quality at the same file size, but more work. For hardware encoders that work happens on the video chip, so it rarely costs FPS until the slowest settings at high resolutions."
+  },
+  "tuning": {
+    "term": "Tuning",
+    "short": "What the encoder should optimize for.",
+    "eli5": "Tells the encoder what matters most: the best picture, the lowest delay (for streaming and remote play), or perfect, uncompressed-looking quality."
+  },
+  "tune-hq": {
+    "term": "High quality",
+    "short": "Best picture. The right choice for recording.",
+    "eli5": "Spends a little extra time per frame for a better image. Recording doesn't care about a few milliseconds of delay, so this is what you want.",
+    "pickIf": "You're recording or using Instant Replay."
+  },
+  "tune-uhq": {
+    "term": "Ultra high quality",
+    "short": "Even better picture, more GPU work.",
+    "eli5": "Squeezes out extra quality for HEVC and AV1 on newer NVIDIA cards at the cost of more encoder work.",
+    "cons": ["HEVC/AV1 and newer GPUs only", "Uses more GPU memory"]
+  },
+  "tune-ll": {
+    "term": "Low latency",
+    "short": "Less delay, slightly lower quality.",
+    "eli5": "Gets each frame out the door faster. Matters for live streaming and remote play, not for recording."
+  },
+  "tune-ull": {
+    "term": "Ultra low latency",
+    "short": "Minimum delay, lower quality.",
+    "eli5": "Fastest possible output for things like game streaming to another device."
+  },
+  "tune-lossless": {
+    "term": "Lossless",
+    "short": "Perfect quality, gigantic files.",
+    "eli5": "Keeps every single pixel exactly as it was. Files can be tens of gigabytes per hour.",
+    "cons": ["Enormous files", "Not suitable for Instant Replay"]
+  },
+  "multipass": {
+    "term": "Multipass",
+    "short": "The encoder looks at each frame twice.",
+    "eli5": "A quick first look helps the encoder decide where to spend data before doing the real work. A quarter-resolution first look is cheap and helps; a full-resolution one helps more but costs more GPU."
+  },
+  "multipass-off": {
+    "term": "Off",
+    "short": "One look per frame. Fastest and lightest.",
+    "eli5": "The encoder compresses each frame in a single go."
+  },
+  "multipass-quarter": {
+    "term": "Two passes (quarter resolution)",
+    "short": "A cheap first look. Cleaner fast motion.",
+    "eli5": "The first look is at a small version of the frame, so it's quick but still helps quality, especially in fast motion."
+  },
+  "multipass-full": {
+    "term": "Two passes (full resolution)",
+    "short": "A detailed first look. Best quality, most work.",
+    "eli5": "The first look is at the full frame. Slightly better quality, but noticeably more encoder work at 1440p and 4K."
+  },
+  "profile": {
+    "term": "Profile",
+    "short": "Which feature set the video uses.",
+    "eli5": "A promise about which compression tricks are used, so players know whether they can play it. For H.264, High is the best and universally supported. For HEVC, Main 10 is needed for 10-bit and HDR."
+  },
+  "lookahead": {
+    "term": "Look-ahead",
+    "short": "The encoder peeks at upcoming frames.",
+    "eli5": "By looking a few frames into the future, the encoder can see a big change coming and plan its data budget. Helps fast action look cleaner.",
+    "pros": ["Cleaner fast motion"],
+    "cons": ["Uses noticeably more memory and some GPU work"]
+  },
+  "spatial-aq": {
+    "term": "Adaptive quantization",
+    "short": "Extra detail where blockiness shows the most.",
+    "eli5": "Flat areas like skies, fog and dark corners show ugly blocks first. This spends a bit more data there so they stay smooth.",
+    "pros": ["Fewer visible blocks in skies and dark scenes"],
+    "cons": ["Fine textures may get slightly less data", "Some extra GPU work while you play"]
+  },
+  "temporal-aq": {
+    "term": "Temporal adaptive quantization",
+    "short": "Extra detail for things that stay still.",
+    "eli5": "Parts of the screen that don't move, like your HUD, get a little extra quality since they're seen for a long time."
+  },
+  "b-frames": {
+    "term": "B-frames",
+    "short": "Frames that borrow from before and after.",
+    "eli5": "Some frames can be built from the frames before and after them, which saves space. They make the encoder work a little harder; on NVIDIA cards Backsight uses 0 to stay light.",
+    "pros": ["Smaller files at the same quality"],
+    "cons": ["A little more work for the encoder", "Tiny bit of delay (irrelevant for recording)"]
+  },
+  "encoder-usage": {
+    "term": "Usage",
+    "short": "What AMD's encoder should be tuned for.",
+    "eli5": "AMD's version of tuning: recording and transcoding favor quality, low latency favors speed."
+  },
+  "row-mt": {
+    "term": "Row multithreading",
+    "short": "Lets the encoder use more CPU cores.",
+    "eli5": "Splits each frame into rows so more CPU cores can work at once. Faster, with almost no quality cost."
+  },
+
+  "resolution": {
+    "term": "Output resolution",
+    "short": "How big the saved video is.",
+    "eli5": "\"Same as source\" keeps every pixel. Scaling down (say, 1440p to 1080p) saves space and encoder work, and still looks good on phones and Discord."
+  },
+  "frame-rate": {
+    "term": "Frame rate",
+    "short": "How many pictures per second.",
+    "eli5": "60 FPS looks smooth for games. 30 FPS halves the work and files feel choppier. 120 FPS and above is great for slow-motion edits but needs more bitrate.",
+    "pros": ["Higher = smoother motion"],
+    "cons": ["Higher = more data and encoder work"]
+  },
+  "resolution-source": {
+    "term": "Same as source",
+    "short": "Keeps your screen's own size.",
+    "eli5": "Nothing is scaled down. Best for reading small text, but your PC encodes the most pixels."
+  },
+  "resolution-2160p": {
+    "term": "2160p (4K)",
+    "short": "Ultra sharp, never bigger than your screen.",
+    "eli5": "2160 pixels tall on a normal widescreen. On a smaller screen it just keeps your screen's size."
+  },
+  "resolution-1440p": {
+    "term": "1440p",
+    "short": "Sharp, never bigger than your screen.",
+    "eli5": "1440 pixels tall on a normal widescreen. A middle ground between 1080p and 4K."
+  },
+  "resolution-1080p": {
+    "term": "1080p",
+    "short": "Sharp, light, and easy to share.",
+    "eli5": "1080 pixels tall on a normal widescreen. Looks good on phones and Discord and is light on your PC."
+  },
+  "resolution-720p": {
+    "term": "720p",
+    "short": "Lightest, softer picture.",
+    "eli5": "720 pixels tall on a normal widescreen. Very light on your PC, but text looks fuzzier."
+  },
+  "fps-30": {
+    "term": "30 FPS",
+    "short": "Lightest, less smooth.",
+    "eli5": "30 pictures every second. Your PC does half the work of 60 FPS, but fast games look choppier."
+  },
+  "fps-60": {
+    "term": "60 FPS",
+    "short": "Smooth for most games.",
+    "eli5": "60 pictures every second. Motion looks fluid without asking too much from your PC."
+  },
+  "fps-120": {
+    "term": "120 FPS",
+    "short": "Extra smooth, more work.",
+    "eli5": "120 pictures every second. Good for slow-motion edits, but raise Bitrate so each picture stays sharp."
+  },
+  "fps-144": {
+    "term": "144 FPS",
+    "short": "Matches fast monitors.",
+    "eli5": "144 pictures every second, the speed of many gaming monitors. The most encoder work; raise Bitrate to keep it sharp."
+  },
+  "capture-cursor": {
+    "term": "Show cursor",
+    "short": "Include your mouse pointer.",
+    "eli5": "Turn it off for games where the pointer is hidden anyway, or for clean screenshots."
+  },
+  "file-splitting": {
+    "term": "Split recordings",
+    "short": "Start a new file every so often.",
+    "eli5": "Long recordings are saved as several smaller files instead of one giant one. Easier to move, upload and edit. 0 turns it off."
+  },
+
+  "instant-replay": {
+    "term": "Instant Replay",
+    "short": "An always-on rewind button.",
+    "eli5": "Backsight quietly keeps the last few minutes in memory. When something cool happens, press your hotkey and those minutes are saved as a clip. Nothing is written to your drive until you save.",
+    "pros": ["Never miss a moment", "No huge recordings to clean up"],
+    "cons": ["Uses some RAM while it's on"]
+  },
+  "replay-length": {
+    "term": "Replay length",
+    "short": "How far back a saved clip goes.",
+    "eli5": "Longer replays need more memory. The estimate below the slider shows how much RAM your current settings will use."
+  },
+
+  "audio-encoder": {
+    "term": "Audio format",
+    "short": "The compression language for sound.",
+    "eli5": "Like video, audio can be compressed (small files, tiny quality loss) or kept perfect (bigger files)."
+  },
+  "aac": {
+    "term": "AAC",
+    "short": "The audio format everything plays.",
+    "eli5": "The standard sound format for MP4 videos. Sounds great at 160 kbps and above.",
+    "pros": ["Plays everywhere", "Small"],
+    "cons": ["Slight quality loss (inaudible at normal bitrates)"],
+    "pickIf": "You want it to just work. The best default."
+  },
+  "opus": {
+    "term": "Opus",
+    "short": "Better sound per kilobyte than AAC.",
+    "eli5": "A modern audio format, used by Discord and YouTube. Sounds better than AAC at the same size.",
+    "pros": ["Excellent quality at low bitrates"],
+    "cons": ["Some editors and older devices don't support it"]
+  },
+  "flac": {
+    "term": "FLAC",
+    "short": "Perfect audio, compressed.",
+    "eli5": "Lossless: you get back exactly what was recorded, just packed tighter. About half the size of uncompressed audio.",
+    "pros": ["No quality loss"],
+    "cons": ["Larger than AAC/Opus", "Some players skip it inside MP4"]
+  },
+  "alac": {
+    "term": "ALAC",
+    "short": "Apple's perfect, compressed audio.",
+    "eli5": "Apple's lossless format. Same idea as FLAC, but friendlier for Apple apps.",
+    "pros": ["No quality loss", "Apple-friendly"],
+    "cons": ["Larger than AAC/Opus"]
+  },
+  "pcm-16": {
+    "term": "PCM 16-bit",
+    "short": "Uncompressed, CD quality.",
+    "eli5": "Raw audio with no compression at all. Editors love it. About 11 MB per minute for stereo.",
+    "pros": ["Perfect quality", "Easiest for editors"],
+    "cons": ["Large files", "MKV and MOV only"]
+  },
+  "pcm-24": {
+    "term": "PCM 24-bit",
+    "short": "Uncompressed, studio quality.",
+    "eli5": "Raw audio with more headroom than CD quality. About 17 MB per minute for stereo.",
+    "pros": ["Perfect quality with headroom for editing"],
+    "cons": ["Large files", "MKV and MOV only"]
+  },
+  "pcm-32f": {
+    "term": "PCM 32-bit float",
+    "short": "Uncompressed, can't clip.",
+    "eli5": "Raw audio that can't distort from being too loud, even if levels go over the top. About 23 MB per minute for stereo.",
+    "pros": ["Impossible to clip", "Maximum editing flexibility"],
+    "cons": ["Largest files", "MKV and MOV only"]
+  },
+  "audio-bitrate": {
+    "term": "Audio bitrate",
+    "short": "How much data each second of sound gets.",
+    "eli5": "160 kbps sounds great for gameplay. 320 kbps is near-perfect. Audio is tiny compared to video, so there's little reason to go low."
+  },
+  "compression-level": {
+    "term": "Compression level",
+    "short": "How hard to pack lossless audio.",
+    "eli5": "Higher numbers make slightly smaller files and use slightly more CPU. Quality is always perfect either way."
+  },
+  "desktop-audio": {
+    "term": "Desktop audio",
+    "short": "Everything your PC plays.",
+    "eli5": "Game sounds, music, Discord voices: whatever comes out of your speakers or headset."
+  },
+  "microphone": {
+    "term": "Microphone",
+    "short": "Your voice.",
+    "eli5": "Records your mic alongside the game. Use the mute or push-to-talk hotkeys to control it while you play."
+  },
+  "app-audio": {
+    "term": "Game audio only",
+    "short": "Record sound from one game.",
+    "eli5": "Focus the game on your primary monitor when starting capture. Backsight keeps recording that game's sound when you switch windows. Restart capture to choose another game.",
+    "pros": ["No music or chat in your clips"],
+    "cons": ["Needs Windows 10 version 2004 or newer"]
+  },
+  "audio-tracks": {
+    "term": "Separate audio tracks",
+    "short": "Keep each audio source on its own track.",
+    "eli5": "The first track contains all your sound for normal playback. Each enabled source also gets its own track, so you can adjust it later in an editor.",
+    "pros": ["Total control while editing"],
+    "cons": ["Most players and sites only play the first track", "MKV and MOV handle this best"]
+  },
+
+  "screenshot-format": {
+    "term": "Screenshot format",
+    "short": "How screenshots are saved.",
+    "eli5": "PNG keeps every pixel perfect, JPEG and WebP make much smaller files with a tiny bit of loss, and JPEG XR keeps HDR brightness."
+  },
+  "png": {
+    "term": "PNG",
+    "short": "Pixel-perfect screenshots.",
+    "eli5": "Lossless, so text and UI stay razor sharp. Files are a few megabytes each.",
+    "pros": ["Perfect quality", "Opens everywhere"],
+    "cons": ["Bigger files"],
+    "pickIf": "You want the best quality. A great default."
+  },
+  "jpeg": {
+    "term": "JPEG",
+    "short": "Small screenshots, opens everywhere.",
+    "eli5": "Compresses the image so it's a fraction of PNG's size. At quality 90 you'll struggle to spot the difference.",
+    "pros": ["Small files", "Opens everywhere"],
+    "cons": ["Slight blur around sharp text at low quality"]
+  },
+  "webp": {
+    "term": "WebP",
+    "short": "Smaller than JPEG at the same quality.",
+    "eli5": "A modern web image format. Looks like JPEG at roughly two-thirds of the size.",
+    "pros": ["Smallest files", "Great for sharing online"],
+    "cons": ["A few older apps can't open it"]
+  },
+  "jxr": {
+    "term": "JPEG XR (HDR)",
+    "short": "Keeps HDR brightness in screenshots.",
+    "eli5": "Normal image formats can't store the extra brightness of HDR, so HDR screenshots look washed out. JPEG XR keeps it. Xbox Game Bar uses the same format.",
+    "pros": ["Real HDR screenshots"],
+    "cons": ["Limited app support"],
+    "pickIf": "You play in HDR and want screenshots that look the way the game did."
+  },
+  "screenshot-quality": {
+    "term": "Image quality",
+    "short": "Higher = better looking, bigger file.",
+    "eli5": "Only used by JPEG and WebP. 90 is the sweet spot; 100 is close to perfect but much bigger."
+  },
+  "copy-to-clipboard": {
+    "term": "Copy to clipboard",
+    "short": "Paste it straight into Discord.",
+    "eli5": "Each screenshot is also copied, so you can press Ctrl+V right away in a chat or document."
+  },
+
+  "hotkey": {
+    "term": "Hotkey",
+    "short": "A key combo that works even in-game.",
+    "eli5": "Press it any time, even while a game is focused. Click a hotkey box, press the combination you want, and it's set. Mouse side buttons work too."
+  },
+  "hotkey-conflict": {
+    "term": "Hotkey conflict",
+    "short": "Two actions share the same keys.",
+    "eli5": "Only one of them could fire, so Backsight asks you to change one. Also watch out for combos your games or other apps already use."
+  },
+  "nvidia-overlay": {
+    "term": "NVIDIA overlay",
+    "short": "NVIDIA's own recorder, opened with Alt+Z.",
+    "eli5": "The NVIDIA app can record and take screenshots too, with the same keys Backsight uses by default. Then one key press makes two clips. Give Backsight other keys, or turn NVIDIA's overlay off in the NVIDIA app."
+  },
+
+  "output-folder": {
+    "term": "Save location",
+    "short": "Where your clips and screenshots go.",
+    "eli5": "By default Backsight uses Videos\\Backsight and Pictures\\Backsight. Pick a fast drive with plenty of space for long recordings."
+  },
+  "name-after-game": {
+    "term": "Name files after the game",
+    "short": "Files start with the game's name.",
+    "eli5": "A clip saved while you play Tomb Raider is called \"Tomb Raider 2026-11-12 01.15.07.mp4\" instead of \"Backsight …\". Backsight uses the program you have kept in front for a few seconds. On the desktop, or when a program has no usable name, files still start with \"Backsight\"."
+  },
+  "video-hdr": {
+    "term": "HDR video",
+    "short": "Keep bright highlights in clips and recordings.",
+    "eli5": "Turning this on also picks what HDR needs: NVIDIA NVENC HEVC and an MP4 or MKV file. Turn on HDR in Windows for the monitor your game is on. Whenever HDR can't be recorded, Backsight records standard video and says why on Home."
+  },
+  "capture-target": {
+    "term": "What to record",
+    "short": "The whole monitor, or just the game's window.",
+    "eli5": "Whole monitor records everything you see, pop-ups and other apps included. Game window only records the first program you keep in front for a few seconds, usually your game, and sticks with it until its window closes. Home always says what is happening, for example when the window is minimized or closed."
+  },
+  "capture-target-monitor": {
+    "term": "Whole monitor",
+    "short": "Records everything on one monitor.",
+    "eli5": "What you see is what you get. It works with every game, including exclusive full screen, and needs no setup."
+  },
+  "capture-target-window": {
+    "term": "Game window only",
+    "short": "Records just the game, nothing around it.",
+    "eli5": "Backsight records the window of the program you keep in front for a few seconds, so start your game first. Switching to a chat or browser doesn't change what is recorded; only another program filling the whole screen takes over. After the game window closes, the next program you keep in front is recorded, so check Home if you're unsure."
+  },
+  "capture-monitor": {
+    "term": "Monitor",
+    "short": "Which screen to record.",
+    "eli5": "Pick the monitor your games run on. If that monitor is unplugged, Backsight records your main monitor and says so on Home, then goes back to your pick when it's connected again."
+  },
+  "folder-per-game": {
+    "term": "A folder per game",
+    "short": "Each game gets its own folder.",
+    "eli5": "Clips, recordings and screenshots go in a folder named after the game, such as Videos\\Backsight\\Tomb Raider. Files saved on the desktop stay in the main folder. The Library still shows everything together."
+  },
+  "start-with-windows": {
+    "term": "Start with Windows",
+    "short": "Be ready the moment you log in.",
+    "eli5": "Backsight starts quietly in the system tray, so Instant Replay is already running when you launch a game."
+  },
+  "minimize-to-tray": {
+    "term": "Keep running in the tray",
+    "short": "Closing the window doesn't stop Backsight.",
+    "eli5": "The window closes and its memory is freed, but hotkeys and Instant Replay keep working from the tray icon by the clock."
+  },
+  "notifications": {
+    "term": "Pop-ups",
+    "short": "A small card for everything Backsight does.",
+    "eli5": "A Backsight card slides in (top right unless you move it) when a recording starts or stops, a clip or screenshot is saved, and so on. It never takes your mouse or keyboard away from the game, and it never shows up in your videos."
+  },
+  "sounds": {
+    "term": "Sounds",
+    "short": "A short sound for every action.",
+    "eli5": "A different short sound for recording, saving, screenshots and the mic, so you know it worked without looking. It works in every game, even full screen. The sound plays on your speakers, so one made during a recording is in the video too."
+  },
+  "recording-indicator": {
+    "term": "Recording dot",
+    "short": "A red dot on screen while you record.",
+    "eli5": "While a recording runs, a red dot with the time sits on screen (top right unless you move it), with a microphone symbol when push-to-talk is open or the mic is muted. The Backsight icon by the clock turns red too. Like pop-ups, it never shows up in your videos, and games in exclusive full screen hide it."
+  },
+  "hud-position": {
+    "term": "Where they appear",
+    "short": "Drag the dot and pop-ups anywhere.",
+    "eli5": "Press Move, then drag the sample dot and pop-up wherever you like on your screen. Press Done to keep that spot. Back to corner puts them top right again."
+  },
+  "advanced-mode": {
+    "term": "Advanced settings",
+    "short": "Show every knob.",
+    "eli5": "Simple mode shows the handful of settings most people need. Advanced reveals everything else. Every setting still has an explanation, so feel free to explore."
+  },
+  "updates": {
+    "term": "Updates",
+    "short": "Gets the newest Backsight from GitHub.",
+    "eli5": "Backsight only goes online when you press Check. If there's a newer version, Install downloads it, checks it's really from Backsight, then closes and reopens Backsight. A recording in progress is saved first."
+  },
+  "first-run-setup": {
+    "term": "Setup",
+    "short": "Checks your PC and picks what records.",
+    "eli5": "Backsight tests which encoders work on your PC and picks the one that costs your games the least. It also checks whether NVIDIA's overlay uses the same keys. Run it again after you change graphics cards."
+  },
+  "diag-buffer-length": {
+    "term": "Buffer length",
+    "short": "How much replay is stored right now.",
+    "eli5": "This is how far back a saved clip can reach right now. It grows after Instant Replay starts, then stays at the length you chose."
+  },
+  "diag-buffer-memory": {
+    "term": "Buffer memory",
+    "short": "The RAM the stored replay uses.",
+    "eli5": "Instant Replay keeps your last few minutes in memory as already-compressed video and audio. This is how much memory that takes, and it never goes past its limit."
+  },
+  "diag-buffer-rate": {
+    "term": "Stored data rate",
+    "short": "Average size of the stored video and audio.",
+    "eli5": "This is the stored data divided by the time it covers, so it is a rough average, not an exact bitrate. It includes audio, and it needs a few seconds of replay to show."
+  },
+  "diag-written-rate": {
+    "term": "Recording data rate",
+    "short": "How fast the recording file is growing.",
+    "eli5": "This is the real amount of video and audio written to your file over the last few seconds, not the quality you picked. It shows a dash when you are not recording."
+  },
+  "diag-writer-backlog": {
+    "term": "Recording backlog",
+    "short": "Data waiting to be saved to disk.",
+    "eli5": "Recorded data waits here until your drive writes it. A small number is normal. If it climbs toward the limit, your drive is too slow and the recording will stop to keep what it has."
+  },
+  "diag-encoded-frames": {
+    "term": "Frames encoded",
+    "short": "Pictures sent to the video encoder.",
+    "eli5": "Every frame Backsight compresses counts here. It just keeps going up while Instant Replay runs."
+  },
+  "diag-encoder-queue": {
+    "term": "Encoder queue",
+    "short": "Frames still inside the encoder.",
+    "eli5": "Some frames wait inside the encoder before they come out. A small steady number is normal. A number that keeps growing means your encoder can't keep up."
+  },
+  "diag-dropped-frames": {
+    "term": "Dropped frames",
+    "short": "Frames thrown away because the game was faster.",
+    "eli5": "If your game draws more frames than you record, Backsight keeps the newest and drops the rest. That is normal and not a problem."
+  },
+  "diag-repeated-frames": {
+    "term": "Repeated frames",
+    "short": "Frames shown twice because nothing new arrived.",
+    "eli5": "When the screen doesn't change, or capture is late, Backsight repeats the last picture to keep the video smooth. Lots of repeats can mean the game is slower than your recording rate."
+  },
+  "diag-skipped-frames": {
+    "term": "Skipped frames",
+    "short": "Frames left out after a long freeze.",
+    "eli5": "After a long stall, Backsight jumps ahead instead of sending a burst of repeats. A few after a PC sleep are normal."
+  },
+  "diag-late-frames": {
+    "term": "Late frames",
+    "short": "Frames encoded more than one frame late.",
+    "eli5": "A frame is late when the GPU or encoder took too long to handle it. A few are fine. Many mean your PC is too busy, so try a lighter video setting."
+  },
+  "diag-silence-fills": {
+    "term": "Audio silence fills",
+    "short": "Quiet gaps added to keep sound in step.",
+    "eli5": "When nothing is playing, or a device changes, Backsight adds silence so the sound stays in step with the video. Lots of fills while sound is playing means something is wrong."
+  },
+  "diag-audio-trimmed": {
+    "term": "Audio trimmed",
+    "short": "Overlapping sound that was cut away.",
+    "eli5": "Sometimes a device sends sound that overlaps what is already saved. Backsight cuts the extra so nothing plays twice."
+  },
+  "diag-audio-jumps": {
+    "term": "Audio jumps",
+    "short": "Sound skipped after a freeze.",
+    "eli5": "After your PC sleeps or freezes, Backsight skips ahead in the audio instead of filling the gap with silence."
+  },
+  "diag-audio-glitches": {
+    "term": "Audio glitches",
+    "short": "Hiccups reported by your sound device.",
+    "eli5": "Windows sometimes tells Backsight that a sound packet came out glitchy. A few over a long session are normal."
+  },
+  "diag-audio-device-errors": {
+    "term": "Audio device errors",
+    "short": "Times a sound device failed or vanished.",
+    "eli5": "This counts unplugged headsets, devices that wouldn't open, and restarts of the Windows audio service. Backsight retries every half second."
+  }
+}

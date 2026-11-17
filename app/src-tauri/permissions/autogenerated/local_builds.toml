@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-local-builds"
+description = "Enables the local_builds command without any pre-configured scope."
+commands.allow = ["local_builds"]
+
+[[permission]]
+identifier = "deny-local-builds"
+description = "Denies the local_builds command without any pre-configured scope."
+commands.deny = ["local_builds"]

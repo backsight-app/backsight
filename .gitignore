@@ -1,0 +1,22 @@
+# Rust
+/target/
+/dist-desktop/
+
+# Node
+node_modules/
+app/dist/
+
+# Tauri
+app/src-tauri/gen/
+
+# FFmpeg dev files (fetched by scripts/fetch-ffmpeg.ps1)
+/third_party/
+
+# Editors and OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+Thumbs.db
+.DS_Store
+

@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 520">
+  <title>Backsight: instant replay, recording and screenshots for Windows</title>
+  <defs>
+    <radialGradient id="glow-v" cx="0.15" cy="0.1" r="0.6">
+      <stop offset="0" stop-color="#8B5CF6" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#8B5CF6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow-c" cx="0.9" cy="0.95" r="0.55">
+      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="0.5" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="text-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#A78BFA"/>
+      <stop offset="1" stop-color="#38D6F0"/>
+    </linearGradient>
+    <linearGradient id="sky1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2B1C5C"/><stop offset="1" stop-color="#F472B6"/>
+    </linearGradient>
+    <linearGradient id="sky2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0E3A5C"/><stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="sky3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1E1B4B"/><stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#FFFFFF" stroke-opacity="0.04"/>
+    </pattern>
+    <clipPath id="f1"><rect x="0" y="0" width="300" height="170" rx="14"/></clipPath>
+    <clipPath id="f2"><rect x="0" y="0" width="300" height="170" rx="14"/></clipPath>
+    <clipPath id="f3"><rect x="0" y="0" width="300" height="170" rx="14"/></clipPath>
+    <radialGradient id="dot" cx="0.38" cy="0.32" r="0.75">
+      <stop offset="0" stop-color="#FF9BAE"/><stop offset="1" stop-color="#FF3D63"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1600" height="520" fill="#0B0F1A"/>
+  <rect width="1600" height="520" fill="url(#grid)"/>
+  <rect width="1600" height="520" fill="url(#glow-v)"/>
+  <rect width="1600" height="520" fill="url(#glow-c)"/>
+
+  <!-- Mark -->
+  <g transform="translate(96 118) scale(0.17)">
+    <rect x="64" y="64" width="896" height="896" rx="216" fill="url(#grad)"/>
+    <path d="M512 262 A250 250 0 1 1 277.1 426.5" fill="none" stroke="#FFFFFF" stroke-width="76" stroke-linecap="round"/>
+    <path d="M378 262 L536 164 L536 360 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="30" stroke-linejoin="round"/>
+    <circle cx="512" cy="512" r="106" fill="url(#dot)"/>
+  </g>
+
+  <!-- Wordmark and tagline -->
+  <text x="286" y="232" font-family="Segoe UI Variable Display, Segoe UI, sans-serif" font-size="104" font-weight="700" letter-spacing="-2" fill="#F1F4FB">Back<tspan fill="url(#text-grad)">sight</tspan></text>
+  <text x="100" y="332" font-family="Segoe UI Variable Text, Segoe UI, sans-serif" font-size="31" fill="#C3CBE0">Instant replay, recording and screenshots for Windows.</text>
+  <text x="100" y="374" font-family="Segoe UI Variable Text, Segoe UI, sans-serif" font-size="31" fill="#8E99B6">Lightweight, powerful, and it explains every setting.</text>
+
+  <!-- Feature chips -->
+  <g font-family="Segoe UI Variable Text, Segoe UI, sans-serif" font-size="19" font-weight="600" fill="#DDE3F2">
+    <rect x="100" y="412" width="104" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.05" stroke="#FFFFFF" stroke-opacity="0.16"/>
+    <text x="152" y="438" text-anchor="middle">NVENC</text>
+    <rect x="216" y="412" width="88" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.05" stroke="#FFFFFF" stroke-opacity="0.16"/>
+    <text x="260" y="438" text-anchor="middle">AMF</text>
+    <rect x="316" y="412" width="140" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.05" stroke="#FFFFFF" stroke-opacity="0.16"/>
+    <text x="386" y="438" text-anchor="middle">Quick Sync</text>
+    <rect x="468" y="412" width="210" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.05" stroke="#FFFFFF" stroke-opacity="0.16"/>
+    <text x="573" y="438" text-anchor="middle">AV1 · HEVC · H.264</text>
+    <rect x="690" y="412" width="190" height="40" rx="20" fill="#7C5CFF" fill-opacity="0.18" stroke="#A78BFA" stroke-opacity="0.5"/>
+    <text x="785" y="438" text-anchor="middle" fill="#E4DCFF">Plain-English help</text>
+  </g>
+
+  <!-- Stacked clip frames -->
+  <g transform="translate(1180 70) rotate(6)" opacity="0.55">
+    <g clip-path="url(#f3)">
+      <rect width="300" height="170" fill="url(#sky3)"/>
+      <path d="M0 140 L70 90 L120 120 L190 70 L300 130 V170 H0 Z" fill="#0B0F1A" fill-opacity="0.6"/>
+    </g>
+    <rect width="300" height="170" rx="14" fill="none" stroke="#FFFFFF" stroke-opacity="0.2"/>
+  </g>
+  <g transform="translate(1120 112) rotate(-3)" opacity="0.8">
+    <g clip-path="url(#f2)">
+      <rect width="300" height="170" fill="url(#sky2)"/>
+      <circle cx="220" cy="60" r="26" fill="#E0F7FF" fill-opacity="0.8"/>
+      <path d="M0 150 L60 110 L110 135 L170 95 L230 125 L300 100 V170 H0 Z" fill="#0B0F1A" fill-opacity="0.65"/>
+    </g>
+    <rect width="300" height="170" rx="14" fill="none" stroke="#FFFFFF" stroke-opacity="0.25"/>
+  </g>
+  <g transform="translate(1060 160)">
+    <g clip-path="url(#f1)">
+      <rect width="300" height="170" fill="url(#sky1)"/>
+      <circle cx="90" cy="70" r="32" fill="#FFE4F1" fill-opacity="0.85"/>
+      <path d="M0 130 L80 80 L140 115 L210 65 L300 120 V170 H0 Z" fill="#0B0F1A" fill-opacity="0.7"/>
+      <path d="M0 155 L90 125 L160 145 L240 115 L300 140 V170 H0 Z" fill="#0B0F1A" fill-opacity="0.85"/>
+    </g>
+    <rect width="300" height="170" rx="14" fill="none" stroke="#FFFFFF" stroke-opacity="0.35"/>
+    <rect x="14" y="14" width="74" height="26" rx="13" fill="#0B0F1A" fill-opacity="0.7"/>
+    <circle cx="31" cy="27" r="6" fill="#FF4D6D"/>
+    <text x="43" y="33" font-family="Segoe UI Variable Text, Segoe UI, sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">REC</text>
+  </g>
+
+  <!-- Replay timeline -->
+  <g transform="translate(1000 390)">
+    <rect width="480" height="10" rx="5" fill="#FFFFFF" fill-opacity="0.1"/>
+    <rect x="250" width="230" height="10" rx="5" fill="url(#grad)"/>
+    <g fill="#FFFFFF" fill-opacity="0.25">
+      <rect x="40" y="-6" width="2" height="22"/><rect x="100" y="-6" width="2" height="22"/>
+      <rect x="160" y="-6" width="2" height="22"/><rect x="220" y="-6" width="2" height="22"/>
+    </g>
+    <circle cx="480" cy="5" r="11" fill="#FFFFFF"/>
+    <circle cx="480" cy="5" r="5" fill="#FF4D6D"/>
+    <text x="250" y="44" font-family="Segoe UI Variable Text, Segoe UI, sans-serif" font-size="18" font-weight="600" fill="#9FE9F7">Last 2:00 saved</text>
+    <text x="480" y="44" text-anchor="end" font-family="Segoe UI Variable Text, Segoe UI, sans-serif" font-size="18" fill="#8E99B6">Alt + F10</text>
+  </g>
+</svg>

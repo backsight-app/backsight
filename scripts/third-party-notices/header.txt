@@ -1,0 +1,31 @@
+Backsight third-party notices
+=============================
+
+Backsight is Copyright (C) 2026 Backsight contributors. It is free software under the
+GNU General Public License, version 3 or (at your option) any later version, with no
+warranty; see LICENSE.txt in this folder. Its source code is at
+https://github.com/backsight-app/backsight
+
+Backsight is built with the work of many other people. This file lists each part that ships
+inside Backsight or its installer, with its license.
+
+Contents
+  1. FFmpeg and the libraries it is built with
+  2. The Rust standard library
+  3. Microsoft WebView2 SDK (loader)
+  4. Rust crates
+  5. JavaScript in Backsight's window
+  6. NSIS (the installer)
+
+This file is made by scripts/third-party-notices.ps1; don't edit it by hand.
+
+
+========================================================================
+1. FFmpeg and the libraries it is built with
+========================================================================
+
+Backsight uses FFmpeg (https://ffmpeg.org) as separate DLL files in this folder. FFmpeg and the
+libraries it is built with have their own license files here, named LICENSE-*.txt
+(for example LICENSE-ffmpeg-COPYING-GPLv3.txt and LICENSE-x264-COPYING.txt).
+FFMPEG-BUILDINFO.txt says exactly how this FFmpeg was built, and FFMPEG-SOURCE.txt says where
+to get its complete source code.

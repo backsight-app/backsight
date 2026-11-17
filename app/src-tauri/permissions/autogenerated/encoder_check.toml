@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-encoder-check"
+description = "Enables the encoder_check command without any pre-configured scope."
+commands.allow = ["encoder_check"]
+
+[[permission]]
+identifier = "deny-encoder-check"
+description = "Denies the encoder_check command without any pre-configured scope."
+commands.deny = ["encoder_check"]

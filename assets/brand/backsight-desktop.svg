@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>Backsight desktop — replay reel</title>
+  <defs>
+    <linearGradient id="edge" x2="1" y2="1">
+      <stop stop-color="#8B5CF6"/>
+      <stop offset=".5" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="face" x2=".7" y2="1">
+      <stop stop-color="#263151"/>
+      <stop offset="1" stop-color="#0B0F1A"/>
+    </linearGradient>
+    <radialGradient id="light" cx=".3" cy=".1" r="1">
+      <stop stop-color="#FFFFFF" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="record" cx=".35" cy=".25" r=".8">
+      <stop stop-color="#FF9BAE"/>
+      <stop offset="1" stop-color="#FF3D63"/>
+    </radialGradient>
+  </defs>
+  <!-- A film-reel frame surrounds the project's rewind ring and recording dot. -->
+  <rect x="40" y="40" width="944" height="944" rx="222" fill="url(#edge)"/>
+  <rect x="55" y="55" width="914" height="914" rx="208" fill="url(#face)"/>
+  <rect x="55" y="55" width="914" height="914" rx="208" fill="url(#light)"/>
+  <g fill="url(#edge)" opacity=".8">
+    <rect x="110" y="250" width="48" height="92" rx="16"/>
+    <rect x="110" y="466" width="48" height="92" rx="16"/>
+    <rect x="110" y="682" width="48" height="92" rx="16"/>
+    <rect x="866" y="250" width="48" height="92" rx="16"/>
+    <rect x="866" y="466" width="48" height="92" rx="16"/>
+    <rect x="866" y="682" width="48" height="92" rx="16"/>
+  </g>
+  <path d="M512 262 A250 250 0 1 1 277.1 426.5" fill="none" stroke="#FFFFFF" stroke-width="76" stroke-linecap="round"/>
+  <path d="M378 262 L536 164 L536 360 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="30" stroke-linejoin="round"/>
+  <circle cx="512" cy="512" r="106" fill="url(#record)"/>
+  <circle cx="512" cy="512" r="106" fill="none" stroke="#FFFFFF" stroke-opacity=".35" stroke-width="6"/>
+</svg>

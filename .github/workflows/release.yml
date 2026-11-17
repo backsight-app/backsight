@@ -1,0 +1,82 @@
+name: Release
+
+# Every change on main that passes CI becomes a signed release (ADR 0014): the installer, its
+# signature and latest.json, which the Update button reads. Public repository only.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      !github.event.repository.private
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+      - uses: actions/cache@v6
+        with:
+          path: third_party/ffmpeg
+          key: ffmpeg-${{ hashFiles('scripts/fetch-ffmpeg.ps1') }}
+      - run: ./scripts/fetch-ffmpeg.ps1
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+      # One version everywhere: the installer and updater (tauri.conf.json), the General page
+      # (which imports it) and the program (Cargo). Later releases always count higher.
+      - name: Version and notes
+        id: version
+        shell: pwsh
+        run: |
+          $Version = "0.1.${{ github.run_number }}"
+          $Conf = 'app/src-tauri/tauri.conf.json'
+          # The signed update files (.sig, latest.json) only here: local builds have no key.
+          (Get-Content $Conf -Raw) -replace '"version": "[^"]*"', "`"version`": `"$Version`"" -replace '"bundle": \{', '"bundle": { "createUpdaterArtifacts": true,' | Set-Content $Conf -NoNewline
+          (Get-Content Cargo.toml -Raw) -replace '(\[workspace\.package\]\r?\nversion = )"[^"]*"', "`$1`"$Version`"" | Set-Content Cargo.toml -NoNewline
+          $Previous = git describe --tags --match 'v*' --abbrev=0 2>$null
+          $Range = if ($Previous) { "$Previous..HEAD" } else { 'HEAD' }
+          $Notes = (git log $Range --no-merges --pretty='- %s') -join "`n"
+          "version=$Version" >> $env:GITHUB_OUTPUT
+          "notes<<EOF`n$Notes`nEOF" >> $env:GITHUB_OUTPUT
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+        with:
+          projectPath: app
+          tagName: v${{ steps.version.outputs.version }}
+          commitish: ${{ github.event.workflow_run.head_sha }}
+          releaseName: Backsight ${{ steps.version.outputs.version }}
+          releaseBody: |
+            Download **Backsight_${{ steps.version.outputs.version }}_x64-setup.exe** below and run it. Already installed? On the General page, press **Check** under Updates.
+
+            ${{ steps.version.outputs.notes }}
+          # A draft until every file is up: latest.json must never point at a half-uploaded release.
+          releaseDraft: true
+          prerelease: false
+      - run: gh release edit v${{ steps.version.outputs.version }} --draft=false --latest
+        env:
+          GH_TOKEN: ${{ github.token }}

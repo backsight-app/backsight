@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-crash-open-folder"
+description = "Enables the crash_open_folder command without any pre-configured scope."
+commands.allow = ["crash_open_folder"]
+
+[[permission]]
+identifier = "deny-crash-open-folder"
+description = "Denies the crash_open_folder command without any pre-configured scope."
+commands.deny = ["crash_open_folder"]

@@ -1,0 +1,41 @@
+[package]
+name = "backsight"
+description = "Backsight desktop app: tray icon, windows and the bridge between the UI and the engine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+backsight-config.workspace = true
+backsight-encode.workspace = true
+backsight-engine.workspace = true
+directories.workspace = true
+tauri.workspace = true
+tauri-plugin-single-instance.workspace = true
+tauri-plugin-dialog.workspace = true
+tauri-plugin-updater.workspace = true
+serde.workspace = true
+# generate_context! reads the updater plugin's settings with it.
+serde_json.workspace = true
+tracing.workspace = true
+# WebView2's process-failure event (`uiwatch.rs`); the version wry uses, so it compiles once.
+webview2-com = "0.39"
+# webview_check.rs: registry read and a message box when WebView2 is missing.
+windows = { workspace = true, features = ["Win32_System_Registry", "Win32_UI_WindowsAndMessaging"] }
+
+[features]
+# The Update button for local test builds (ADR 0009). Only `scripts/build-desktop.ps1` turns it on;
+# installers and public builds never carry code that runs an update script.
+local-update = []
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

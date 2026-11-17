@@ -1,0 +1,99 @@
+name: Performance check
+
+# Catches a big slowdown in the GPU-free hot paths (pacer, replay buffer, recording feed, hotkeys,
+# audio mixer). The base commit and this change are benched one after the other on the same
+# runner, so shared-runner speed differences cancel out. See docs/architecture/testing.md.
+# Jobs skip in a private fork; run them by hand there with
+# `gh workflow run bench.yml --ref <branch>`.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Commit to compare against (default is the parent of the newest commit)
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bench:
+    name: Benchmarks vs base commit
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/cache@v6
+        with:
+          path: third_party/ffmpeg
+          key: ffmpeg-${{ hashFiles('scripts/fetch-ffmpeg.ps1') }}
+      - run: ./scripts/fetch-ffmpeg.ps1
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Check out the base commit beside this one
+        shell: pwsh
+        # The typed-in base goes through env so it is never pasted into the script.
+        env:
+          INPUT_BASE: ${{ inputs.base }}
+        run: |
+          $base = if ('${{ github.event_name }}' -eq 'pull_request') { '${{ github.event.pull_request.base.sha }}' } elseif ('${{ github.event_name }}' -eq 'workflow_dispatch') { if ($env:INPUT_BASE) { $env:INPUT_BASE } else { (& git rev-parse HEAD~1) } } else { '${{ github.event.before }}' }
+          if (-not $base -or $base -match '^0+$') { "No base commit (first push); nothing to compare." | Add-Content $env:GITHUB_STEP_SUMMARY; 'SKIP=1' | Add-Content $env:GITHUB_ENV; exit 0 }
+          git worktree add ../base $base
+          # The FFmpeg dev files are not in git; share this checkout's copy.
+          New-Item -ItemType Junction -Path ../base/third_party/ffmpeg -Target "$PWD/third_party/ffmpeg" -Force | Out-Null
+          "BASE_SHA=$base" | Add-Content $env:GITHUB_ENV
+      # Both checkouts share one target dir (so dependencies build once), but cargo can reuse the
+      # workspace crates it built for the other checkout. They are cleaned before each build, and
+      # the log shows "Compiling backsight-config/-encode/-engine" for each side. The two bench
+      # programs are kept, then run base, change, base, change (quick runs, about 5 s per
+      # benchmark); the compare script takes the faster run of each side.
+      - name: Run benchmarks
+        if: env.SKIP != '1'
+        shell: pwsh
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target
+          CRITERION_HOME: ${{ github.workspace }}/target/criterion
+        run: |
+          $env:PATH = "$PWD/third_party/ffmpeg/bin;$env:PATH"
+          $bins = New-Item -ItemType Directory -Force "$PWD/target/bench-bins"
+          function Build($dir, $name) {
+              Push-Location $dir
+              try {
+                  cargo clean --release -p backsight-config -p backsight-encode -p backsight-engine
+                  if ($LASTEXITCODE) { throw "cargo clean failed in $dir" }
+                  $json = cargo bench -p backsight-engine --bench hot_paths --no-run --message-format=json
+                  if ($LASTEXITCODE) { throw "cargo build failed in $dir" }
+                  $exe = $json | Where-Object { $_ -like '{*' } | ForEach-Object { $_ | ConvertFrom-Json } |
+                      Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'hot_paths' -and $_.executable } |
+                      Select-Object -Last 1 -ExpandProperty executable
+                  if (-not $exe) { throw "no bench program built in $dir" }
+                  Copy-Item $exe "$bins/$name.exe"
+                  Write-Host "Built $name from $dir"
+              } finally { Pop-Location }
+          }
+          Build ../base base
+          Build . head
+          function Bench($name, $baseline) {
+              & "$bins/$name.exe" --bench --warm-up-time 1 --measurement-time 3 --sample-size 30 --noplot --save-baseline $baseline
+              if ($LASTEXITCODE) { throw "$name benchmarks failed" }
+          }
+          Bench base base1
+          Bench head head1
+          Bench base base2
+          Bench head head2
+      - name: Compare
+        if: env.SKIP != '1'
+        shell: pwsh
+        run: ./scripts/bench-compare.ps1 -Base base1,base2 -Head head1,head2 -Threshold 30

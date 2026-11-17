@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hud-arrange"
+description = "Enables the hud_arrange command without any pre-configured scope."
+commands.allow = ["hud_arrange"]
+
+[[permission]]
+identifier = "deny-hud-arrange"
+description = "Denies the hud_arrange command without any pre-configured scope."
+commands.deny = ["hud_arrange"]

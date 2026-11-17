@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "hud",
+  "description": "The pop-ups and the recording dot: only their own commands.",
+  "windows": ["hud", "dot"],
+  "permissions": ["allow-hud-poll", "allow-hud-idle", "allow-hud-drag", "allow-ui-log", "allow-ui-heartbeat"]
+}

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hud-drag"
+description = "Enables the hud_drag command without any pre-configured scope."
+commands.allow = ["hud_drag"]
+
+[[permission]]
+identifier = "deny-hud-drag"
+description = "Denies the hud_drag command without any pre-configured scope."
+commands.deny = ["hud_drag"]
