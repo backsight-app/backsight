@@ -62,6 +62,8 @@ fn main() {
         "lighter_video",
         "nvidia_overlay_keys",
         "crash_notice",
+        "clips_space",
+        "press_action",
         "crash_dismiss",
         "crash_open_folder",
         "open_logs_folder",

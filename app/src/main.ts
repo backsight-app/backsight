@@ -1,6 +1,9 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { mount } from "svelte";
+// Bundled, not fetched: the app works offline.
+import "@fontsource-variable/inter";
+import "@fontsource-variable/sora";
 import "./app.css";
 import App from "./App.svelte";
 import Hud from "./Hud.svelte";

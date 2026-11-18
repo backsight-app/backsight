@@ -1,7 +1,7 @@
 // Self-check for library.ts. The app has no test runner, so run it directly:
 //   node --experimental-strip-types src/lib/library.check.ts   (from app/)
 import assert from "node:assert/strict";
-import { activeFilters, applyFilters, formatBytes, formatClock, groupByDay, isVertical, noFilters, type LibraryItem } from "./library.ts";
+import { activeFilters, applyFilters, formatBytes, formatClock, groupByDay, isVertical, newSince, noFilters, todayStats, type LibraryItem } from "./library.ts";
 
 const now = new Date(2026, 10, 8, 15, 0).getTime();
 const at = (daysAgo: number, hour = 12) => new Date(2026, 10, 8 - daysAgo, hour).getTime();
@@ -44,4 +44,8 @@ assert.deepEqual(activeFilters({ ...noFilters(), duration: "s", size: "xl" }, "a
 
 const groups = groupByDay(items, now);
 assert.deepEqual(groups.map((g) => [g.label, g.items.length]), [["Today", 2], ["Yesterday", 1], [groups[2].label, 1]]);
+// Today: video "a" (2:05) only; the screenshot and yesterday's video don't count.
+assert.deepEqual(todayStats(items, now), { clips: 1, minutes: 2 });
+assert.equal(newSince(items, at(0, 10)), 1);
+assert.equal(newSince(items, 0), 4);
 console.log("library.ts: all checks passed");

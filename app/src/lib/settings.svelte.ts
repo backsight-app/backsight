@@ -69,6 +69,10 @@ export type ReplayStatus = {
   game_audio_from: string | null;
   capture_notice: string | null;
   hotkey_problem: string | null;
+  /** The game being watched (its folder name), null for the desktop. */
+  game: string | null;
+  /** A newer version is ready to install (installed copies check by themselves). */
+  update: string | null;
 };
 
 let timer: ReturnType<typeof setTimeout> | undefined;

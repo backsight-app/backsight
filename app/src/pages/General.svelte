@@ -33,7 +33,7 @@
       (e) => (aboutError = String(e)),
     );
 
-  // Updates: online only when pressed (ADR 0014). Install closes Backsight; the installer reopens it.
+  // Updates (ADR 0014): Backsight also checks by itself; Install closes Backsight and the installer reopens it.
   let update = $state<{ version: string; notes: string | null } | null>(null);
   let updateState = $state<"idle" | "checking" | "current" | "installing">("idle");
   let updateError = $state("");

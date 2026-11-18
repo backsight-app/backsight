@@ -153,7 +153,7 @@ struct MicKey {
     control: Option<Box<dyn Fn(bool) + Send>>,
 }
 
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
@@ -182,6 +182,10 @@ struct Status {
     capture_notice: Option<&'static str>,
     /// The hotkeys couldn't start, so pressing them does nothing.
     hotkey_problem: Option<String>,
+    /// The game Backsight is watching, as files are filed under it.
+    game: Option<String>,
+    /// A newer version is ready to install (ADR 0014).
+    update: Option<String>,
 }
 
 /// Replaces the session with a new one. The caller holds `apply` and not `replay`: opening the
@@ -232,8 +236,17 @@ fn stop_replay(engine: &Engine, replay: &mut Replay) {
     replay.start_error = None;
 }
 
-fn recording(replay: &Replay) -> bool {
+pub(crate) fn recording(replay: &Replay) -> bool {
     replay.session.as_ref().is_some_and(|s| s.recording_time().is_some())
+}
+
+/// Nothing to lose by restarting now: Setup is finished, nothing records and no game is in front
+/// (an update found at start installs only then).
+pub(crate) fn idle_for_update(app: &AppHandle) -> bool {
+    let setup_done = Settings::load().is_ok_and(|s| s.setup.done);
+    let engine = app.state::<Engine>();
+    let replay = lock(&engine.replay);
+    setup_done && !recording(&replay) && replay.session.as_ref().is_none_or(|s| s.game_name().is_none())
 }
 
 /// Runs replay the way `settings` and the toggle hotkey say. The caller holds `apply`, so no
@@ -1710,6 +1723,38 @@ fn library_dirs(settings: &Settings) -> [Option<PathBuf>; 2] {
         .map(|d| d.and_then(|d| std::path::absolute(d).ok()))
 }
 
+/// Home's Record and Screenshot tiles: the same as pressing that key, queued with the hotkeys.
+#[tauri::command]
+fn press_action(actions: tauri::State<Sender<Action>>, action: Action) -> Result<(), String> {
+    match action {
+        Action::ToggleRecording | Action::Screenshot => actions
+            .try_send(action)
+            .map_err(|_| "Backsight is still busy with the last key press. Try again in a moment.".into()),
+        _ => Err("Only Record and Screenshot can be pressed from Home.".into()),
+    }
+}
+
+/// Free and total bytes on the drive that holds the clips folder (Home's side menu), `None` when
+/// Windows can't say. A folder not made yet counts as its nearest existing parent.
+/// Off the main thread: a sleeping or network drive can take seconds to answer.
+#[tauri::command]
+async fn clips_space() -> Option<(u64, u64)> {
+    use windows::{Win32::Storage::FileSystem::GetDiskFreeSpaceExW, core::HSTRING};
+    let settings = load_settings().ok()?;
+    let [videos, _] = library_dirs(&settings);
+    spawn_blocking(move || {
+        let dir = videos?.ancestors().find(|d| d.is_dir())?.to_owned();
+        let (mut free, mut total) = (0u64, 0u64);
+        // SAFETY: the path is a valid wide string and both outputs live across the call.
+        unsafe { GetDiskFreeSpaceExW(&HSTRING::from(dir.as_os_str()), Some(&mut free), Some(&mut total), None) }
+            .ok()?;
+        Some((free, total))
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
 /// Lets the WebView load thumbnails, screenshots and previews through the asset protocol.
 // shortcut: a folder you switch away from stays readable until restart (Tauri's scope can only add a
 // permanent forbid); fine while it only holds your own clips.
@@ -1951,6 +1996,8 @@ fn status(replay: &Replay, ptt_live: bool) -> Status {
         game_audio_from: None,
         capture_notice: None,
         hotkey_problem: None,
+        game: None,
+        update: update::ready(),
     };
     if let Some(session) = &replay.session
         && let Some(t) = session.recording_time()
@@ -1970,6 +2017,7 @@ fn status(replay: &Replay, ptt_live: bool) -> Status {
         status.mic_muted = replay.mic_muted && session.records_mic();
         status.game_audio_from = session.game_audio_target().map(|t| t.name().to_owned());
         status.capture_notice = session.capture_notice();
+        status.game = session.game_name();
         if !session.replay_on() {
             return status;
         }
@@ -2085,6 +2133,9 @@ pub(crate) fn windows_dir() -> PathBuf {
     std::env::var_os("SystemRoot").map_or_else(|| PathBuf::from(r"C:\Windows"), PathBuf::from)
 }
 
+/// The installer's "close Backsight and continue" (windows/installer.nsi).
+const QUIT_FLAG: &str = "--quit";
+
 /// Quits without holding up the window or Windows' messages: the tray icon and the windows go at
 /// once, a worker finishes a running recording and the files still being written, then the
 /// process ends.
@@ -2168,13 +2219,19 @@ fn main() {
     let app = tauri::Builder::default()
         .manage(Engine::default())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
+        // `--quit` comes from the installer: close the running copy the way Quit does (a running
+        // recording is finished first). Any other second start shows the window.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if args.iter().any(|a| a == QUIT_FLAG) { quit(app) } else { show_main_window(app) }
+        }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .on_page_load(|webview, _| uiwatch::watch_webview(webview))
         .invoke_handler(tauri::generate_handler![
             get_settings,
             save_settings,
             get_status,
+            clips_space,
+            press_action,
             replay_menu_action,
             get_diagnostics,
             list_microphones,
@@ -2213,6 +2270,11 @@ fn main() {
             uiwatch::ui_heartbeat
         ])
         .setup(|app| {
+            // Nothing was running to quit: don't start one.
+            if std::env::args().any(|a| a == QUIT_FLAG) {
+                std::process::exit(0);
+            }
+            update::check_in_background(app.handle().clone());
             let (actions, mut queued) = async_runtime::channel::<Action>(32);
             app.manage(actions);
             let handle = app.handle().clone();

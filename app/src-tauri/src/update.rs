@@ -1,9 +1,10 @@
-//! The Update button for installed copies (ADR 0014): asks GitHub Releases for a newer signed
-//! installer only when pressed, then installs it the way Quit closes Backsight.
+//! Updates for installed copies (ADR 0014): asks GitHub Releases for a newer signed installer when
+//! Backsight starts, every hour, when the window opens and when Check is pressed, then installs it
+//! the way Quit closes Backsight.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
@@ -23,13 +24,54 @@ struct Progress {
     total: Option<u64>,
 }
 
+/// The newer version the last check found: Home shows "Update ready" with it.
+static READY: Mutex<Option<String>> = Mutex::new(None);
+
+pub fn ready() -> Option<String> {
+    crate::lock(&READY).clone()
+}
+
 /// The newer release, or `None` when this copy is the newest.
 #[tauri::command]
 pub async fn check_update(app: AppHandle) -> Result<Option<Available>, String> {
     installed()?;
     let update =
         app.updater_builder().timeout(Duration::from_secs(30)).build().map_err(plain)?.check().await.map_err(plain)?;
+    *crate::lock(&READY) = update.as_ref().map(|u| u.version.clone());
     Ok(update.map(|u| Available { version: u.version, notes: u.body }))
+}
+
+/// Checks now and then every hour. An update found in the first minutes after Backsight starts
+/// installs straight away when nothing would be lost (`crate::idle_for_update`); otherwise Home
+/// offers it.
+pub fn check_in_background(app: AppHandle) {
+    if installed().is_err() {
+        return;
+    }
+    let started = Instant::now();
+    let spawned = std::thread::Builder::new().name("backsight-update-check".into()).spawn(move || {
+        loop {
+            if let Ok(Some(found)) = tauri::async_runtime::block_on(check_update(app.clone()))
+                && started.elapsed() < Duration::from_secs(180)
+                && crate::idle_for_update(&app)
+                && first_try(&found.version)
+            {
+                tracing::info!("update {}: found at start, installing", found.version);
+                let _ = tauri::async_runtime::block_on(install_update(app.clone()));
+            }
+            std::thread::sleep(Duration::from_secs(3600));
+        }
+    });
+    if let Err(e) = spawned {
+        tracing::warn!("update check didn't start: {e}");
+    }
+}
+
+/// Installing at start is tried once per version: a broken installer must not restart Backsight
+/// over and over. A marker in the temp folder remembers the try.
+fn first_try(version: &str) -> bool {
+    let marker = std::env::temp_dir().join(format!("backsight-auto-update-{version}"));
+    std::fs::OpenOptions::new().write(true).create_new(true).open(marker).is_ok()
 }
 
 /// Downloads and checks the newest release, then closes Backsight (finishing a running recording

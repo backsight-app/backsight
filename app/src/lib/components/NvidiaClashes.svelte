@@ -57,8 +57,8 @@
   .note {
     padding: 10px 12px;
     border-radius: var(--radius-sm);
-    background: rgb(245 158 11 / 0.12);
-    color: #fcd34d;
+    background: rgb(212 178 91 / 0.1);
+    color: #e8cf8a;
   }
   ul {
     display: grid;

@@ -210,3 +210,13 @@ export function formatWhen(ms: number, now = Date.now()): string {
 
 /** Formats that exist in these items, for the format filter. */
 export const formatsIn = (items: LibraryItem[]) => [...new Set(items.map((i) => i.ext))].sort();
+
+/** Home's "today": videos saved since midnight and their minutes together. */
+export function todayStats(items: LibraryItem[], now = Date.now()): { clips: number; minutes: number } {
+  const today = items.filter((i) => i.kind === "video" && dayKey(i.created_ms) === dayKey(now));
+  const ms = today.reduce((n, i) => n + (i.duration_ms ?? 0), 0);
+  return { clips: today.length, minutes: Math.round(ms / 60000) };
+}
+
+/** Files saved after the Library page was last opened (`seen`, ms), for the side menu badge. */
+export const newSince = (items: LibraryItem[], seen: number) => items.filter((i) => i.created_ms > seen).length;

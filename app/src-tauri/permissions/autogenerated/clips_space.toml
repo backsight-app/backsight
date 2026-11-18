@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clips-space"
+description = "Enables the clips_space command without any pre-configured scope."
+commands.allow = ["clips_space"]
+
+[[permission]]
+identifier = "deny-clips-space"
+description = "Denies the clips_space command without any pre-configured scope."
+commands.deny = ["clips_space"]

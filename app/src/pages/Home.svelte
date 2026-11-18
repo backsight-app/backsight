@@ -1,11 +1,12 @@
 <script lang="ts">
-  import mark from "../../../assets/brand/backsight-mark.svg";
   import Icon from "../lib/components/Icon.svelte";
   import Kbd from "../lib/components/Kbd.svelte";
   import NvidiaClashes from "../lib/components/NvidiaClashes.svelte";
+  import { thumbSrc } from "../lib/components/LibraryCard.svelte";
   import { clashesFor, clashSignature, type OverlayKey } from "../lib/nvidia";
-  import { catalog, container, estimateKbps, formatDuration, megabytes, vendorLabel, videoEncoder } from "../lib/content";
-  import { ACTIONS } from "../lib/hotkeys";
+  import { catalog, formatDuration } from "../lib/content";
+  import { feed } from "../lib/feed.svelte";
+  import { formatClock, formatTime, isVertical, todayStats, type LibraryItem } from "../lib/library";
   import { isTauri } from "@tauri-apps/api/core";
   import { invoke } from "../lib/uiwatch";
   import { onMount } from "svelte";
@@ -50,6 +51,7 @@
     return () => {
       clearInterval(id);
       clearTimeout(clearLighter);
+      clearTimeout(hideSaved);
     };
   });
   // A newer local test build waiting to be installed (scripts/build-desktop.ps1).
@@ -108,34 +110,209 @@
   };
   const update = () => invoke("install_local_build").catch((e) => (updateError = String(e)));
 
-  const pill = $derived(live ? { on: "On", off: "Off", failed: "Problem" }[live.state] : s.replay.enabled ? "On" : "Off");
-  const mb = (bytes: number) => (bytes / 1048576).toFixed(0);
+  // Opening the window looks for a newer release too (ADR 0014); quiet when offline.
+  onMount(() => {
+    if (isTauri()) invoke("check_update").catch(() => {});
+  });
+  let installing = $state(false);
+  let percent = $state<number | null>(null);
+  let installError = $state("");
+  async function restartToUpdate() {
+    installing = true;
+    installError = "";
+    const { listen } = await import("@tauri-apps/api/event");
+    const unlisten = await listen<{ done: number; total: number | null }>("update-progress", (e) => {
+      if (e.payload.total) percent = Math.floor((100 * e.payload.done) / e.payload.total);
+    });
+    try {
+      await invoke("install_update");
+    } catch (e) {
+      installError = String(e);
+      installing = false;
+    } finally {
+      unlisten();
+    }
+  }
 
-  const rate = $derived(estimateKbps(s));
-  const replayMb = $derived(rate.video === null ? null : megabytes(rate.video + rate.audio, s.replay.length_seconds));
-  const shot = $derived(catalog.screenshotFormats.find((f: any) => f.id === s.screenshot.format));
+  // Buttons do what their keys do; a failure shows in place of the tip under Save clip.
+  let pressError = $state("");
+  const press = (command: string, args: Record<string, string>) => {
+    pressError = "";
+    invoke(command, args).catch((e) => (pressError = String(e)));
+  };
+  const saveClip = () => press("replay_menu_action", { action: "save" });
+  const record = () => press("press_action", { action: "toggle-recording" });
+  const screenshot = () => press("press_action", { action: "screenshot" });
 
-  const quick = ["save-replay", "toggle-recording", "screenshot"].map((action) => ({
-    action,
-    label: ACTIONS.find((a) => a.id === action)?.label ?? action,
-  }));
-  const enc = $derived(videoEncoder(s.video.encoder));
-  const madeBy = $derived(
-    !enc ? "" : !enc.hardware ? "Made by your processor" : enc.vendor === "nvidia" ? "Made by your NVIDIA card" : `Made by your ${vendorLabel[enc.vendor]} graphics`,
-  );
+  const replayState = $derived(live ? live.state : s.replay.enabled ? "on" : "off");
+  const length = $derived(s.replay.length_seconds);
+  // What the replay holds now: it fills up over the first minutes after it starts.
+  const held = $derived(live?.state === "on" ? Math.min(length, Math.floor(live.buffer_seconds)) : 0);
   const quality = $derived(
     [
       catalog.resolutions.find((r: any) => r.value === s.video.resolution)?.label ?? s.video.resolution,
       catalog.frameRates.find((f: any) => f.value === s.video.fps)?.label ?? `${s.video.fps} FPS`,
-    ].join(" · "),
+      s.video.hdr ? "HDR" : "",
+      s.audio.desktop ? "game sound" : "",
+    ].filter(Boolean).join(" · "),
   );
+  const savedTo = $derived.by(() => {
+    const parts = feed.lib?.video_dir?.split(/[\\/]/).filter(Boolean).slice(-2) ?? [];
+    if (s.general.folder_per_game && live?.game) parts.push(live.game);
+    return parts.join(" › ");
+  });
+  const ticks = [1, 0.75, 0.5, 0.25];
+
+  const today = $derived(feed.lib ? todayStats(feed.lib.items) : null);
+  const latest = $derived(feed.lib?.items.slice(0, 5) ?? []);
+  const kindLabel = (i: LibraryItem) => (i.kind === "screenshot" ? "Screenshot" : isVertical(i) ? "Vertical" : "Video");
+  const whenLabel = (ms: number) => {
+    const day = new Date(ms).toDateString();
+    if (day === new Date().toDateString()) return formatTime(ms);
+    if (day === new Date(Date.now() - 86400000).toDateString()) return "yesterday";
+    return new Date(ms).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  };
+
+  // "Clip saved": a quiet card for a few seconds when a new video lands while Home is open.
+  let lastSeen: string | null | undefined;
+  let savedCard = $state<LibraryItem | null>(null);
+  let hideSaved: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const newest = feed.lib?.items[0];
+    if (!feed.lib) return;
+    // A vertical copy follows its clip: one card per save.
+    if (lastSeen !== undefined && newest && newest.path !== lastSeen && newest.kind === "video" && !isVertical(newest)) {
+      savedCard = newest;
+      clearTimeout(hideSaved);
+      hideSaved = setTimeout(() => (savedCard = null), 8000);
+    }
+    lastSeen = newest?.path ?? null;
+  });
+
+  const micOn = $derived(s.audio.microphone);
+  const shape = $derived(s.replay.clip_shape);
 </script>
 
-<div class="stack">
+<div class="home">
+  <div class="topbar">
+    <span class="game-tile" aria-hidden="true">{(live?.game ?? "").slice(0, 1)}</span>
+    <div class="watching">
+      <span class="faint">{live?.game ? "Watching" : "Watching for a game"}</span>
+      <strong>{live?.game ?? "Your desktop"}</strong>
+    </div>
+    <div class="stats">
+      {#if today}
+        <span>Today <strong>{today.clips} {today.clips === 1 ? "video" : "videos"}</strong></span>
+        <span class="sep"></span>
+        <span>Saved <strong>{today.minutes} min</strong></span>
+        <span class="sep"></span>
+      {/if}
+      <a class="replay-state {replayState}" href="#replay">
+        <span class="dot"></span>{{ on: "Replay on", off: "Replay off", failed: "Replay problem" }[replayState]}
+      </a>
+    </div>
+  </div>
+
+  {#if live?.update}
+    <div class="notice ready" role="status">
+      <Icon name="bolt" size={16} />
+      <span class="grow">
+        <strong>Update ready:</strong> Backsight {live.update}.
+        {#if installing}Downloading{percent !== null ? ` ${percent}%` : ""}… Backsight closes and opens again by itself.
+        {:else if live.recording}Stop recording first to update.
+        {:else}Takes a few seconds; the replay starts over.{/if}
+        {#if installError}<br />{installError}{/if}
+      </span>
+      <button type="button" class="btn primary" onclick={restartToUpdate} disabled={installing || live.recording}>Restart to update</button>
+    </div>
+  {/if}
+
+  <section class="hero">
+    {#if live?.recording}
+      <div class="rec" class:problem={live.recording_message} role="status">
+        <span class="dot"></span>
+        {#if live.recording_message}
+          Recording stopped: {live.recording_message}
+          {#if s.hotkeys["toggle-recording"]}Press <Kbd combo={s.hotkeys["toggle-recording"]} /> to finish.{:else}Recording has no key: give it one in <a href="#hotkeys">Hotkeys</a> to finish.{/if}
+        {:else}
+          {live.recording_paused ? "Paused" : "Recording"} · {formatDuration(Math.floor(live.recording_seconds))}
+        {/if}
+      </div>
+    {/if}
+    <div class="hero-row">
+      <div class="hero-text">
+        <span class="eyebrow">Instant Replay</span>
+        {#if replayState === "on" && held === 0}
+          <h1>Instant Replay is starting.</h1>
+        {:else if replayState === "on"}
+          <h1>The last <span class="accent">{formatClock(held * 1000)}</span> is ready to save.</h1>
+        {:else if replayState === "failed"}
+          <h1>Instant Replay has a problem.</h1>
+        {:else}
+          <h1>Instant Replay is off.</h1>
+        {/if}
+        <p class="dim">
+          {#if replayState === "failed"}
+            {live?.message}
+          {:else if replayState === "off"}
+            Turn it on in <a href="#replay">Instant Replay</a> to always keep the last {formatClock(length * 1000)}.
+          {:else}
+            Works in any game, even full screen · {quality}
+          {/if}
+        </p>
+      </div>
+      <div class="save-col">
+        <button type="button" class="save" onclick={saveClip} disabled={replayState !== "on" || held === 0}>
+          Save clip
+          {#if s.hotkeys["save-replay"]}<Kbd combo={s.hotkeys["save-replay"]} />{/if}
+        </button>
+        {#if pressError}
+          <span class="tip error">{pressError}</span>
+        {:else if !s.hotkeys["save-replay"]}
+          <span class="tip">No key yet: give it one in <a href="#hotkeys">Hotkeys</a>.</span>
+        {:else if savedTo}
+          <span class="tip">Saved to {savedTo}</span>
+        {/if}
+      </div>
+    </div>
+    <div class="timeline" aria-hidden="true">
+      <div class="track">
+        <div class="fill" style:width={`${(held / length) * 100}%`}></div>
+        {#each [0.25, 0.5, 0.75] as t}<span class="tick" style:left={`${t * 100}%`}></span>{/each}
+        {#if replayState === "on"}<span class="head"></span>{/if}
+      </div>
+      <div class="marks">
+        {#each ticks as t}<span>−{formatClock(length * t * 1000)}</span>{/each}
+        <span class="now">now</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="tiles">
+    <button type="button" class="tile" onclick={record}>
+      <span class="tile-title"><span class="rec-dot" class:live={live?.recording}></span>{live?.recording ? "Stop recording" : "Record"}</span>
+      <span class="tile-key"><Kbd combo={s.hotkeys["toggle-recording"]} /><span>start or stop</span></span>
+    </button>
+    <button type="button" class="tile" onclick={screenshot}>
+      <span class="tile-title"><Icon name="camera" size={15} />Screenshot</span>
+      <span class="tile-key"><Kbd combo={s.hotkeys["screenshot"]} /><span>{s.screenshot.copy_to_clipboard ? "saved and copied" : "saved"}</span></span>
+    </button>
+    <a class="tile" href="#replay">
+      <span class="faint small">After each clip</span>
+      <span class="row"><span>Vertical copy</span><span class:on={shape !== "wide"}>{shape === "vertical" ? "Only" : shape === "both" ? "On" : "Off"}</span></span>
+      <span class="row"><span>Captions</span><span class:on={s.audio.captions}>{s.audio.captions ? "On" : "Off"}</span></span>
+    </a>
+    <a class="tile" href="#audio">
+      <span class="faint small">Microphone</span>
+      <span class="tile-title">{!micOn ? "Off" : live?.mic_muted ? "Muted" : "On"}</span>
+      <span class="tile-key">{#if micOn}<Kbd combo={s.hotkeys["toggle-mic"]} /><span>to mute</span>{:else}<span>Turn on in Audio</span>{/if}</span>
+    </a>
+  </div>
+
   {#if crash}
     <div class="notice" role="status">
-      <Icon name="info" size={18} />
-      <span>
+      <Icon name="alert" size={16} />
+      <span class="grow">
         Backsight closed unexpectedly last time. To help fix it, save a problem report and send it to whoever gave you
         Backsight.
       </span>
@@ -145,15 +322,15 @@
   {/if}
   {#if clashes.length && clashSignature(clashes) !== dismissed}
     <div class="notice" role="status">
-      <Icon name="info" size={18} />
+      <Icon name="alert" size={16} />
       <div class="clashes"><NvidiaClashes {clashes} /></div>
       <button type="button" class="btn" onclick={dismissClashes}>Dismiss</button>
     </div>
   {/if}
   {#if builds.next}
-    <div class="notice info update" role="status">
-      <Icon name="bolt" size={18} />
-      <span>
+    <div class="notice info" role="status">
+      <Icon name="bolt" size={16} />
+      <span class="grow">
         A newer build is ready: {builds.next}.
         {live?.recording ? "Stop recording first: updating closes Backsight." : "Backsight closes, updates and opens again. Unsaved replay is cleared."}
         {#if updateError || builds.error}<br />{updateError || builds.error}{/if}
@@ -161,70 +338,10 @@
       <button type="button" class="btn" onclick={update} disabled={!!live?.recording}>Update</button>
     </div>
   {/if}
-  <section class="hero">
-    <img src={mark} alt="" width="88" height="88" />
-    <div class="hero-text">
-      {#if live?.recording}
-        <div class="rec" class:problem={live.recording_message} role="status">
-          <span class="dot"></span>
-          {#if live.recording_message}
-            Recording stopped: {live.recording_message}
-            {#if s.hotkeys["toggle-recording"]}Press <Kbd combo={s.hotkeys["toggle-recording"]} /> to finish.{:else}Recording has no key: give it one in <a href="#hotkeys">Hotkeys</a> to finish.{/if}
-          {:else}
-            {live.recording_paused ? "Paused" : "Recording"} · {formatDuration(Math.floor(live.recording_seconds))}
-          {/if}
-        </div>
-      {/if}
-      <h2>Ready when you are.</h2>
-      <p>
-        {#if s.replay.enabled}
-          Backsight always keeps the last {formatDuration(s.replay.length_seconds)}.
-          {#if s.hotkeys["save-replay"]}Press <Kbd combo={s.hotkeys["save-replay"]} /> to save it as a clip.{:else}Saving
-            a clip has no key: give it one in <a href="#hotkeys">Hotkeys</a>.{/if}
-        {/if}
-        Your clips are in <a href="#library">Library</a>. You can close this window: Backsight keeps running near the
-        clock (click ^ if you don't see its icon).
-      </p>
-      <div class="quick">
-        {#each quick as q}
-          <div class="quick-item"><span>{q.label}</span><Kbd combo={s.hotkeys[q.action]} /></div>
-        {/each}
-      </div>
-    </div>
-  </section>
-
-  <div class="tiles">
-    <a class="tile" href="#replay">
-      <div class="tile-head"><Icon name="replay" /><span>Instant Replay</span>
-        <span class="pill" class:on={live ? live.state === "on" : s.replay.enabled}>{pill}</span></div>
-      <div class="tile-value">{formatDuration(s.replay.length_seconds)}</div>
-      <div class="tile-sub">
-        {#if live?.state === "failed"}
-          {live.message}
-        {:else if live?.state === "on"}
-          <!-- Dropped frames are the surplus of a faster screen (144 Hz → 60 FPS) and normal; only late ones hurt. -->
-          Ready to save the last {formatDuration(Math.round(live.buffer_seconds))} · {mb(live.buffer_bytes)} MB of memory{live.late_frames ? ` · ${live.late_frames} late frames` : ""}
-        {:else}
-          {replayMb === null ? "RAM use depends on the scene" : `≈ ${replayMb} MB of RAM while on`}
-        {/if}
-      </div>
-    </a>
-    <a class="tile" href="#video">
-      <div class="tile-head"><Icon name="video" /><span>Video</span></div>
-      <div class="tile-value">{quality}</div>
-      <div class="tile-sub">{[madeBy, container(s.video.container)?.label].filter(Boolean).join(" · ")}</div>
-    </a>
-    <a class="tile" href="#screenshots">
-      <div class="tile-head"><Icon name="image" /><span>Screenshots</span></div>
-      <div class="tile-value">{shot?.label}</div>
-      <div class="tile-sub">{s.screenshot.copy_to_clipboard ? "Also copied to clipboard" : "Saved to disk"}</div>
-    </a>
-  </div>
-
   {#if overload || lighter}
-    <div class="notice update" role="status">
-      <Icon name="info" size={18} />
-      <span>
+    <div class="notice" role="status">
+      <Icon name="alert" size={16} />
+      <span class="grow">
         {#if overload}<strong>Clips may stutter.</strong> {overload}{/if}
         {#if lighter}<br />{lighter}{/if}
       </span>
@@ -233,25 +350,25 @@
   {/if}
   {#if live?.hotkey_problem}
     <div class="notice" role="status">
-      <Icon name="info" size={18} />
+      <Icon name="alert" size={16} />
       <span><strong>Hotkeys aren't working.</strong> {live.hotkey_problem}</span>
     </div>
   {/if}
   {#if live?.audio_problem}
     <div class="notice" role="status">
-      <Icon name="info" size={18} />
+      <Icon name="alert" size={16} />
       <span><strong>Audio problem.</strong> {live.audio_problem}</span>
     </div>
   {/if}
   {#if live?.capture_notice}
     <div class="notice info" role="status">
-      <Icon name="info" size={18} />
+      <Icon name="info" size={16} />
       <span>{live.capture_notice}</span>
     </div>
   {/if}
   {#if live?.mic_muted}
     <div class="notice info" role="status">
-      <Icon name="info" size={18} />
+      <Icon name="info" size={16} />
       <span
         >Your microphone is muted. {#if s.hotkeys["toggle-mic"]}Press <Kbd combo={s.hotkeys["toggle-mic"]} /> to unmute.{:else}Muting
           has no key: give it one in <a href="#hotkeys">Hotkeys</a> to unmute.{/if}</span
@@ -260,83 +377,370 @@
   {/if}
   {#if live?.game_audio_from && !live?.audio_problem}
     <div class="notice info" role="status">
-      <Icon name="info" size={18} />
+      <Icon name="info" size={16} />
       <span>Game sound comes from {live.game_audio_from}. To pick another game, focus it and turn Instant Replay off and on.</span>
     </div>
   {/if}
   {#if live?.pending_apply}
     <div class="notice info" role="status">
-      <Icon name="info" size={18} />
+      <Icon name="info" size={16} />
       <span>Saved capture settings take effect when you stop recording.</span>
     </div>
   {/if}
   {#if !isTauri()}
     <div class="notice info">
-      <Icon name="info" size={18} />
+      <Icon name="info" size={16} />
       <span><strong>Preview.</strong> This page is running outside the app, so nothing is captured or saved.</span>
     </div>
   {/if}
-  {#if builds.version}
-    <p class="build">Backsight {builds.version}, {builds.current ? `build ${builds.current}` : "development build"}</p>
+
+  {#if latest.length}
+    <section class="latest">
+      <div class="latest-head"><h2>Latest captures</h2><a href="#library">Open Library →</a></div>
+      <div class="captures">
+        {#each latest as item (item.path)}
+          <a class="capture" href="#library" title={item.name}>
+            <span class="thumb">
+              <Icon name={item.kind === "video" ? "video" : "image"} size={18} />
+              {#if item.thumbnail}
+                <img src={thumbSrc(item.thumbnail)} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")} />
+              {/if}
+              {#if item.captions}<span class="badge left">CC</span>{/if}
+              {#if item.duration_ms}<span class="badge right">{formatClock(item.duration_ms)}</span>{/if}
+            </span>
+            <span class="faint small">{kindLabel(item)} · {whenLabel(item.created_ms)}</span>
+          </a>
+        {/each}
+      </div>
+    </section>
   {/if}
-  {#if isTauri()}
-    <p class="report">
-      Something not working?
-      <button type="button" class="btn" onclick={saveReport} disabled={reporting}>Save a problem report</button>
-      {#if reportSaved}Saved on your Desktop as "{reportSaved}". Send it to whoever gave you Backsight.{/if}
-      {#if reportError}{reportError}{/if}
-    </p>
-  {/if}
+
+  <footer>
+    <span>You can close this window: Backsight keeps running near the clock (click ^ if you don't see its icon).</span>
+    {#if builds.version}
+      <span>Backsight {builds.version}, {builds.current ? `build ${builds.current}` : "development build"}</span>
+    {/if}
+    {#if isTauri()}
+      <span class="report">
+        Something not working?
+        <button type="button" class="link" onclick={saveReport} disabled={reporting}>Save a problem report</button>
+        {#if reportSaved}Saved on your Desktop as "{reportSaved}". Send it to whoever gave you Backsight.{/if}
+        {#if reportError}{reportError}{/if}
+      </span>
+    {/if}
+  </footer>
 </div>
 
+{#if savedCard}
+  <div class="saved-wrap" role="status"><a class="saved" href="#library">
+    <span class="saved-thumb">{#if savedCard.thumbnail}<img src={thumbSrc(savedCard.thumbnail)} alt="" />{/if}</span>
+    <span class="saved-text">
+      <strong>Saved</strong>
+      <span class="faint small">
+        {savedCard.duration_ms ? formatClock(savedCard.duration_ms) : ""}{shape !== "wide" ? " · vertical copy next" : ""}{s.audio.captions ? " · captions next" : ""}
+      </span>
+    </span>
+  </a></div>
+{/if}
+
 <style>
-  .update {
-    align-items: center;
+  .home {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-top: 24px;
   }
-  .update span {
+  /* The one soft glow, behind the hero. */
+  .home::before {
+    content: "";
+    position: absolute;
+    left: -40px;
+    top: -40px;
+    width: 820px;
+    height: 380px;
+    background: radial-gradient(ellipse at 25% 0%, var(--accent-glow), transparent 70%);
+    pointer-events: none;
+  }
+  .home > :global(*) {
+    position: relative;
+  }
+  .faint {
+    color: var(--text-faint);
+  }
+  .dim {
+    color: var(--text-dim);
+  }
+  .small {
+    font-size: 11.5px;
+  }
+  .grow {
     flex: 1;
   }
-  .report {
+
+  .topbar {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
-    margin: 0;
+    gap: 12px;
+    min-height: 40px;
   }
-  .build {
-    margin: 0;
+  .game-tile {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    flex: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #263552, #3a2f4a);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+    font: 700 14px var(--font-display);
+    color: var(--text-dim);
+  }
+  .watching {
+    display: grid;
+    flex: 1;
+    min-width: 0;
+    line-height: 1.25;
+  }
+  .watching span {
+    font-size: 11.5px;
+  }
+  .watching strong {
+    overflow: hidden;
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .stats {
+    display: flex;
+    align-items: center;
+    height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
     font-size: 12px;
     color: var(--text-faint);
   }
-  .hero {
-    position: relative;
-    display: flex;
-    gap: 26px;
-    align-items: center;
-    padding: 30px 32px;
-    border-radius: 18px;
-    border: 1px solid var(--border-strong);
-    background:
-      radial-gradient(600px 220px at 0% 0%, rgb(139 92 246 / 0.28), transparent 70%),
-      radial-gradient(520px 240px at 100% 100%, rgb(34 211 238 / 0.18), transparent 70%),
-      var(--bg-card);
-    overflow: hidden;
+  .stats > span:not(.sep) {
+    padding: 0 14px;
   }
+  .stats strong {
+    margin-left: 4px;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .sep {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+  }
+  .replay-state {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 100%;
+    padding: 0 14px;
+    border-radius: 0 9px 9px 0;
+    color: #c9cbd6;
+    text-decoration: none;
+  }
+  .replay-state:hover {
+    background: var(--bg-hover);
+  }
+  .replay-state .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-faint);
+  }
+  .replay-state.on .dot {
+    background: var(--ok);
+    animation: pulse 2.4s ease-out infinite;
+  }
+  .replay-state.failed .dot {
+    background: var(--rec);
+  }
+  @keyframes pulse {
+    0% {
+      box-shadow: 0 0 0 0 rgb(52 211 153 / 0.45);
+    }
+    100% {
+      box-shadow: 0 0 0 7px rgb(52 211 153 / 0);
+    }
+  }
+
+  .hero {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 30px 32px 24px;
+    border-radius: 18px;
+    border: 1px solid #23252f;
+    background: linear-gradient(180deg, #15161d, #101117);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 24px 60px rgb(0 0 0 / 0.35);
+  }
+  /* The 1px accent line along the top edge. */
+  .hero::before {
+    content: "";
+    position: absolute;
+    left: 32px;
+    right: 32px;
+    top: -1px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  }
+  .hero-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 32px;
+  }
+  .hero-text {
+    display: grid;
+    flex: 1;
+    gap: 10px;
+  }
+  .eyebrow {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .hero h1 {
+    font-size: 36px;
+    line-height: 1.08;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+  .accent {
+    color: var(--accent);
+  }
+  .hero p {
+    font-size: 13.5px;
+  }
+  .hero a,
+  .tip a {
+    color: var(--accent);
+  }
+  .save-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    flex: none;
+    max-width: 280px;
+  }
+  .save {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    height: 52px;
+    padding: 0 10px 0 22px;
+    border-radius: 12px;
+    border: none;
+    background: var(--accent-grad);
+    color: #fff;
+    font: 600 15.5px var(--font);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 0 0 1px rgb(255 255 255 / 0.06), 0 10px 32px var(--accent-glow);
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+  .save:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+  .save:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .save:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+  }
+  .save :global(kbd) {
+    border-color: rgb(255 255 255 / 0.18);
+    background: rgb(0 0 0 / 0.28);
+    color: #fff;
+  }
+  .save :global(.plus) {
+    display: none;
+  }
+  .tip {
+    font-size: 11.5px;
+    color: var(--text-faint);
+    text-align: right;
+  }
+  .tip.error {
+    color: var(--rec);
+  }
+
+  .timeline {
+    display: grid;
+    gap: 8px;
+  }
+  .track {
+    position: relative;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+  }
+  .fill {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgb(255 255 255 / 0.04), var(--accent));
+    transition: width 1s linear;
+  }
+  .tick {
+    position: absolute;
+    top: 6px;
+    width: 1px;
+    height: 4px;
+    background: #33353f;
+  }
+  .head {
+    position: absolute;
+    right: -1px;
+    top: -5px;
+    width: 2px;
+    height: 14px;
+    border-radius: 1px;
+    background: #fff;
+    box-shadow: 0 0 8px rgb(255 255 255 / 0.5);
+  }
+  .marks {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+  .marks span:nth-child(3) {
+    text-align: center;
+  }
+  .marks span:nth-child(n + 4) {
+    text-align: right;
+  }
+  .marks .now {
+    color: #c9cbd6;
+  }
+
   .rec {
     display: inline-flex;
     align-items: center;
+    align-self: flex-start;
     gap: 8px;
-    margin-bottom: 8px;
+    margin-bottom: -8px;
     padding: 4px 10px;
     border-radius: 999px;
-    background: rgb(239 68 68 / 0.15);
-    color: #fca5a5;
+    background: rgb(240 80 110 / 0.14);
+    color: #f7a1b3;
     font-size: 13px;
     font-weight: 600;
   }
   .rec.problem {
-    background: rgb(245 158 11 / 0.15);
-    color: #fcd34d;
+    background: rgb(212 178 91 / 0.12);
+    color: #e8cf8a;
     font-weight: 500;
   }
   .rec .dot {
@@ -352,100 +756,260 @@
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .rec .dot {
+    .rec .dot,
+    .replay-state.on .dot {
       animation: none;
     }
   }
-  .hero img {
-    flex: none;
-    filter: drop-shadow(0 10px 24px rgb(99 102 241 / 0.45));
-  }
-  .hero-text {
-    display: grid;
-    gap: 10px;
-  }
-  .hero h2 {
-    font-size: 24px;
-    font-weight: 700;
-  }
-  .hero p {
-    max-width: 620px;
-    color: var(--text-dim);
-  }
-  .hero p :global(svg) {
-    vertical-align: -2px;
-    color: var(--accent-2);
-  }
-  .quick {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 6px;
-  }
-  .quick-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 7px 10px 7px 12px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: rgb(11 15 26 / 0.55);
-    font-size: 13px;
-    color: var(--text-dim);
-  }
+
   .tiles {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
   }
   .tile {
-    display: grid;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: space-between;
     gap: 6px;
-    padding: 18px 20px;
-    border-radius: var(--radius);
+    min-height: 92px;
+    padding: 14px 16px;
+    border-radius: 14px;
     border: 1px solid var(--border);
     background: var(--bg-card);
-    color: inherit;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
     text-decoration: none;
-    transition: border-color 0.15s, transform 0.15s;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
   }
   .tile:hover {
     border-color: var(--border-strong);
-    transform: translateY(-1px);
+    background: #14151c;
   }
-  .tile-head {
+  .tile:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+  }
+  .tile-title {
     display: flex;
     align-items: center;
     gap: 8px;
-    color: var(--text-dim);
+    font-size: 14px;
     font-weight: 600;
+  }
+  .tile-title :global(svg) {
+    color: var(--text-dim);
+  }
+  .tile-key {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    color: var(--text-faint);
+  }
+  .tile-key :global(kbd) {
+    min-width: 0;
+    padding: 1px 7px;
+    border-radius: 5px;
+    background: transparent;
+    color: #b4b6c2;
+    font-size: 11.5px;
+    font-weight: 500;
+  }
+  .tile-key :global(.plus) {
+    display: none;
+  }
+  .rec-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--rec);
+    box-shadow: 0 0 0 3px rgb(240 80 110 / 0.15);
+  }
+  .rec-dot.live {
+    animation: blink 1.2s ease-in-out infinite;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
     font-size: 13px;
   }
-  .tile-head :global(svg) {
-    color: var(--accent-2);
-  }
-  .pill {
-    margin-left: auto;
-    padding: 1px 9px;
-    border-radius: 99px;
-    font-size: 11px;
-    background: var(--bg-hover);
+  .row span:last-child {
     color: var(--text-faint);
   }
-  .pill.on {
-    background: rgb(52 211 153 / 0.14);
+  .row span.on {
     color: var(--ok);
   }
-  .tile-value {
-    font: 650 19px/1.3 var(--font-display);
+
+  .notice {
+    align-items: center;
   }
-  .tile-sub {
-    font-size: 12.5px;
-    color: var(--text-faint);
+  .notice.ready {
+    border-color: rgb(163 149 255 / 0.35);
+    background: var(--accent-soft);
+    color: var(--text);
+  }
+  .notice.ready :global(svg) {
+    color: var(--accent);
   }
   .clashes {
     display: grid;
     flex: 1;
     gap: 8px;
+  }
+
+  .latest {
+    display: grid;
+    gap: 10px;
+  }
+  .latest-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .latest-head h2 {
+    font: 600 13.5px var(--font);
+    letter-spacing: 0;
+  }
+  .latest-head a {
+    font-size: 12.5px;
+    color: var(--text-dim);
+    text-decoration: none;
+  }
+  .latest-head a:hover {
+    color: var(--text);
+  }
+  .captures {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .capture {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    color: inherit;
+    text-decoration: none;
+  }
+  .capture .small {
+    overflow: hidden;
+    color: var(--text-dim);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .thumb {
+    position: relative;
+    display: block;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #1c1d26, #15161d);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.05);
+  }
+  .thumb :global(svg) {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    color: var(--text-faint);
+  }
+  .thumb img {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .capture:hover .thumb {
+    box-shadow: inset 0 0 0 1px var(--border-strong);
+  }
+  .badge {
+    position: absolute;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgb(0 0 0 / 0.6);
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #d9dae2;
+  }
+  .badge.left {
+    left: 6px;
+    top: 6px;
+  }
+  .badge.right {
+    right: 6px;
+    bottom: 6px;
+  }
+
+  footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 4px;
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+  .link {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text-dim);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .link:hover {
+    color: var(--text);
+  }
+
+  .saved {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 304px;
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid #262833;
+    background: var(--bg-pop);
+    box-shadow: 0 16px 48px rgb(0 0 0 / 0.55);
+    color: inherit;
+    text-decoration: none;
+    animation: rise 0.25s ease-out;
+  }
+  .saved-thumb {
+    width: 64px;
+    height: 40px;
+    flex: none;
+    overflow: hidden;
+    border-radius: 7px;
+    background: linear-gradient(135deg, #2a2440, #16303a);
+  }
+  .saved-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .saved-text {
+    display: grid;
+    gap: 2px;
+    font-size: 13px;
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .saved {
+      animation: none;
+    }
   }
 </style>

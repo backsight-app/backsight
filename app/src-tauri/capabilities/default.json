@@ -33,6 +33,8 @@
     "allow-lighter-video",
     "allow-nvidia-overlay-keys",
     "allow-crash-notice",
+    "allow-clips-space",
+    "allow-press-action",
     "allow-crash-dismiss",
     "allow-crash-open-folder",
     "allow-open-logs-folder",

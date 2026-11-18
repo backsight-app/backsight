@@ -8,6 +8,8 @@
   import Term from "./lib/components/Term.svelte";
   import SettingsProblem from "./lib/SettingsProblem.svelte";
   import { app, loadSettings, resetSection, scheduleSave, type ReplayStatus } from "./lib/settings.svelte";
+  import { feed, markSeen, startFeed } from "./lib/feed.svelte";
+  import { formatBytes, newSince } from "./lib/library";
   import Audio from "./pages/Audio.svelte";
   import Diagnostics from "./pages/Diagnostics.svelte";
   import General from "./pages/General.svelte";
@@ -20,15 +22,15 @@
   import Video from "./pages/Video.svelte";
 
   const pages = [
-    { id: "home", label: "Home", icon: "home", subtitle: "Everything Backsight is set to do, at a glance.", component: Home },
-    { id: "library", label: "Library", icon: "library", subtitle: "Everything you've saved, newest first.", component: Library },
-    { id: "replay", label: "Instant Replay", icon: "replay", subtitle: "Always-on rewind. Save the last few minutes with one key.", component: Replay, section: "replay" },
-    { id: "video", label: "Video", icon: "video", subtitle: "How your clips and recordings are compressed and saved.", component: Video, section: "video" },
-    { id: "audio", label: "Audio", icon: "mic", subtitle: "What you hear, and what ends up in your clips.", component: Audio, section: "audio" },
-    { id: "screenshots", label: "Screenshots", icon: "image", subtitle: "Grab a moment as a picture.", component: Screenshots, section: "screenshot" },
-    { id: "hotkeys", label: "Hotkeys", icon: "keyboard", subtitle: "Shortcuts that work even while you're in a game.", component: Hotkeys, section: "hotkeys" },
-    { id: "general", label: "General", icon: "sliders", subtitle: "Where files go and how Backsight starts.", component: General, section: "general" },
-    { id: "diagnostics", label: "Diagnostics", icon: "bolt", subtitle: "Live numbers that show how well Backsight is keeping up.", component: Diagnostics },
+    { id: "home", label: "Home", icon: "home", subtitle: "Everything Backsight is set to do, at a glance.", component: Home, group: "Capture" },
+    { id: "replay", label: "Instant Replay", icon: "replay", subtitle: "Always-on rewind. Save the last few minutes with one key.", component: Replay, section: "replay", group: "Capture" },
+    { id: "video", label: "Video", icon: "video", subtitle: "How your clips and recordings are compressed and saved.", component: Video, section: "video", group: "Capture" },
+    { id: "audio", label: "Audio & captions", icon: "mic", subtitle: "What you hear, and what ends up in your clips.", component: Audio, section: "audio", group: "Capture" },
+    { id: "screenshots", label: "Screenshots", icon: "camera", subtitle: "Grab a moment as a picture.", component: Screenshots, section: "screenshot", group: "Capture" },
+    { id: "library", label: "Library", icon: "library", subtitle: "Everything you've saved, newest first.", component: Library, group: "Yours" },
+    { id: "hotkeys", label: "Hotkeys", icon: "keyboard", subtitle: "Shortcuts that work even while you're in a game.", component: Hotkeys, section: "hotkeys", group: "Yours" },
+    { id: "general", label: "General", icon: "sliders", subtitle: "Where files go and how Backsight starts.", component: General, section: "general", group: "Yours" },
+    { id: "diagnostics", label: "Diagnostics", icon: "bolt", subtitle: "Live numbers that show how well Backsight is keeping up.", component: Diagnostics, group: "Yours" },
   ] as const;
 
   // Resetting asks for a second click on the same page, so a stray click changes nothing.
@@ -61,6 +63,12 @@
   let menu = $state.raw<{ anchor: Anchor; opener: HTMLElement | null } | null>(null);
   let replay = $state<ReplayStatus | null>(null);
   let menuFeedback = $state("");
+  // Opening Library clears its "new" count; files saved while it is open don't count either.
+  $effect(() => {
+    if (current === "library" && feed.lib) markSeen();
+  });
+  const fresh = $derived(feed.lib && current !== "library" ? newSince(feed.lib.items, feed.seen) : 0);
+  const used = $derived(feed.space && feed.space[1] ? 1 - feed.space[0] / feed.space[1] : 0);
   const setupVisible = $derived(app.loaded && (app.setupOpen || !app.settings.setup?.done));
   $effect(() => { if (setupVisible) closeMenu(false); });
 
@@ -121,6 +129,7 @@
     };
     addEventListener("hashchange", onHash);
     loadSettings();
+    startFeed();
     return () => removeEventListener("hashchange", onHash);
   });
 
@@ -135,14 +144,16 @@
 <div class="shell" inert={setupVisible} oncontextmenu={context}>
   <aside class="sidebar">
     <div class="brand">
-      <img src={mark} alt="" width="34" height="34" />
-      <span class="wordmark">Back<span>sight</span></span>
+      <img src={mark} alt="" width="24" height="24" />
+      <span class="wordmark">Backsight</span>
     </div>
     <nav aria-label="Sections">
-      {#each pages as p}
+      {#each pages as p, i}
+        {#if p.group !== pages[i - 1]?.group}<span class="group">{p.group}</span>{/if}
         <a href={`#${p.id}`} class:active={p.id === page.id} aria-current={p.id === page.id ? "page" : undefined}>
-          <Icon name={p.icon} />
-          <span>{p.label}</span>
+          <Icon name={p.icon} size={17} />
+          <span class="label">{p.label}</span>
+          {#if p.id === "library" && fresh}<span class="badge" title="Saved since you last opened Library">{fresh} new</span>{/if}
         </a>
       {/each}
     </nav>
@@ -156,6 +167,14 @@
           }
         }}
         onclick={(e) => showMenu(e.currentTarget)}>Backsight menu</button>
+      {#if feed.space}
+        <div class="space" title="Free space on the drive that holds your clips folder">
+          <span>Clips folder</span><span class="free">{formatBytes(feed.space[0])} free</span>
+          <div class="bar" role="meter" aria-label="Clips drive used" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(used * 100)}>
+            <div style:width={`${Math.round(used * 100)}%`}></div>
+          </div>
+        </div>
+      {/if}
       <span class="status" class:error={app.status === "error"} title={app.error}>
         <span class="status-dot"></span>{statusText[app.status]}
       </span>
@@ -163,7 +182,7 @@
   </aside>
 
   <main>
-    <header class="page-head">
+    <header class="page-head" class:hidden={page.id === "home"}>
       <div>
         <h1>{page.label}</h1>
         <p class="muted">{page.subtitle}</p>
@@ -203,79 +222,121 @@
   .app-menu { align-self: flex-start; margin-bottom: 8px; }
   .shell {
     display: grid;
-    grid-template-columns: 236px 1fr;
+    grid-template-columns: 216px 1fr;
     height: 100%;
   }
   .sidebar {
     display: flex;
     flex-direction: column;
-    gap: 22px;
-    padding: 22px 14px 16px;
+    gap: 18px;
+    padding: 20px 12px 16px;
     border-right: 1px solid var(--border);
     background: var(--bg-elev);
+    overflow-y: auto;
   }
   .brand {
     display: flex;
     align-items: center;
-    gap: 11px;
-    padding: 0 8px;
+    gap: 10px;
+    padding: 4px 10px 6px;
   }
   .wordmark {
-    font: 700 21px/1 var(--font-display);
-    letter-spacing: -0.02em;
-  }
-  .wordmark span {
-    background: var(--accent-grad);
-    background-clip: text;
-    color: transparent;
+    font: 700 16px/1 var(--font-display);
+    letter-spacing: -0.01em;
   }
   nav {
     display: grid;
     gap: 2px;
   }
+  .group {
+    padding: 14px 12px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .group:first-child {
+    padding-top: 0;
+  }
   nav a {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 9px 12px;
-    border-radius: var(--radius-sm);
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
     color: var(--text-dim);
     text-decoration: none;
+    font-size: 13.5px;
     font-weight: 500;
     transition: background 0.15s, color 0.15s;
+  }
+  nav a .label {
+    flex: 1;
   }
   nav a:hover {
     background: var(--bg-hover);
     color: var(--text);
   }
   nav a.active {
-    background: var(--accent-soft);
-    color: var(--text);
+    background: var(--bg-hover);
+    color: #fff;
+    font-weight: 600;
   }
   nav a.active::before {
     content: "";
     position: absolute;
-    left: -14px;
+    left: 0;
     top: 8px;
     bottom: 8px;
-    width: 3px;
-    border-radius: 0 3px 3px 0;
-    background: var(--accent-grad);
+    width: 2px;
+    border-radius: 1px;
+    background: var(--accent);
   }
   nav a.active :global(svg) {
-    color: var(--accent-2);
+    color: var(--accent);
   }
   nav a:focus-visible {
     outline: none;
     box-shadow: 0 0 0 2px var(--focus);
   }
+  .badge {
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 600;
+  }
   .sidebar-foot {
     margin-top: auto;
     display: grid;
-    gap: 4px;
-    padding: 0 8px;
+    gap: 6px;
+    padding: 14px 12px 4px;
+    border-top: 1px solid var(--border);
     font-size: 12px;
+  }
+  .space {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+    margin-bottom: 4px;
+    color: var(--text-faint);
+  }
+  .space .free {
+    color: var(--text);
+  }
+  .bar {
+    grid-column: 1 / -1;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--border);
+  }
+  .bar div {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--text-faint);
   }
   .status {
     display: flex;
@@ -307,6 +368,9 @@
     justify-content: space-between;
     gap: 20px;
     padding: 28px 36px 20px;
+  }
+  .page-head.hidden {
+    display: none;
   }
   .page-head h1 {
     font-size: 26px;

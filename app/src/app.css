@@ -1,30 +1,32 @@
 /* Backsight design tokens. Brand reference: docs/design/brand-and-voice.md */
 :root {
   color-scheme: dark;
-  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font: "Inter Variable", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Sora Variable", "Segoe UI", system-ui, sans-serif;
 
-  --bg: #0b0f1a;
-  --bg-elev: #10162a;
-  --bg-card: #141b30;
-  --bg-input: #0f1526;
-  --bg-hover: #1e2843;
-  --bg-pop: #161e36;
-  --border: #212b45;
-  --border-strong: #2e3a5c;
+  /* Near-black neutral greys and one accent (violet): calm, with one standout (Save clip). */
+  --bg: #0a0b0f;
+  --bg-elev: #0d0e13;
+  --bg-card: #111218;
+  --bg-input: #0d0e13;
+  --bg-hover: #16171e;
+  --bg-pop: #16171e;
+  --border: #1f212a;
+  --border-strong: #2a2c37;
 
-  --text: #e9edf7;
-  --text-dim: #a3adc6;
-  --text-faint: #6f7a96;
+  --text: #ececf1;
+  --text-dim: #a0a2b0;
+  --text-faint: #7c7f8d;
 
-  --accent: #7c5cff;
-  --accent-2: #38d6f0;
-  --accent-grad: linear-gradient(135deg, #8b5cf6 0%, #6366f1 50%, #22d3ee 100%);
-  --accent-soft: rgb(124 92 255 / 0.14);
-  --focus: rgb(124 92 255 / 0.45);
-  --rec: #ff4d6d;
+  --accent: #a395ff;
+  --accent-2: #a395ff;
+  --accent-grad: linear-gradient(135deg, #7c5cff, #4f7cff);
+  --accent-soft: rgb(163 149 255 / 0.14);
+  --accent-glow: rgb(124 92 255 / 0.16);
+  --focus: rgb(163 149 255 / 0.45);
+  --rec: #f0506e;
   --ok: #34d399;
-  --warn: #fbbf24;
+  --warn: #d4b25b;
 
   --radius: 14px;
   --radius-sm: 9px;
@@ -33,6 +35,7 @@
   font-family: var(--font);
   font-size: 14px;
   line-height: 1.45;
+  font-feature-settings: "tnum", "cv11";
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
@@ -60,7 +63,7 @@ h2,
 h3 {
   margin: 0;
   font-family: var(--font-display);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 p {
@@ -107,15 +110,16 @@ p {
   align-items: flex-start;
   padding: 12px 14px;
   border-radius: var(--radius-sm);
-  border: 1px solid rgb(251 191 36 / 0.3);
-  background: rgb(251 191 36 / 0.08);
-  color: var(--text);
+  border: 1px solid #332c1c;
+  background: #13110c;
+  color: #d8d2c0;
   font-size: 13px;
 }
 
 .notice.info {
-  border-color: rgb(56 214 240 / 0.3);
-  background: rgb(56 214 240 / 0.07);
+  border-color: var(--border-strong);
+  background: var(--bg-card);
+  color: var(--text);
 }
 
 .notice :is(svg) {
@@ -214,9 +218,10 @@ input[type="range"] {
   cursor: default;
 }
 .btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--bg);
+  border-color: transparent;
+  background: var(--accent-grad);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25);
 }
 .btn:focus-visible {
   outline: none;

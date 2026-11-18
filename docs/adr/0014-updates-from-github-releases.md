@@ -15,7 +15,7 @@ Every push to `main` that passes CI in the public repository becomes a release (
 
 ## Consequences
 
-- No background checks. Backsight goes online only when someone presses Update.
+- ~~No background checks.~~ Changed 2026-11-18 (owner, after a friend found no way to update without hunting): installed copies check by themselves when Backsight starts, every hour, and when its window opens. Home then says "Update ready" with one **Restart to update** button. An update found in the first minutes after Backsight starts (before any game, nothing recording) installs straight away. Privacy page updated.
 - A tampered or wrongly signed download is refused before anything is closed: "This download didn't pass its safety check, so nothing was installed."
 - Losing the private key means existing installs can never update again. Leaking it lets anyone who can also serve `latest.json` from the repository push an update.
 - Only a copy the installer put there (an `uninstall.exe` beside it) updates itself. The installer always installs to its own folder, so a copied or test folder would otherwise end up as two copies.

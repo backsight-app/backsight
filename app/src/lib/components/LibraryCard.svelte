@@ -167,7 +167,7 @@
     z-index: 1;
     padding: 2px 8px;
     border-radius: 99px;
-    background: rgb(11 15 26 / 0.7);
+    background: rgb(10 11 15 / 0.7);
     color: var(--text-dim);
     font-size: 11px;
   }
@@ -188,7 +188,7 @@
     font: 700 32px/1.15 var(--font-display);
     letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
-    background: linear-gradient(135deg, #fff 30%, #c4b5fd 70%, #67e8f9);
+    background: linear-gradient(135deg, #fff 40%, var(--accent));
     background-clip: text;
     color: transparent;
   }

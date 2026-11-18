@@ -671,6 +671,11 @@ impl ReplaySession {
         self.audio_capture.as_ref().and_then(SessionAudio::game_target)
     }
 
+    /// The game in front (or last in front), as its folder name; `None` for the desktop. Home shows it.
+    pub fn game_name(&self) -> Option<String> {
+        self.game.name()
+    }
+
     pub fn replay_on(&self) -> bool {
         self.replay_on.load(Relaxed)
     }

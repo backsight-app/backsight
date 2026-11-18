@@ -243,6 +243,34 @@ FunctionEnd
   Push $0
   nsis_tauri_utils::FindProcessCurrentUser "${MAINBINARYNAME}.exe"
   Pop $0
+  ; Offer to close it when the installed copy understands --quit (0.1.7 or newer): the running copy
+  ; finishes a recording and quits like its own Quit. Up to 60 s, then the message below.
+  ${If} $0 != 1
+  ${AndIfNot} ${Silent}
+    Push $1
+    Push $2
+    ReadRegStr $1 HKCU "${MANUPRODUCTKEY}" ""
+    ReadRegStr $2 HKCU "${UNINSTKEY}" "DisplayVersion"
+    ${VersionCompare} "$2" "0.1.7" $2
+    ${If} ${FileExists} "$1\${MAINBINARYNAME}.exe"
+    ${AndIf} $2 != 2
+    ${AndIf} ${Cmd} `MessageBox MB_YESNO|MB_ICONQUESTION "Backsight is open. Close it and continue?$\r$\nA recording in progress is saved first." IDYES`
+      Banner::show /set 76 "Closing Backsight..." "A recording in progress is saved first."
+      Exec '"$1\${MAINBINARYNAME}.exe" --quit'
+      StrCpy $1 0
+      ${Do}
+        Sleep 250
+        nsis_tauri_utils::FindProcessCurrentUser "${MAINBINARYNAME}.exe"
+        Pop $0
+        ${IfThen} $0 = 1 ${|} ${ExitDo} ${|}
+        IntOp $1 $1 + 1
+        ${IfThen} $1 >= 240 ${|} ${ExitDo} ${|}
+      ${Loop}
+      Banner::destroy
+    ${EndIf}
+    Pop $2
+    Pop $1
+  ${EndIf}
   ${If} $0 != 1
     DetailPrint "${QUIT_MESSAGE}"
     ${If} ${Silent}

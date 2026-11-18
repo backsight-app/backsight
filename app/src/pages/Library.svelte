@@ -667,7 +667,7 @@
     cursor: pointer;
     content-visibility: auto;
     contain-intrinsic-size: auto 60px;
-    border-bottom: 1px solid rgb(33 43 69 / 0.5);
+    border-bottom: 1px solid rgb(31 33 42 / 0.7);
     outline: none;
   }
   .row:hover,
@@ -701,7 +701,7 @@
     top: 3px;
     padding: 0 5px;
     border-radius: 4px;
-    background: rgb(11 15 26 / 0.8);
+    background: rgb(10 11 15 / 0.8);
     font-size: 11px;
   }
   .cc {
@@ -710,7 +710,7 @@
     bottom: 3px;
     padding: 0 5px;
     border-radius: 4px;
-    background: rgb(11 15 26 / 0.8);
+    background: rgb(10 11 15 / 0.8);
     font-size: 11px;
   }
   .dur {
@@ -719,7 +719,7 @@
     bottom: 3px;
     padding: 0 5px;
     border-radius: 4px;
-    background: rgb(11 15 26 / 0.8);
+    background: rgb(10 11 15 / 0.8);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
   }

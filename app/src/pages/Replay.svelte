@@ -70,7 +70,7 @@
     padding: 18px 22px;
     border-radius: var(--radius);
     border: 1px solid var(--border);
-    background: linear-gradient(135deg, rgb(124 92 255 / 0.12), rgb(34 211 238 / 0.06)), var(--bg-card);
+    background: linear-gradient(180deg, #15161d, #101117);
   }
   .meter :global(svg) {
     color: var(--accent-2);
