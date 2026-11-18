@@ -6,6 +6,7 @@
 //! [`media`] reads saved files back for the library (metadata, thumbnails, hover previews).
 //! The FFmpeg encode and mux pipeline is described in `docs/architecture/capture-pipeline.md`.
 
+pub mod burn;
 pub mod catalog;
 pub mod ffmpeg;
 pub mod fsutil;

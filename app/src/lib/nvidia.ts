@@ -46,15 +46,22 @@ export function useOtherKeys(
   const moving = untouched ? Object.keys(previous) : clashes.map((c) => c.action);
   const moved: string[] = [];
   const stuck: string[] = [];
-  for (const action of moving) {
+  // A key that moves to its fallback takes its partner along (Alt+V records, Alt+Shift+V pauses),
+  // when the partner still has its default.
+  const partners: Record<string, string> = { "toggle-recording": "pause-recording", "save-replay": "toggle-replay" };
+  const queue = [...moving];
+  for (const action of queue) {
     const free = (key?: string) =>
       !!key &&
       !overlay.some((o) => same(o.key) === same(key)) &&
       !Object.entries(keys).some(([a, k]) => a !== action && k && same(k) === same(key));
-    const key = [defaults[action], fallback[action]].find(free);
+    const following = !moving.includes(action);
+    const key = (following ? [fallback[action]] : [defaults[action], fallback[action]]).find(free);
     if (key) {
       keys[action] = key;
       moved.push(action);
+      const partner = partners[action];
+      if (key === fallback[action] && partner && keys[partner] === defaults[partner] && !queue.includes(partner)) queue.push(partner);
     } else stuck.push(action);
   }
   return { moved, stuck: stuck.filter((a) => clashes.some((c) => c.action === a)) };

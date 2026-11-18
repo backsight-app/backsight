@@ -248,6 +248,9 @@ struct Input {
     /// The newest captured frame, converted when its slot comes up. A newer one replaces it
     /// unconverted, so a game faster than the output rate costs no extra conversions.
     held: Option<Held>,
+    /// The newest frame skipped while the capture size settles; the video thread uses it once the
+    /// size has held (`SizeSettle::due`), for a still window that sends no frame after a resize.
+    resized: Option<Held>,
     /// Window mode: the newest capture that sent a frame (numbered from 1). An older one's frames,
     /// arriving while it is being replaced, are ignored.
     window_source: u64,
@@ -274,6 +277,25 @@ impl VideoConverter {
         } else {
             Converter::new(gpu, source, size, fps).map(|c| Self::Sdr(Box::new(c)))
         }
+    }
+}
+
+impl Input {
+    /// Rebuilds the converter for a `source`-sized capture, scaled into the encoder's `size`
+    /// keeping its shape (black bars, `target::fit`): a resized window or a new monitor resolution.
+    fn resize(
+        &mut self,
+        gpu: &Gpu,
+        source: (u32, u32),
+        size: (u32, u32),
+        fps: u32,
+    ) -> Result<(), (&'static str, String)> {
+        // The video processor shares the immediate context with NVENC's `send` on the video thread.
+        let _device = gpu.lock();
+        let hdr = matches!(self.converter, VideoConverter::Hdr(_));
+        self.converter = VideoConverter::new(gpu, source, size, fps, hdr).map_err(|e| (NO_CONVERTER, e.to_string()))?;
+        tracing::info!("capture size changed to {source:?}");
+        Ok(())
     }
 }
 
@@ -377,6 +399,11 @@ impl ReplaySession {
         // same program), else the monitor in front, normally the game's; a game found on the
         // other kind restarts once it's captured.
         let window = window.filter(|p| window_mode && p.window_open());
+        let hdr_fallback = match &window {
+            Some(p) if hdr && hdr_window_failed(&p.exe) => HdrFallback::WindowCapture,
+            _ => hdr_fallback,
+        };
+        let hdr = hdr && hdr_fallback == HdrFallback::NotNeeded;
         let hdr_monitor = match &window {
             Some(p) => wgc::window_monitor(p.window),
             None if window_mode => wgc::foreground_monitor(),
@@ -467,6 +494,7 @@ impl ReplaySession {
                 pacer: Pacer::new(fps, wgc::CLOCK_HZ),
                 settle: SizeSettle::default(),
                 held: None,
+                resized: None,
                 window_source: 0,
             }),
             replay: Mutex::new(ReplayBuffer::new(length, replay_ceiling(system::physical_memory()))),
@@ -557,7 +585,7 @@ impl ReplaySession {
         session.video_thread = Some(
             std::thread::Builder::new()
                 .name("backsight-video".into())
-                .spawn(move || encode_video(&s, &g, video, download, fps))
+                .spawn(move || encode_video(&s, &g, video, download, size, fps))
                 .map_err(|e| user_error(NO_CAPTURE, &e))?,
         );
         let (s, g) = (shared.clone(), gpu.clone());
@@ -593,11 +621,11 @@ impl ReplaySession {
     /// Saves the last `length` of the buffer (starting on a keyframe) into the video folder and
     /// returns the file. Refused after a failure: the buffer then holds only old footage.
     pub fn save_clip(&self) -> Result<PathBuf, String> {
-        self.prepare_clip()?()
+        self.prepare_clip()?.save()
     }
 
-    /// Snapshots the replay now. The returned job writes it without holding the session lock.
-    pub fn prepare_clip(&self) -> Result<impl FnOnce() -> Result<PathBuf, String> + Send + 'static, String> {
+    /// Snapshots the replay now. [`Clip::save`] writes it without holding the session lock.
+    pub fn prepare_clip(&self) -> Result<Clip, String> {
         if !self.replay_on() {
             return Err(REPLAY_OFF.into());
         }
@@ -616,15 +644,21 @@ impl ReplaySession {
             folder.display()
         );
         let (container, video, audio) = (self.container.clone(), self.video.clone(), self.audio.clone());
-        Ok(move || {
+        Ok(Clip::new(packets, move |packets| {
             let _watch = Watch::start(Step::SaveClip { bytes: packets.iter().map(|p| p.data.len() as u64).sum() });
             fs::create_dir_all(&folder).map_err(|e| user_error(&cant_save, &e))?;
             let mux = open_named_mux(&folder, &name, &container, &video, &audio, false)
                 .map_err(|e| user_error(&cant_save, &e))?;
-            let saved = finish_clip(mux, &packets).map_err(|e| user_error(&cant_save, &e))?;
+            let saved = finish_clip(mux, packets).map_err(|e| user_error(&cant_save, &e))?;
             tracing::info!("saved {} ({} packets) in {:?}", saved.display(), packets.len(), started.elapsed());
             Ok(saved)
-        })
+        }))
+    }
+
+    /// How much more RAM the replay buffer may take before its ceiling: what clips kept from
+    /// before a move may hold beside it.
+    pub fn replay_room(&self) -> usize {
+        lock(&self.shared.replay).room()
     }
 
     /// The folder and file name start for a file saved now: after the game, if the settings say
@@ -651,14 +685,19 @@ impl ReplaySession {
 
     /// Whether to restart on another monitor (see [`target::should_move`]), e.g. the saved one is
     /// plugged back in, or (window mode) to switch between HDR and standard video for the game's
-    /// monitor. Asks Windows for the monitor list: every few seconds, not per frame.
-    pub fn monitor_moved(&self) -> bool {
+    /// monitor. `monitors` is [`wgc::monitors`], asked for by the caller before it locks the
+    /// session: Windows can take a while to answer.
+    pub fn monitor_moved(&self, monitors: &[wgc::Monitor]) -> bool {
         self.hdr_moved.load(Relaxed)
             || self.monitor.as_ref().is_some_and(|(captured, saved)| {
-                let monitors = wgc::monitors();
                 let ids: Vec<_> = monitors.iter().map(|m| (m.id.as_str(), m.primary)).collect();
                 target::should_move(captured, saved, &ids)
             })
+    }
+
+    /// Monitor mode: [`Self::monitor_moved`] looks at the monitor list. Window mode doesn't.
+    pub fn follows_monitor(&self) -> bool {
+        self.monitor.is_some()
     }
 
     /// Window mode: the program whose window is (or was last) captured, for the next start.
@@ -674,6 +713,11 @@ impl ReplaySession {
     /// The game in front (or last in front), as its folder name; `None` for the desktop. Home shows it.
     pub fn game_name(&self) -> Option<String> {
         self.game.name()
+    }
+
+    /// How much a saved clip holds (`replay.length_seconds`).
+    pub fn replay_length(&self) -> Duration {
+        self.length
     }
 
     pub fn replay_on(&self) -> bool {
@@ -908,6 +952,77 @@ impl ReplaySession {
     }
 }
 
+/// A replay snapshot ([`ReplaySession::prepare_clip`]). It holds its packets' memory until it is
+/// saved or dropped.
+pub struct Clip {
+    packets: Vec<Packet>,
+    write: Box<WriteClip>,
+}
+
+/// Saves a clip's packets as a file.
+type WriteClip = dyn FnOnce(&[Packet]) -> Result<PathBuf, String> + Send;
+
+impl Clip {
+    /// `packets` start on a video keyframe, as [`ReplayBuffer::clip`] gives them; `write` saves them.
+    pub fn new(
+        packets: Vec<Packet>,
+        write: impl FnOnce(&[Packet]) -> Result<PathBuf, String> + Send + 'static,
+    ) -> Self {
+        Clip { packets, write: Box::new(write) }
+    }
+
+    /// The packets' bytes.
+    pub fn bytes(&self) -> usize {
+        self.packets.iter().map(|p| p.data.len()).sum()
+    }
+
+    /// Keeps (at least) the last `length`, picked as [`ReplayBuffer::clip`] does: a keyframe first,
+    /// the video after it and the audio from its decode time on. Allocates nothing.
+    pub fn keep_last(&mut self, length: Duration) {
+        let video = |p: &Packet| p.stream == StreamKind::Video;
+        let latest = self.packets.iter().filter(|p| video(p)).map(|p| p.pts_us).max().unwrap_or(0);
+        let cutoff = latest.saturating_sub(length.as_micros() as i64);
+        let Some(start) = self.packets.iter().rposition(|p| video(p) && p.keyframe && p.pts_us <= cutoff) else {
+            return;
+        };
+        if start == 0 {
+            return; // starts there already
+        }
+        let (key_dts, mut i) = (self.packets[start].dts_us, 0);
+        self.packets.retain(|p| {
+            i += 1;
+            if video(p) { i > start } else { p.pts_us >= key_dts }
+        });
+        // The keyframe goes first, ahead of the audio kept from before it.
+        let key = self.packets.iter().position(video).expect("the keyframe is kept");
+        self.packets[..=key].rotate_right(1);
+    }
+
+    /// Keeps the newest part that fits in about `max` bytes, from a keyframe on ([`Clip::keep_last`]).
+    /// `false` when not even the part from the last keyframe fits.
+    pub fn keep_bytes(&mut self, max: usize) -> bool {
+        let video = |p: &Packet| p.stream == StreamKind::Video;
+        let latest = self.packets.iter().filter(|p| video(p)).map(|p| p.pts_us).max().unwrap_or(0);
+        let (mut sum, mut from) = (0, None);
+        for p in self.packets.iter().rev() {
+            sum += p.data.len();
+            if sum > max {
+                break;
+            }
+            if video(p) && p.keyframe {
+                from = Some(p.pts_us);
+            }
+        }
+        let Some(from) = from else { return false };
+        self.keep_last(Duration::from_micros(latest.saturating_sub(from) as u64));
+        true
+    }
+
+    pub fn save(self) -> Result<PathBuf, String> {
+        (self.write)(&self.packets)
+    }
+}
+
 impl Drop for ReplaySession {
     fn drop(&mut self) {
         let watch = Watch::start(Step::CaptureStop);
@@ -965,23 +1080,27 @@ impl Shared {
             }
             input.window_source = source;
         }
-        let first = window.is_some_and(|(_, f)| f.swap(false, Relaxed));
-        if !first && !input.settle.observe(current, frame.size, frame.time) {
-            return Ok(()); // still resizing: the pacer repeats the last picture
+        // Cleared only once this frame is kept: a failed converter rebuild sent no picture
+        // (`target::HdrWindowTries` counts it).
+        let first = window.is_some_and(|(_, f)| f.load(Relaxed));
+        let kept = || Held { texture: frame.texture.clone(), size: frame.size, _frame: frame.handle.cloned() };
+        if first {
+            input.settle.settled(); // the old window's size change no longer matters
+        } else if !input.settle.observe(current, frame.size, frame.time) {
+            // Still resizing: the pacer repeats the last picture; this one waits in case it's the last.
+            input.resized = Some(kept());
+            return Ok(());
         }
+        input.resized = None;
         if frame.size != current {
-            // The video processor shares the immediate context with NVENC's `send` on the video thread.
-            let _device = gpu.lock();
-            // A resized window or a new monitor resolution is scaled into the size the encoder
-            // started with, keeping its shape (black bars, `target::fit`).
-            let hdr = matches!(input.converter, VideoConverter::Hdr(_));
-            input.converter =
-                VideoConverter::new(gpu, frame.size, size, fps, hdr).map_err(|e| (NO_CONVERTER, e.to_string()))?;
-            tracing::info!("capture size changed to {:?}", frame.size);
+            input.resize(gpu, frame.size, size, fps)?;
         }
         // Replacing a frame its slot hasn't taken hands it back unconverted (the pacer counts it
         // as dropped).
-        input.held = Some(Held { texture: frame.texture.clone(), size: frame.size, _frame: frame.handle.cloned() });
+        input.held = Some(kept());
+        if let Some((_, f)) = window {
+            f.store(false, Relaxed);
+        }
         input.pacer.frame_arrived(frame.time);
         Ok(())
     }
@@ -1041,7 +1160,14 @@ fn still_slot(fresh_us: i64, sent_us: i64, key_us: i64, slot_us: i64, want_key: 
 /// The video thread: one frame per pacer slot, converted on the GPU and encoded. On a still
 /// screen most slots are left out: players hold a picture until the next one's time, so the
 /// video looks the same and the encoder (most of Instant Replay's GPU use on a desktop) rests.
-fn encode_video(s: &Shared, gpu: &Gpu, mut video: VideoSession, download: Option<Downloader>, fps: u32) {
+fn encode_video(
+    s: &Shared,
+    gpu: &Gpu,
+    mut video: VideoSession,
+    download: Option<Downloader>,
+    size: (u32, u32),
+    fps: u32,
+) {
     let frame_ticks = wgc::CLOCK_HZ / u64::from(fps);
     let mut start_us = None;
     // Leaving slots out needs an encoder that can hand over the frames it holds back (B-frames,
@@ -1053,6 +1179,26 @@ fn encode_video(s: &Shared, gpu: &Gpu, mut video: VideoSession, download: Option
     while !s.stopped() {
         let now = wgc::now();
         let mut input = lock(&s.input);
+        // A still window resized once sends no frame after the settle time: use the last one skipped.
+        if input.settle.due(now)
+            && let Some(resized) = input.resized.take()
+        {
+            input.settle.settled();
+            // A failed rebuild keeps the old converter and picture; the window's next frame tries again.
+            let old = match input.resize(gpu, resized.size, size, fps) {
+                Ok(()) => {
+                    input.pacer.frame_arrived(now);
+                    input.held.replace(resized)
+                }
+                Err((_, raw)) => {
+                    tracing::warn!("the resized capture's last picture couldn't be used: {raw}");
+                    Some(resized)
+                }
+            };
+            drop(input);
+            drop(old); // after the lock, as in `release_held`
+            continue;
+        }
         let due = input.pacer.next_deadline();
         let Some(slot) = input.pacer.poll(now) else {
             drop(input);
@@ -1141,7 +1287,8 @@ fn encode_video(s: &Shared, gpu: &Gpu, mut video: VideoSession, download: Option
 /// keeps it until it closes (`target::should_capture`: another program only takes over when it
 /// fills its monitor or the captured program started it), and keeps `notice` saying what's going
 /// on. A closed or minimized window, or a capture error, never stops the session: the pacer
-/// repeats the last picture meanwhile, and a failed capture is tried again after `RETRY`.
+/// repeats the last picture meanwhile, and a failed capture is tried again after `RETRY`. HDR
+/// capture that keeps failing (`target::HdrWindowTries`) asks for a restart in standard video.
 #[allow(clippy::too_many_arguments)] // one caller; each argument is a different kind of thing
 fn follow_window(
     s: Arc<Shared>,
@@ -1159,14 +1306,17 @@ fn follow_window(
     const OK: u8 = 0;
     const CLOSED: u8 = 1;
     const FAILED: u8 = 2;
-    // The captured (pid, window), its capture and how it ended (OK while running).
-    let mut current: Option<((u32, isize), Capture, Arc<AtomicU8>)> = None;
+    // The captured (pid, window), its capture, how it ended (OK while running) and whether it
+    // has yet to send a picture.
+    type Captured = ((u32, isize), Capture, Arc<AtomicU8>, Arc<AtomicBool>);
+    let mut current: Option<Captured> = None;
     // A capture that failed: the same (pid, window) is tried again after RETRY, and meanwhile it
     // still counts as captured, so a failure never lets another program's window in.
     let mut failed: Option<((u32, isize), Instant)> = None;
     let mut lost = false;
     // The captured (or failed) program, for `Program::started` in `target::should_capture`.
-    // `captured_out` gets only one that captured, for the next session (`carried`, tried first).
+    // `captured_out` gets only one that captured, for the next session (`carried`, tried first),
+    // or one whose HDR capture was given up, so the restart records it in standard video.
     let mut owner: Option<Program> = None;
     // When the current capture began, in FILETIME ticks like `Program::started`.
     let mut began = 0;
@@ -1178,13 +1328,20 @@ fn follow_window(
     let (mut checked_monitor, mut window_hdr) = (None, None);
     // Numbers each capture started, for `Input::window_source`.
     let mut sources = 0u64;
+    // HDR capture failures in a row; once given up, the failed window isn't tried again here.
+    let (mut hdr_tries, mut hdr_given_up) = (target::HdrWindowTries::default(), false);
+    // The window frame count when it last changed, and when: a game in front that sends none
+    // for `EXCLUSIVE_QUIET` may be in exclusive full screen.
+    let (mut last_frames, mut last_frame_at) = (0, Instant::now());
     move |game| {
         if s.stopped() {
             release_held(&s);
             current = None;
             return;
         }
-        if let Some((id, _, end)) = &current {
+        // The program whose HDR capture is given up, taken when it fails: `owner` may change below.
+        let mut give_up = None;
+        if let Some((id, _, end, fresh)) = &current {
             match end.load(Relaxed) {
                 OK => {}
                 CLOSED => {
@@ -1199,12 +1356,15 @@ fn follow_window(
                 }
                 _ => {
                     release_held(&s);
+                    if hdr && hdr_tries.failed(*id, !fresh.load(Relaxed)) {
+                        give_up = lock(&captured_out).clone(); // set when this capture started
+                    }
                     failed = Some((*id, Instant::now() + RETRY));
                     current = None;
                 }
             }
         }
-        let captured = current.as_ref().map(|(c, _, _)| *c).or(failed.map(|(id, _)| id));
+        let captured = current.as_ref().map(|(c, ..)| *c).or(failed.map(|(id, _)| id));
         let wanted = |p: &Program| match failed {
             Some((id, until)) if id == (p.pid, p.window) => Instant::now() >= until,
             _ => {
@@ -1217,14 +1377,17 @@ fn follow_window(
                     })
                 };
                 let other = captured.is_some_and(|(pid, _)| pid != p.pid);
-                let covers = wgc::covers_monitor(p.window);
-                target::should_capture(captured, (p.pid, p.window), covers, other && !covers && launched())
+                let browser = other && game::is_browser(&p.exe);
+                let covers = !browser && wgc::covers_monitor(p.window);
+                let launched = other && !browser && !covers && launched();
+                target::should_capture(captured, (p.pid, p.window), covers, launched, browser)
             }
         };
         // Checked again: the window may have closed (and its handle gone to another program)
         // since the start.
         let carried = carried.take().filter(Program::window_open);
-        if let Some(p) = carried.as_ref().or(game).filter(|p| p.window != 0 && wanted(p)) {
+        // Once HDR is given up nothing more is captured: the pool is HDR, and the restart is due.
+        if let Some(p) = carried.as_ref().or(game).filter(|p| !hdr_given_up && p.window != 0 && wanted(p)) {
             let end = Arc::new(AtomicU8::new(OK));
             let (shared, g, e) = (s.clone(), gpu.clone(), end.clone());
             let hwnd = windows::Win32::Foundation::HWND(p.window as _);
@@ -1255,15 +1418,18 @@ fn follow_window(
             match started {
                 Ok(capture) => {
                     tracing::info!("capturing the window {:#x} of {}", p.window, p.exe);
+                    // A new window gets its own 2 s before it can count as exclusive full screen.
+                    (last_frames, last_frame_at) = (s.window_frames.load(Relaxed), Instant::now());
                     // The old picture goes, unless this window's first frame already took its place.
                     let held = {
                         let mut input = lock(&s.input);
                         // The old window's capture is dropped next: its late frames are ignored now.
                         input.window_source = input.window_source.max(source);
-                        if fresh.load(Relaxed) { input.held.take() } else { None }
+                        let old = input.resized.take();
+                        (if fresh.load(Relaxed) { input.held.take() } else { None }, old)
                     };
                     drop(held); // after the lock, as in `release_held`
-                    (current, lost, failed) = (Some(((p.pid, p.window), capture, end)), false, None);
+                    (current, lost, failed) = (Some(((p.pid, p.window), capture, end, fresh)), false, None);
                     owner = Some(p.clone());
                     began = foreground::now();
                     *lock(&captured_out) = Some(p.clone());
@@ -1274,14 +1440,27 @@ fn follow_window(
                     if failed.is_none_or(|(f, _)| f != id) {
                         tracing::warn!("the window {:#x} of {} can't be captured yet: {e}", p.window, p.exe);
                     }
+                    // A window not ready yet (a game still launching) isn't an HDR failure.
+                    if hdr && wgc::window_ready(hwnd) && hdr_tries.failed(id, false) {
+                        give_up = Some(p.clone());
+                    }
                     failed = Some((id, Instant::now() + RETRY));
                     owner = Some(p.clone());
                 }
             }
         }
+        if let Some(p) = give_up
+            && !std::mem::replace(&mut hdr_given_up, true)
+        {
+            tracing::warn!("HDR capture of the window of {} kept failing: restarting in standard video for it", p.exe);
+            lock(&HDR_WINDOW_FAILED).push(p.exe.clone());
+            *lock(&captured_out) = Some(p); // the restart captures it straight away
+        }
         // A game on (or dragged to) the other kind of monitor asks for a restart (`monitor_moved`);
-        // dragged back before it happens, the restart is called off.
-        if hdr_wanted && let Some(((_, w), _, _)) = &current {
+        // dragged back before it happens, the restart is called off. Never once HDR is given up.
+        if hdr_given_up {
+            hdr_moved.store(true, Relaxed);
+        } else if hdr_wanted && let Some(((_, w), ..)) = &current {
             let monitor = wgc::window_monitor(*w);
             if checked_monitor != Some(monitor.0 as isize) {
                 checked_monitor = Some(monitor.0 as isize);
@@ -1299,19 +1478,41 @@ fn follow_window(
                 }
             }
         }
-        let minimized = current.as_ref().is_some_and(|((_, w), _, _)| wgc::is_minimized(*w));
+        let minimized = current.as_ref().is_some_and(|((_, w), ..)| wgc::is_minimized(*w));
+        let frames = s.window_frames.load(Relaxed);
+        // A minimized window sends nothing either; its quiet time starts once it is back.
+        if frames != last_frames || current.is_none() || minimized {
+            (last_frames, last_frame_at) = (frames, Instant::now());
+        }
+        let exclusive = current.as_ref().is_some_and(|((_, w), ..)| {
+            last_frame_at.elapsed() >= target::EXCLUSIVE_QUIET && wgc::exclusive_full_screen(*w)
+        });
         // No HDR line while a restart for the game's monitor is due: it would be about to change
         // (while a recording holds the restart off, `ReplaySession::capture_notice` says so).
         let hdr_note =
             target::window_hdr_notice(hdr_wanted, hdr_fallback, window_hdr).filter(|_| !hdr_moved.load(Relaxed));
-        *lock(&notice) = target::window_notice(current.is_some(), lost, minimized, hdr_note);
+        *lock(&notice) = match current {
+            None if hdr_given_up => Some(target::HDR_WINDOW_FAILING),
+            _ => target::window_notice(current.is_some(), lost, minimized, exclusive, hdr_note),
+        };
     }
+}
+
+/// Programs whose HDR window capture kept failing (`follow_window`): later sessions record them in
+/// standard video until Backsight restarts.
+static HDR_WINDOW_FAILED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+fn hdr_window_failed(exe: &str) -> bool {
+    lock(&HDR_WINDOW_FAILED).iter().any(|e| e.eq_ignore_ascii_case(exe))
 }
 
 /// Gives back the frame the video thread hasn't converted yet, before its window capture (and frame
 /// pool) is dropped: Microsoft doesn't say a frame stays usable after its pool closes.
 fn release_held(s: &Shared) {
-    let held = lock(&s.input).held.take();
+    let held = {
+        let mut input = lock(&s.input);
+        (input.held.take(), input.resized.take())
+    };
     drop(held); // after the lock: never release a frame while holding what the capture callback waits on
 }
 
@@ -1548,6 +1749,36 @@ mod tests {
         assert_eq!(output_size((1365, 767), "source"), (1364, 766), "NV12 needs even sizes");
         assert_eq!(output_size((1080, 1920), "1080p"), (1080, 1920), "portrait 1080p stays as is");
         assert_eq!(output_size((1440, 2560), "1080p"), (1080, 1920), "portrait scales by its short side");
+    }
+
+    #[test]
+    fn a_kept_clip_is_trimmed_from_a_keyframe() {
+        let packet = |stream, s: f64, keyframe| Packet {
+            stream,
+            pts_us: (s * 1e6) as i64,
+            dts_us: (s * 1e6) as i64,
+            duration_us: 0,
+            keyframe,
+            data: vec![0; 10].into(),
+        };
+        // Video each second (keyframes at 0, 4 and 8 s), each after audio for half a second later:
+        // the encoders' delays mix the order.
+        let packets = (0..10)
+            .flat_map(|t| {
+                let t = f64::from(t);
+                [packet(StreamKind::Audio(0), t + 0.5, false), packet(StreamKind::Video, t, t % 4.0 == 0.0)]
+            })
+            .collect();
+        let mut clip = Clip::new(packets, |p| Ok(PathBuf::from(p.len().to_string())));
+        clip.keep_last(Duration::from_secs(20));
+        assert_eq!(clip.bytes(), 200, "longer than it is: all of it");
+        clip.keep_last(Duration::from_secs(3));
+        let first = &clip.packets[0];
+        assert!(first.stream == StreamKind::Video && first.keyframe && first.pts_us == 4_000_000, "{first:?}");
+        assert!(clip.packets.iter().all(|p| p.pts_us >= 4_000_000), "nothing from before the keyframe");
+        assert_eq!(clip.packets.iter().filter(|p| p.stream == StreamKind::Video).count(), 6);
+        assert_eq!(clip.bytes(), 120, "6 video packets and the audio from 4.5 s on");
+        assert_eq!(clip.save(), Ok(PathBuf::from("12")));
     }
 
     #[test]

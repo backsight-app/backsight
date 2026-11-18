@@ -24,6 +24,10 @@ pub const HDR_AFTER_RECORDING: &str =
     "Your game is on a monitor showing HDR now. Backsight switches to HDR video when this recording ends.";
 /// Window mode: the game moved to a monitor not showing HDR during a recording of HDR video.
 pub const SDR_AFTER_RECORDING: &str = "Your game is on a monitor that isn't showing HDR now. Backsight switches to standard video when this recording ends.";
+/// Window mode: HDR capture of the game's window kept failing, so the session restarts in standard video.
+pub const HDR_WINDOW_FAILING: &str = "HDR video couldn't capture your game's window, so Backsight switches to standard video for it (after a recording, if one runs).";
+/// Window mode: the session runs in standard video after [`HDR_WINDOW_FAILING`].
+pub const HDR_WINDOW_CAPTURE: &str = "HDR video couldn't capture your game's window, so Backsight records standard video for this game. Restart Backsight to try HDR again.";
 /// [`MONITOR_GONE`] and [`HDR_SETTINGS`] together.
 pub const MONITOR_GONE_HDR_SETTINGS: &str = "The monitor picked on Backsight's Video page isn't connected, so Backsight records your main monitor. These video settings can't record HDR, so the video is standard.";
 /// [`MONITOR_GONE`] and [`HDR_ENCODER`] together.
@@ -42,6 +46,8 @@ pub enum HdrFallback {
     Settings,
     /// The encoder didn't start in HDR (the raw reason is logged).
     Encoder,
+    /// Window mode: HDR capture of this game's window kept failing ([`HdrWindowTries`]).
+    WindowCapture,
 }
 
 /// What the saved settings allow, before the monitor or the encoder is asked. `encoder_hdr` is the
@@ -63,7 +69,30 @@ pub fn window_hdr_restart(wanted: bool, fallback: HdrFallback, window_hdr: bool)
         _ if !wanted => false,
         HdrFallback::NotNeeded => !window_hdr,
         HdrFallback::SdrMonitor | HdrFallback::Unknown => window_hdr,
-        HdrFallback::Settings | HdrFallback::Encoder => false,
+        HdrFallback::Settings | HdrFallback::Encoder | HdrFallback::WindowCapture => false,
+    }
+}
+
+/// Window mode, HDR video: failures in a row, with no picture between, after which HDR capture of
+/// a window is given up (one try every 2 s).
+pub const HDR_WINDOW_TRIES: u32 = 3;
+
+/// Counts failed HDR captures of one window, so they aren't retried forever.
+#[derive(Debug, Default)]
+pub struct HdrWindowTries {
+    window: Option<(u32, isize)>,
+    failures: u32,
+}
+
+impl HdrWindowTries {
+    /// A capture of `window` (`(pid, window)`) failed; `pictured`: it sent a picture first. True
+    /// once HDR should be given up for it.
+    pub fn failed(&mut self, window: (u32, isize), pictured: bool) -> bool {
+        if pictured || self.window != Some(window) {
+            *self = Self { window: Some(window), failures: 0 };
+        }
+        self.failures += 1;
+        self.failures >= HDR_WINDOW_TRIES
     }
 }
 
@@ -75,6 +104,7 @@ pub fn window_hdr_notice(wanted: bool, fallback: HdrFallback, window_hdr: Option
         _ if !wanted => None,
         HdrFallback::SdrMonitor | HdrFallback::Unknown if window_hdr == Some(false) => Some(HDR_WINDOW),
         HdrFallback::SdrMonitor | HdrFallback::Unknown => Some(HDR_UNKNOWN),
+        HdrFallback::WindowCapture => Some(HDR_WINDOW_CAPTURE),
         other => start_notice(false, false, other),
     }
 }
@@ -99,6 +129,7 @@ pub fn start_notice(window_mode: bool, monitor_gone: bool, hdr: HdrFallback) -> 
         (false, true, HdrFallback::Settings) => Some(MONITOR_GONE_HDR_SETTINGS),
         (false, false, HdrFallback::Encoder) => Some(HDR_ENCODER),
         (false, true, HdrFallback::Encoder) => Some(MONITOR_GONE_HDR_ENCODER),
+        (false, _, HdrFallback::WindowCapture) => Some(HDR_WINDOW_CAPTURE), // window mode only
     }
 }
 /// Window mode before a game has kept focus.
@@ -108,6 +139,12 @@ pub const WINDOW_CLOSED: &str = "The game window closed. Backsight records the n
 /// Window mode while the captured window is minimized.
 pub const WINDOW_MINIMIZED: &str =
     "The game window is minimized, so the video shows its last picture until you bring it back.";
+/// Window mode while the game runs in exclusive full screen, which window capture can't see.
+pub const WINDOW_EXCLUSIVE: &str = "Your game runs in exclusive full screen, which \"Game window only\" can't record. Set the game's display mode to borderless or windowed in its settings.";
+/// How long the game's window may send no picture, while it's in front in exclusive full screen,
+/// before [`WINDOW_EXCLUSIVE`] shows: a game in front draws all the time, so silence means
+/// window capture can't see it.
+pub const EXCLUSIVE_QUIET: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// Which of `monitors` (`(id, primary)` pairs, in any order) to capture for the saved id: that
 /// one, or the primary one when the id is empty or the monitor is gone. The flag says it fell
@@ -132,18 +169,21 @@ pub fn should_move(captured: &str, saved: &str, monitors: &[(&str, bool)]) -> bo
 /// covers its whole monitor, as full-screen and borderless games do, or (`launched_by_captured`)
 /// the captured program started it: a windowed game launched from a launcher or chat captured
 /// first. So Alt+Tab to a chat, or a browser opened mid-game, never puts that window in the
-/// video (ADR 0012). `captured` and `candidate` are `(pid, window)`.
+/// video (ADR 0012). A `browser` never takes over at all, not even one the game started or one
+/// shown full screen: games open them for store pages and log-ins. `captured` and `candidate`
+/// are `(pid, window)`.
 pub fn should_capture(
     captured: Option<(u32, isize)>,
     candidate: (u32, isize),
     covers_monitor: bool,
     launched_by_captured: bool,
+    browser: bool,
 ) -> bool {
     match captured {
         None => true,
         Some(c) if c == candidate => false,
         Some((pid, _)) if pid == candidate.0 => true,
-        Some(_) => covers_monitor || launched_by_captured,
+        Some(_) => !browser && (covers_monitor || launched_by_captured),
     }
 }
 
@@ -154,11 +194,18 @@ pub fn covers(window: (i32, i32, i32, i32), monitor: (i32, i32, i32, i32)) -> bo
 }
 
 /// What Home says in window mode. `hdr` ([`window_hdr_notice`]) is said while nothing else needs saying.
-pub fn window_notice(capturing: bool, lost: bool, minimized: bool, hdr: Option<&'static str>) -> Option<&'static str> {
+pub fn window_notice(
+    capturing: bool,
+    lost: bool,
+    minimized: bool,
+    exclusive: bool,
+    hdr: Option<&'static str>,
+) -> Option<&'static str> {
     match (capturing, lost) {
         (false, true) => Some(WINDOW_CLOSED),
         (false, false) => Some(WAITING_FOR_WINDOW),
         (true, _) if minimized => Some(WINDOW_MINIMIZED),
+        (true, _) if exclusive => Some(WINDOW_EXCLUSIVE),
         (true, _) => hdr,
     }
 }
@@ -169,10 +216,8 @@ pub const SIZE_SETTLE: u64 = 1_500_000;
 
 /// Debounces capture size changes. `observe` gets each frame's size and time and says whether to
 /// convert it at that size (`true`), or skip it while the size is still changing (the last
-/// picture is repeated meanwhile).
-// shortcut: a still window resized once sends no frame after the settle time, so the video keeps
-// its old size and picture until it redraws; apply the pending frame from the video thread if
-// paused games that change resolution show this.
+/// picture is repeated meanwhile). A still window resized once sends no frame after the settle
+/// time, so the video thread asks [`SizeSettle::due`] and applies the last skipped frame itself.
 #[derive(Debug, Default)]
 pub struct SizeSettle {
     pending: Option<((u32, u32), u64)>,
@@ -191,6 +236,16 @@ impl SizeSettle {
                 false
             }
         }
+    }
+
+    /// A skipped size has held until `now` with no frame since: its last frame should be used.
+    pub fn due(&self, now: u64) -> bool {
+        self.pending.is_some_and(|(_, since)| now.saturating_sub(since) >= SIZE_SETTLE)
+    }
+
+    /// The pending size was applied without [`SizeSettle::observe`] (see [`SizeSettle::due`]).
+    pub fn settled(&mut self) {
+        self.pending = None;
     }
 }
 
@@ -241,17 +296,19 @@ mod tests {
         assert_eq!(hdr_settings(true, false, "mp4"), Settings, "an encoder without HDR");
         assert_eq!(hdr_settings(true, true, "mov"), Settings, "a file format without HDR");
         // Every fallback has something to say on Home, once, instead of an error per key press.
-        for fallback in [SdrMonitor, Unknown, Settings, Encoder] {
+        for fallback in [SdrMonitor, Unknown, Settings, Encoder, WindowCapture] {
             assert!(start_notice(false, false, fallback).is_some_and(|n| n.contains("standard video")), "{fallback:?}");
         }
         let hdr = window_hdr_notice(true, SdrMonitor, Some(false));
         assert_eq!(hdr, Some(HDR_WINDOW), "the game's monitor, not the Video page's, is blamed");
-        assert_eq!(window_notice(true, false, false, hdr), Some(HDR_WINDOW));
-        assert_eq!(window_notice(true, false, false, None), None);
-        assert_eq!(window_notice(true, false, true, hdr), Some(WINDOW_MINIMIZED), "the nearer fact wins");
-        assert_eq!(window_notice(false, false, false, hdr), Some(WAITING_FOR_WINDOW));
+        assert_eq!(window_notice(true, false, false, false, hdr), Some(HDR_WINDOW));
+        assert_eq!(window_notice(true, false, false, false, None), None);
+        assert_eq!(window_notice(true, false, true, false, hdr), Some(WINDOW_MINIMIZED), "the nearer fact wins");
+        assert_eq!(window_notice(false, false, false, false, hdr), Some(WAITING_FOR_WINDOW));
         assert_eq!(window_hdr_notice(true, Settings, Some(false)), Some(HDR_SETTINGS));
         assert_eq!(window_hdr_notice(true, Encoder, None), Some(HDR_ENCODER), "the standard retry still says why");
+        assert_eq!(window_hdr_notice(true, WindowCapture, Some(true)), Some(HDR_WINDOW_CAPTURE));
+        assert!(!window_hdr_restart(true, WindowCapture, true), "never back to HDR in a loop");
         assert_eq!(window_hdr_notice(true, NotNeeded, Some(true)), None, "recording HDR");
         assert_eq!(window_hdr_notice(false, SdrMonitor, Some(false)), None, "HDR video off");
         assert_eq!(window_hdr_notice(true, Unknown, None), Some(HDR_UNKNOWN), "the game's monitor couldn't be checked");
@@ -304,13 +361,18 @@ mod tests {
     #[test]
     fn window_mode_sticks_with_the_game() {
         let game = (100, 0x10);
-        assert!(should_capture(None, game, false, false), "nothing yet: the program kept in front");
-        assert!(!should_capture(Some(game), game, false, true), "already captured");
-        assert!(should_capture(Some(game), (100, 0x20), false, false), "the game's new window");
-        assert!(!should_capture(Some(game), (200, 0x30), false, false), "Alt+Tab to a chat stays out");
-        assert!(should_capture(Some(game), (200, 0x30), true, false), "another full-screen game takes over");
+        assert!(should_capture(None, game, false, false, false), "nothing yet: the program kept in front");
+        assert!(!should_capture(Some(game), game, false, true, false), "already captured");
+        assert!(should_capture(Some(game), (100, 0x20), false, false, false), "the game's new window");
+        assert!(!should_capture(Some(game), (200, 0x30), false, false, false), "Alt+Tab to a chat stays out");
+        assert!(should_capture(Some(game), (200, 0x30), true, false, false), "another full-screen game takes over");
         // A chat or an unlisted launcher captured first: the windowed game it starts takes over.
-        assert!(should_capture(Some(game), (200, 0x30), false, true), "a program the captured one started");
+        assert!(should_capture(Some(game), (200, 0x30), false, true, false), "a program the captured one started");
+        // A browser the game opened (a store page, a log-in), even full screen, stays out.
+        assert!(!should_capture(Some(game), (300, 0x40), false, true, true), "a browser the game started");
+        assert!(!should_capture(Some(game), (300, 0x40), true, false, true), "a full-screen browser");
+        assert!(should_capture(None, (300, 0x40), false, false, true), "a browser game kept in front first");
+        assert!(should_capture(Some((300, 0x40)), (300, 0x50), false, false, true), "the browser's own new window");
     }
 
     #[test]
@@ -324,10 +386,12 @@ mod tests {
 
     #[test]
     fn window_notices() {
-        assert_eq!(window_notice(false, false, false, None), Some(WAITING_FOR_WINDOW));
-        assert_eq!(window_notice(false, true, false, None), Some(WINDOW_CLOSED));
-        assert_eq!(window_notice(true, false, true, None), Some(WINDOW_MINIMIZED));
-        assert_eq!(window_notice(true, true, false, None), None, "a new window after one closed");
+        assert_eq!(window_notice(false, false, false, false, None), Some(WAITING_FOR_WINDOW));
+        assert_eq!(window_notice(false, true, false, false, None), Some(WINDOW_CLOSED));
+        assert_eq!(window_notice(true, false, true, false, None), Some(WINDOW_MINIMIZED));
+        assert_eq!(window_notice(true, true, false, false, None), None, "a new window after one closed");
+        assert_eq!(window_notice(true, false, false, true, Some(HDR_WINDOW)), Some(WINDOW_EXCLUSIVE), "before HDR");
+        assert_eq!(window_notice(true, false, true, true, None), Some(WINDOW_MINIMIZED), "minimized says more");
     }
 
     #[test]
@@ -340,6 +404,32 @@ mod tests {
         assert!(!settle.observe(now, (820, 600), 20 + SIZE_SETTLE - 1));
         assert!(settle.observe(now, (820, 600), 20 + SIZE_SETTLE), "held long enough");
         assert!(settle.observe((820, 600), (820, 600), 20 + SIZE_SETTLE + 1));
+    }
+
+    #[test]
+    fn failing_hdr_window_capture_is_given_up() {
+        let mut tries = HdrWindowTries::default();
+        let (game, other) = ((10, 1), (20, 2));
+        assert!(!tries.failed(game, false));
+        assert!(!tries.failed(game, false));
+        assert!(tries.failed(game, false), "the third failure in a row gives up");
+        let mut tries = HdrWindowTries::default();
+        assert!(!tries.failed(game, false));
+        assert!(!tries.failed(game, true), "it worked for a while: counting starts again");
+        assert!(!tries.failed(game, false));
+        assert!(!tries.failed(other, false), "another window has its own count");
+        assert!(!tries.failed(game, false));
+    }
+
+    #[test]
+    fn a_still_window_resized_once_gets_its_new_picture() {
+        let mut settle = SizeSettle::default();
+        assert!(!settle.due(SIZE_SETTLE * 10), "nothing pending");
+        assert!(!settle.observe((800, 600), (900, 700), 100));
+        assert!(!settle.due(100 + SIZE_SETTLE - 1), "may still be dragging");
+        assert!(settle.due(100 + SIZE_SETTLE), "no frame came since: the video thread uses the skipped one");
+        settle.settled();
+        assert!(!settle.due(100 + SIZE_SETTLE * 2));
     }
 
     #[test]

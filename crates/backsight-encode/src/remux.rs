@@ -116,7 +116,7 @@ pub fn remux_to_mp4_report(input: &Path, reserved: &mut dyn FnMut(&Path)) -> Res
         match fs::OpenOptions::new().write(true).create_new(true).open(&part_path) {
             Ok(_) => break (target, part_path),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && tries < 100 => tries += 1,
-            Err(e) => return Err(format!("can't create {}: {e}", part_path.display())),
+            Err(e) => return Err(format!("{CANT_WRITE}can't create {}: {e}", part_path.display())),
         }
     };
     reserved(&part_path);
@@ -126,7 +126,7 @@ pub fn remux_to_mp4_report(input: &Path, reserved: &mut dyn FnMut(&Path)) -> Res
 
     // A name taken since `free_name` picked it gets the next free one; nothing is replaced.
     let path = crate::fsutil::publish(&part.path, &target)
-        .map_err(|e| format!("can't rename {}: {e}", part.path.display()))?;
+        .map_err(|e| format!("{CANT_WRITE}can't rename {}: {e}", part.path.display()))?;
     part.keep = true;
     Ok(Remuxed { path, skipped: copied.skipped })
 }

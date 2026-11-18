@@ -175,7 +175,7 @@ fn records_three_tracks_even_when_the_microphone_is_missing() {
     assert_eq!(stopped.stopped_early, None);
     let save = session.prepare_clip().unwrap();
     drop(session);
-    let replay = save().unwrap();
+    let replay = save.save().unwrap();
     for path in [stopped.file.unwrap(), replay] {
         let info = ffprobe(&path, &["-select_streams", "a", "-show_entries", "stream=codec_type"]);
         assert_eq!(info["streams"].as_array().unwrap().len(), 3, "{}", path.display());

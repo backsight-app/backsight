@@ -33,9 +33,18 @@ const MAX_NAME: usize = 60;
 /// recorded.
 pub fn is_launcher(exe: &str) -> bool {
     static LIST: OnceLock<Vec<String>> = OnceLock::new();
-    LIST.get_or_init(|| serde_json::from_str(include_str!("../../../content/game-launchers.json")).unwrap_or_default())
-        .iter()
-        .any(|l| l.eq_ignore_ascii_case(exe))
+    listed(&LIST, include_str!("../../../content/game-launchers.json"), exe)
+}
+
+/// Whether `exe` is a web browser (`content/browsers.json`). In window mode a browser never
+/// takes over a captured game, even one the game itself opened for a store page or a log-in.
+pub fn is_browser(exe: &str) -> bool {
+    static LIST: OnceLock<Vec<String>> = OnceLock::new();
+    listed(&LIST, include_str!("../../../content/browsers.json"), exe)
+}
+
+fn listed(list: &OnceLock<Vec<String>>, json: &str, exe: &str) -> bool {
+    list.get_or_init(|| serde_json::from_str(json).unwrap_or_default()).iter().any(|l| l.eq_ignore_ascii_case(exe))
 }
 
 /// Invisible formatting characters (Unicode category Cf) that can hide or reverse text in a file
@@ -295,6 +304,18 @@ mod tests {
             assert!(!is_launcher(exe), "{exe}");
         }
         let list: Vec<String> = serde_json::from_str(include_str!("../../../content/game-launchers.json")).unwrap();
+        assert!(list.iter().all(|e| e.to_ascii_lowercase().ends_with(".exe")), "file names, as Windows reports them");
+    }
+
+    #[test]
+    fn browsers_are_known() {
+        for exe in ["chrome.exe", "MSEDGE.EXE", "firefox.exe", "brave.exe", "opera.exe"] {
+            assert!(is_browser(exe), "{exe}");
+        }
+        for exe in ["Wow.exe", "Battle.net.exe", "javaw.exe", "msedgewebview2.exe", ""] {
+            assert!(!is_browser(exe), "{exe}");
+        }
+        let list: Vec<String> = serde_json::from_str(include_str!("../../../content/browsers.json")).unwrap();
         assert!(list.iter().all(|e| e.to_ascii_lowercase().ends_with(".exe")), "file names, as Windows reports them");
     }
 

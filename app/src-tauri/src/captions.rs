@@ -4,9 +4,9 @@
 use backsight_captions::{Job, Outcome, Queue, model};
 use backsight_config::Settings;
 use serde::Serialize;
-use std::path::Path;
-use std::sync::OnceLock;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use std::sync::{Mutex, OnceLock, PoisonError, mpsc};
 use tauri::{AppHandle, Emitter};
 
 static QUEUE: OnceLock<Queue> = OnceLock::new();
@@ -30,10 +30,15 @@ pub fn start(app: &AppHandle) {
                     other => tracing::info!("captions for {}: {other:?}", job.clip.display()),
                 }
                 let _ = app.emit("library-changed", ());
+                let mut waiting = WAITING.lock().unwrap_or_else(PoisonError::into_inner);
+                waiting.retain(|(clip, tx)| clip != &job.clip || tx.send(outcome.clone()).is_err());
             },
         )
     });
 }
+
+/// Vertical jobs waiting for their clip's captions, to burn them in.
+static WAITING: Mutex<Vec<(PathBuf, mpsc::Sender<Outcome>)>> = Mutex::new(Vec::new());
 
 /// Kills a running captions process; at quit.
 pub fn stop() {
@@ -42,16 +47,44 @@ pub fn stop() {
     }
 }
 
-/// Captions `clip` in the background when the setting is on and the models are there.
-pub fn after_save(clip: &Path, settings: &Settings) {
+/// The captions job for `clip` when the setting is on and the models are there.
+fn job(clip: &Path, settings: &Settings) -> Option<Job> {
     let a = &settings.audio;
     if !a.captions || !backsight_captions::cpu_supported() || !model::dir().is_ok_and(|d| model::installed(&d)) {
-        return;
+        return None;
     }
     // The microphone is the last track with separate tracks; otherwise the first track, the mix.
     let track = if a.separate_tracks && a.microphone { None } else { Some(0) };
-    if let Some(queue) = QUEUE.get() {
-        queue.push(Job { clip: clip.to_path_buf(), track, language: "auto".into() });
+    Some(Job { clip: clip.to_path_buf(), track, language: "auto".into() })
+}
+
+/// Captions `clip` in the background when the setting is on and the models are there.
+pub fn after_save(clip: &Path, settings: &Settings) {
+    if let (Some(job), Some(queue)) = (job(clip, settings), QUEUE.get()) {
+        queue.push(job);
+    }
+}
+
+/// The captions of `clip` for its vertical clip, when the setting is on: the file already there
+/// (a job resumed at start), or made now in the queue and waited for. `None` if nobody talked or
+/// they couldn't be made (the queue tells the user then).
+pub fn wait_for(clip: &Path, settings: &Settings) -> Option<PathBuf> {
+    let (job, queue) = (job(clip, settings)?, QUEUE.get()?);
+    let srt = backsight_captions::captions_path(clip);
+    if srt.is_file() {
+        return Some(srt);
+    }
+    let (tx, rx) = mpsc::channel();
+    WAITING.lock().unwrap_or_else(PoisonError::into_inner).push((clip.to_path_buf(), tx));
+    if !queue.push(job) {
+        WAITING.lock().unwrap_or_else(PoisonError::into_inner).retain(|(c, _)| c != clip);
+        return None;
+    }
+    // Quitting drops the queue's waiting jobs; this thread then waits until the process ends.
+    match rx.recv() {
+        Ok(Outcome::Written(path)) => Some(path),
+        Ok(Outcome::AlreadyThere) => Some(srt),
+        _ => None,
     }
 }
 

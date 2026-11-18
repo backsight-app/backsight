@@ -2,6 +2,7 @@
 //! (ADR 0015). Part of the FFmpeg edge; runs after the save, never in the capture path.
 
 use crate::{
+    burn::Captions,
     catalog::{Container, VideoEncoder},
     ffmpeg::open_with_options,
     media::open_input,
@@ -114,16 +115,19 @@ impl Output {
 
 /// Makes a vertical copy of the clip `src` at `dst` (through `<dst>.part`, renamed when done; ` (2)`
 /// if `dst` is taken) and returns the file written. Video is decoded on this thread only, cropped
-/// with [`vertical_crop`] and encoded with `encoder` and `values`; HDR clips stay HDR. Every
-/// audio track is copied unchanged.
+/// with [`vertical_crop`] and encoded with `encoder` and `values`; HDR clips stay HDR. `captions`
+/// are burned into the picture. Every audio track is copied unchanged.
 pub fn make_vertical(
     src: &Path,
     dst: &Path,
     container: &Container,
     encoder: &VideoEncoder,
     values: &EncoderOptions,
+    mut captions: Option<&mut Captions>,
 ) -> Result<PathBuf> {
     let mut input = open_input(src)?;
+    // Caption times count from the file's start, as the captions process reads it.
+    let start_us = if input.start_time == NOPTS { 0 } else { input.start_time };
     let (vi, codec) =
         input.find_best_stream(ffi::AVMEDIA_TYPE_VIDEO).map_err(|e| e.to_string())?.ok_or("no video track")?;
     let size = |v: i32| u32::try_from(v).unwrap_or(0);
@@ -176,7 +180,8 @@ pub fn make_vertical(
         if frame.best_effort_timestamp == NOPTS {
             return Ok(());
         }
-        let pts = rescale(to_us(frame.best_effort_timestamp, vtb), i64::from(fps), 1_000_000, 1, 1);
+        let t_us = to_us(frame.best_effort_timestamp, vtb);
+        let pts = rescale(t_us, i64::from(fps), 1_000_000, 1, 1);
         if last_pts.is_some_and(|last| pts <= last) {
             return Ok(()); // two frames in one slot: keep the first
         }
@@ -216,6 +221,10 @@ pub fn make_vertical(
         }
         let (ctx, _) = sws.as_mut().expect("set above");
         ctx.scale_frame(frame, 0, frame.height, target).map_err(|e| e.to_string())?;
+        if let Some(c) = captions.as_deref_mut() {
+            let size = (crop.out_width as usize, crop.out_height as usize);
+            c.burn(&mut enc.planes_mut()?, size.0, size.1, t_us - start_us, hdr);
+        }
         enc.send(pts, &mut |p| out.video(&p))
     };
 

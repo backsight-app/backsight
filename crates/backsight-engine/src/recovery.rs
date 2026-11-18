@@ -165,7 +165,10 @@ pub fn finish_conversion(mkv: &Path) -> Result<PathBuf, String> {
     let converted = remux::remux_checked(mkv, &mut |part| {
         let _ = fs::write(&mark, part.to_string_lossy().as_bytes());
     });
-    let _ = fs::remove_file(&mark);
+    // A full drive keeps the mark, so the next start tries again once space is freed.
+    if !converted.as_ref().is_err_and(|e| e.starts_with(remux::CANT_WRITE)) {
+        let _ = fs::remove_file(&mark);
+    }
     converted
 }
 

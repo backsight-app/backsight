@@ -16,10 +16,10 @@ use windows::{
     core::{Error, PWSTR, Result},
 };
 
-struct Apartment(bool);
+pub(crate) struct Apartment(bool);
 
 impl Apartment {
-    fn enter() -> Result<Self> {
+    pub(crate) fn enter() -> Result<Self> {
         // SAFETY: A successful call is balanced on this thread after all WIC objects drop.
         let result = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
         if result == RPC_E_CHANGED_MODE {

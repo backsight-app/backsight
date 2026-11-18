@@ -103,7 +103,7 @@
   {#if isTauri()}
     <div class="notice info">
       <Icon name="info" size={18} />
-      <span>Something wrong? Send the files in the logs folder to whoever gave you Backsight. Your name and file names are taken out.</span>
+      <span>Something wrong? Attach the files in the logs folder to a new issue at github.com/backsight-app/backsight/issues. Your name and file names are taken out.</span>
       <button type="button" class="btn" onclick={() => invoke("open_logs_folder")}>Open logs folder</button>
     </div>
   {/if}

@@ -71,8 +71,6 @@ impl Program {
     /// Whether the process `parent` (from [`parent`]) is `self`, started while `self` ran: a game
     /// launched from the launcher (or chat) captured first. The start times rule out a reused
     /// parent PID; a child of a process that exited long ago never matches.
-    // shortcut: a browser the captured game starts (when none was running) also counts as its
-    // child and takes over; keep a list of non-game programs in content/ if users report it.
     pub fn started(&self, child_parent: u32, child_started: u64) -> bool {
         child_parent != 0 && child_parent == self.pid && self.started != 0 && child_started >= self.started
     }

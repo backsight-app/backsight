@@ -555,7 +555,7 @@
   "captions": {
     "term": "Captions",
     "short": "Write out what you say in each clip.",
-    "eli5": "After a clip is saved, Backsight listens to it right here on your PC and writes your words into a .srt file next to the clip. Nothing is sent anywhere. Video players like VLC and sites like YouTube show that file as subtitles.",
+    "eli5": "After a clip is saved, Backsight listens to it right here on your PC and writes your words into a .srt file next to the clip; nothing is sent anywhere. Video players like VLC and sites like YouTube show that file as subtitles. Vertical clips get the words written right into the picture, ready for TikTok and Shorts.",
     "pros": ["Viewers can follow with the sound off", "Works offline after a one-time download of about 61 MB"],
     "cons": ["Turn on Separate audio tracks, or voices in the game may be written out too", "Takes a little while after each save"]
   },
@@ -650,7 +650,7 @@
   "capture-target-window": {
     "term": "Game window only",
     "short": "Records just the game, nothing around it.",
-    "eli5": "Backsight records the window of the program you keep in front for a few seconds, so start your game first. Switching to a chat or browser doesn't change what is recorded; only another program filling the whole screen takes over. After the game window closes, the next program you keep in front is recorded, so check Home if you're unsure."
+    "eli5": "Backsight records the window of the program you keep in front for a few seconds, so start your game first. Switching to a chat or a browser doesn't change what is recorded; only another program filling the whole screen takes over, never a browser. After the game window closes, the next program you keep in front is recorded, so check Home if you're unsure."
   },
   "capture-monitor": {
     "term": "Monitor",

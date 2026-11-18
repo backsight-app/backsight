@@ -313,8 +313,8 @@
     <div class="notice" role="status">
       <Icon name="alert" size={16} />
       <span class="grow">
-        Backsight closed unexpectedly last time. To help fix it, save a problem report and send it to whoever gave you
-        Backsight.
+        Backsight closed unexpectedly last time. To help fix it, save a problem report and attach it to a new issue at
+        github.com/backsight-app/backsight/issues.
       </span>
       <button type="button" class="btn" onclick={saveReport} disabled={reporting}>Save a problem report</button>
       <button type="button" class="btn" onclick={dismissCrash}>Dismiss</button>
@@ -424,7 +424,7 @@
       <span class="report">
         Something not working?
         <button type="button" class="link" onclick={saveReport} disabled={reporting}>Save a problem report</button>
-        {#if reportSaved}Saved on your Desktop as "{reportSaved}". Send it to whoever gave you Backsight.{/if}
+        {#if reportSaved}Saved on your Desktop as "{reportSaved}". Attach it to a new issue at github.com/backsight-app/backsight/issues.{/if}
         {#if reportError}{reportError}{/if}
       </span>
     {/if}

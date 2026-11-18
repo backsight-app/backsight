@@ -49,11 +49,9 @@ impl Queue {
         Queue { jobs: Mutex::new(Some(tx)), stop }
     }
 
-    /// Adds a clip; ignored after [`Queue::stop`].
-    pub fn push(&self, job: Job) {
-        if let Some(tx) = self.jobs.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
-            let _ = tx.send(job);
-        }
+    /// Adds a clip; ignored after [`Queue::stop`] (or without a worker), then `false`.
+    pub fn push(&self, job: Job) -> bool {
+        self.jobs.lock().unwrap_or_else(|e| e.into_inner()).as_ref().is_some_and(|tx| tx.send(job).is_ok())
     }
 
     /// Kills the running captions process and forgets the clips still waiting.

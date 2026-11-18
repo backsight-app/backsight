@@ -151,6 +151,20 @@ pub fn is_minimized(window: isize) -> bool {
     unsafe { windows::Win32::UI::WindowsAndMessaging::IsIconic(HWND(window as _)).as_bool() }
 }
 
+/// Whether the window `window` (a raw `HWND`) is in front and a Direct3D game holds the screen
+/// in exclusive full screen, which window capture can't see (it gets no new pictures).
+pub fn exclusive_full_screen(window: isize) -> bool {
+    use windows::Win32::UI::{
+        Shell::{QUNS_RUNNING_D3D_FULL_SCREEN, SHQueryUserNotificationState},
+        WindowsAndMessaging::GetForegroundWindow,
+    };
+    // SAFETY: neither call takes pointers; both only read state.
+    unsafe {
+        GetForegroundWindow().0 as isize == window
+            && SHQueryUserNotificationState().is_ok_and(|s| s == QUNS_RUNNING_D3D_FULL_SCREEN)
+    }
+}
+
 /// The monitor showing most of the window `window` (a raw `HWND`), or the nearest one.
 pub fn window_monitor(window: isize) -> HMONITOR {
     use windows::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST;
@@ -415,6 +429,8 @@ fn deliver<F: FnMut(Result<Frame>)>(
         // arrives at the new size and the caller rebuilds its converter.
         s.size = content;
         drop(frame);
+        // A frame the session still holds (`resized`, mid-drag) is discarded by `Recreate`, so it
+        // takes no buffer from the new pool; it is stale, and the next frame replaces it.
         return pool.Recreate(&winrt_device(device)?, s.format, BUFFERS, content);
     }
     let access: IDirect3DDxgiInterfaceAccess = frame.Surface()?.cast()?;
@@ -480,6 +496,12 @@ pub(crate) fn monitor_adapter(monitor: HMONITOR) -> Option<String> {
 pub fn monitor_size(monitor: HMONITOR) -> Result<(u32, u32)> {
     let SizeInt32 { Width, Height } = monitor_item(monitor)?.Size()?;
     Ok((Width as u32, Height as u32))
+}
+
+/// Window capture can be set up for `window`: Windows makes its capture item, with a size. Not
+/// yet while a game is still opening its window.
+pub(crate) fn window_ready(window: HWND) -> bool {
+    window_item(window).and_then(|item| item.Size()).is_ok_and(|s| s.Width > 0 && s.Height > 0)
 }
 
 fn window_item(window: HWND) -> Result<GraphicsCaptureItem> {

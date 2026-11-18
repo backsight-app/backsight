@@ -122,13 +122,13 @@ fn game_window_records_hdr_on_an_hdr_monitor() {
     s.video.capture_target = "window".into();
     let mut session = ReplaySession::start(&s).unwrap();
     std::thread::sleep(Duration::from_secs(5));
-    if session.monitor_moved() {
+    if session.monitor_moved(&wgc::monitors()) {
         println!("the window in front is on the other kind of monitor: restarting, as the app does");
         let window = session.captured_window();
         drop(session);
         session = ReplaySession::start_with_audio_state(&s, false, false, None, window).unwrap();
         std::thread::sleep(Duration::from_secs(5));
-        assert!(!session.monitor_moved(), "a second restart: the window in front moved meanwhile?");
+        assert!(!session.monitor_moved(&wgc::monitors()), "a second restart: the window in front moved meanwhile?");
     }
     let notice = session.capture_notice();
     assert_ne!(notice, Some(WAITING_FOR_WINDOW), "keep a window in front for the whole test");

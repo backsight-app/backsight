@@ -187,6 +187,11 @@ impl ReplayBuffer {
         self.held + self.spare_bytes
     }
 
+    /// How much more RAM the buffer may take before its ceiling.
+    pub fn room(&self) -> usize {
+        self.max_bytes.saturating_sub(self.bytes())
+    }
+
     /// How much video the buffer covers right now.
     pub fn duration(&self) -> Duration {
         match self.keyframe(0) {

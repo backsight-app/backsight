@@ -44,6 +44,16 @@ fn make_mkv(dir: &Path) -> PathBuf {
 
 /// [`make_mkv`], writing the `dup`th audio packet twice: Matroska takes the repeated timestamp,
 /// MP4 refuses it.
+/// Hard-to-compress luma, so a clip is big enough (about 1 MB) to be written out mid-copy.
+fn noise(x: usize, row: usize, i: usize) -> u8 {
+    let mut h = (x as u32).wrapping_mul(0x9E37_79B1)
+        ^ (row as u32).wrapping_mul(0x85EB_CA77)
+        ^ (i as u32).wrapping_mul(0xC2B2_AE3D);
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x2C1B_3C6D);
+    (h >> 24) as u8
+}
+
 fn make_mkv_with(dir: &Path, dup: Option<usize>) -> PathBuf {
     let c = Catalog::get();
     let container = c.container("mkv").unwrap();
@@ -59,7 +69,7 @@ fn make_mkv_with(dir: &Path, dup: Option<usize>) -> PathBuf {
     for i in 0..3 * FPS as usize {
         for (n, (data, stride)) in video.planes_mut().unwrap().into_iter().flatten().enumerate() {
             for (row, line) in data.chunks_mut(stride).enumerate() {
-                line.iter_mut().enumerate().for_each(|(x, p)| *p = if n == 0 { (x + row + i * 4) as u8 } else { 128 });
+                line.iter_mut().enumerate().for_each(|(x, p)| *p = if n == 0 { noise(x, row, i) } else { 128 });
             }
         }
         video.send(i as i64, &mut |p| mux.write(Track::Video, &p).unwrap()).unwrap();
@@ -222,4 +232,32 @@ fn remux_checked_keeps_the_mkv_and_a_good_mp4() {
     fs::write(&bad, b"not a video").unwrap();
     assert!(remux_checked(&bad, &mut |_| {}).is_err());
     assert!(bad.exists());
+}
+
+#[test]
+fn a_conversion_whose_drive_fills_up_keeps_the_mkv_and_leaves_no_mp4() {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::{Foundation::HANDLE, Storage::FileSystem::LockFile};
+    let d = dir("drive-full");
+    let mkv = make_mkv(&d);
+    let before = fs::read(&mkv).unwrap();
+    // As a drive filling up mid-copy: another handle locks the reserved `.part` from 4 KiB on, so
+    // the first time FFmpeg's write buffer goes to disk, partway through the packets, it fails.
+    assert!(before.len() > 256 * 1024, "the clip outgrows FFmpeg's write buffer: {} bytes", before.len());
+    let mut lock = None;
+    let e = remux_checked(&mkv, &mut |p| {
+        let f = fs::File::open(p).unwrap();
+        // SAFETY: `f` is an open file handle; the range lies past its end, which LockFile allows.
+        unsafe { LockFile(HANDLE(f.as_raw_handle()), 4096, 0, u32::MAX, u32::MAX >> 1) }.unwrap();
+        lock = Some(f);
+    })
+    .unwrap_err();
+    drop(lock);
+    println!("{e}");
+    assert!(e.starts_with(backsight_encode::remux::CANT_WRITE), "the drive is blamed: {e}");
+    assert!(e.contains("writing the mp4 file failed"), "it failed mid-copy, not at the end: {e}");
+    assert_eq!(fs::read(&mkv).unwrap(), before, "the MKV is untouched");
+    let left: Vec<_> = fs::read_dir(&d).unwrap().flatten().map(|e| e.path()).collect();
+    assert_eq!(left, [mkv], "no MP4 and no .part");
+    fs::remove_dir_all(&d).unwrap();
 }

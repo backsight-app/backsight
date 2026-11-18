@@ -21,7 +21,7 @@ use backsight_engine::{
     input::raw_input::Hotkeys,
     library::{self, Library},
     screenshot::{self, Frozen, Saved},
-    session::ReplaySession,
+    session::{Clip, ReplaySession},
     sounds::{self, Cue},
     vertical::{self, Shape},
 };
@@ -145,6 +145,53 @@ struct Replay {
     mic_muted: bool,
     /// The running session records the mic in push-to-talk mode.
     ptt: bool,
+    /// The replay from before each move to another monitor (or, window mode, to the other kind
+    /// of monitor for HDR), which starts a new session: the next clip saved saves these too.
+    before_move: Vec<Kept>,
+    /// Counts the sessions started, so a kept clip of the one still running isn't saved twice.
+    session_number: u64,
+}
+
+/// A clip snapshot kept from before a move (`Replay::before_move`).
+struct Kept {
+    /// When it moved, and the replay length then.
+    at: std::time::Instant,
+    length: std::time::Duration,
+    /// `Replay::session_number` of the session it was taken from.
+    from: u64,
+    clip: Clip,
+}
+
+/// Clips kept from before moves, at most: a monitor that keeps sleeping and waking would
+/// otherwise add a pile of short files to every clip saved.
+const KEPT_CLIPS: usize = 2;
+
+/// Trims the clips from before a move to what a clip saved at `now` holds, so together with the
+/// running replay they never hold more than the replay length, nor more RAM than its buffer may
+/// still take (`room`, [`ReplaySession::replay_room`]). The oldest is trimmed from its start first,
+/// a keyframe at a time, and goes only when not even its last part fits.
+fn keep_recent(before_move: &mut Vec<Kept>, now: std::time::Instant, room: Option<usize>) {
+    before_move.retain_mut(|k| {
+        let left = k.length.saturating_sub(now.saturating_duration_since(k.at));
+        k.clip.keep_last(left);
+        !left.is_zero()
+    });
+    let mut bytes: usize = before_move.iter().map(|k| k.clip.bytes()).sum();
+    while before_move.len() > KEPT_CLIPS {
+        bytes -= before_move.remove(0).clip.bytes();
+    }
+    while let Some(r) = room.filter(|&r| bytes > r && !before_move.is_empty()) {
+        let first = &mut before_move[0].clip;
+        let had = first.bytes();
+        let trimmed = had > bytes - r && first.keep_bytes(had - (bytes - r)) && first.bytes() < had;
+        bytes -= if trimmed { had - first.bytes() } else { before_move.remove(0).clip.bytes() };
+    }
+}
+
+/// Takes the kept clips for a save. One kept from the session still `running` (its number), saved
+/// while the move is under way, is in that session's own clip already.
+fn kept_to_save(before_move: &mut Vec<Kept>, running: Option<u64>) -> Vec<Clip> {
+    std::mem::take(before_move).into_iter().filter(|k| Some(k.from) != running).map(|k| k.clip).collect()
 }
 
 #[derive(Default)]
@@ -221,6 +268,7 @@ fn start_replay(engine: &Engine, settings: &Settings, preserve_target: bool) {
                 key.control = Some(Box::new(control));
             }
             replay.session = Some(s);
+            replay.session_number += 1;
             replay.ptt = settings.audio.microphone && push_to_talk(settings);
         }
         Err(e) => {
@@ -234,6 +282,7 @@ fn stop_replay(engine: &Engine, replay: &mut Replay) {
     lock(&engine.mic_key).control = None;
     replay.session = None;
     replay.start_error = None;
+    replay.before_move.clear(); // turned off: the replay goes, as it does for the running session
 }
 
 pub(crate) fn recording(replay: &Replay) -> bool {
@@ -269,6 +318,39 @@ fn apply_replay(engine: &Engine, settings: &Settings) {
 /// A "saved" pop-up's body: where to watch it, then the file name.
 fn in_library(name: &str) -> String {
     format!("Watch it in Backsight's Library. ({name})")
+}
+
+/// The pop-up for a save press: `now` is the running replay's clip, `earlier` the ones kept from
+/// before a monitor change (`Replay::before_move`). `making`: a vertical clip is being made of it.
+fn saved_notice(
+    earlier: &[Result<PathBuf, String>],
+    now: Result<PathBuf, String>,
+    making: bool,
+) -> (&'static str, String) {
+    let name = |p: &PathBuf| in_library(&p.file_name().unwrap_or_default().to_string_lossy());
+    let kept = earlier.iter().rev().find_map(|r| r.as_ref().ok());
+    let lost = earlier.iter().rev().find_map(|r| r.as_ref().err());
+    let (title, body) = match (now, kept) {
+        (Ok(path), None) => ("Clip saved", name(&path)),
+        (Ok(path), Some(_)) => (
+            "Clips saved",
+            format!(
+                "{} Instant Replay restarted when your monitor changed, so what came before is a separate clip.",
+                name(&path)
+            ),
+        ),
+        (Err(_), Some(path)) => {
+            ("Clip saved", format!("{} It's what Instant Replay had before your monitor changed.", name(path)))
+        }
+        // A kept clip's error is the real one: the new session's is usually that it is starting.
+        (Err(e), None) => return ("Couldn't save the clip", lost.cloned().unwrap_or(e)),
+    };
+    // The wide file is about to become the vertical clip, so "watch it" would be early.
+    let body = if making { "Making the vertical clip now.".to_owned() } else { body };
+    match lost {
+        Some(e) => (title, format!("{body} The part from before your monitor changed wasn't saved. {e}")),
+        None => (title, body),
+    }
 }
 
 /// The notification for a finished recording, and every file it saved.
@@ -1090,18 +1172,15 @@ fn mark_for_mp4(saved: Vec<PathBuf>) -> Vec<PathBuf> {
 }
 
 /// Makes a clip's vertical copy on its own thread (ADR 0015): never waited for by the next save
-/// or by quitting (the next start picks it up again), and says when it is there.
-/// `caption`: the vertical clip is the only one kept (Vertical), so it gets the captions.
-fn make_vertical(app: &AppHandle, job: vertical::Job, settings: Settings, caption: bool) {
+/// or by quitting (the next start picks it up again), and says when it is there. With captions on,
+/// the clip it is made from is captioned first and the captions are burned into the picture.
+fn make_vertical(app: &AppHandle, job: vertical::Job, settings: Settings) {
     let app = app.clone();
     std::thread::spawn(move || {
-        let (title, body) = match job.run(&settings) {
-            Ok(path) => {
-                if caption {
-                    captions::after_save(&path, &settings);
-                }
-                ("Vertical clip saved", in_library(&path.file_name().unwrap_or_default().to_string_lossy()))
-            }
+        let (title, body) = match job.run(&settings, |source| captions::wait_for(source, &settings)) {
+            Ok(path) => ("Vertical clip saved", in_library(&path.file_name().unwrap_or_default().to_string_lossy())),
+            // Quitting leaves the job for the next start, so there's nothing to tell.
+            Err(_) if app.state::<Engine>().quitting.load(Relaxed) => return,
             Err(e) => ("Couldn't make the vertical clip", e),
         };
         let _ = app.emit("library-changed", ());
@@ -1118,7 +1197,12 @@ fn convert_to_mp4(app: &AppHandle, mkvs: &[PathBuf]) {
             }
             Err(e) => {
                 tracing::warn!("remux of {} failed: {e}", mkv.display());
-                notify(app, "Couldn't convert to MP4", "Your recording is kept as MKV. It plays in VLC.");
+                let body = if e.starts_with(backsight_encode::remux::CANT_WRITE) {
+                    "Your recording is kept as MKV. It plays in VLC. The MP4 couldn't be written: the drive may be full. Free up some space; the next start tries the MP4 again."
+                } else {
+                    "Your recording is kept as MKV. It plays in VLC."
+                };
+                notify(app, "Couldn't convert to MP4", body);
             }
         }
     }
@@ -1130,22 +1214,26 @@ fn watch_recording(app: &AppHandle) {
     let engine = app.state::<Engine>();
     let mut revival = Revival::default();
     let (mut tick, mut moved_before) = (0u32, false);
+    // Last tick's answer: a session that could move to another monitor needs their list.
+    let mut list_monitors = false;
     while !engine.quitting.load(Relaxed) {
         std::thread::sleep(std::time::Duration::from_secs(1));
         tick = tick.wrapping_add(1);
         // Never waits: starting or stopping holds `replay` for seconds.
         refresh_indicators(app);
-        let Ok(replay) = engine.replay.try_lock() else { continue };
+        // Every 5 s, asked before the lock: Windows can take a while to list the monitors.
+        let check = tick.is_multiple_of(5);
+        let listed = if check && list_monitors { backsight_engine::capture::wgc::monitors() } else { Vec::new() };
+        let Ok(mut replay) = engine.replay.try_lock() else { continue };
+        let room = replay.session.as_ref().map(ReplaySession::replay_room);
+        keep_recent(&mut replay.before_move, std::time::Instant::now(), room);
+        // Never cutting a recording.
+        let movable = |s: &ReplaySession| s.error().is_none() && s.recording_time().is_none();
+        list_monitors = replay.session.as_ref().is_some_and(|s| movable(s) && s.follows_monitor());
         if replay.starting {
             continue; // nothing to judge until the session is open
         }
-        // Every 5 s, as it asks Windows for the monitors; never cutting a recording.
-        let moved = tick.is_multiple_of(5).then(|| {
-            replay
-                .session
-                .as_ref()
-                .is_some_and(|s| s.error().is_none() && s.recording_time().is_none() && s.monitor_moved())
-        });
+        let moved = check.then(|| replay.session.as_ref().is_some_and(|s| movable(s) && s.monitor_moved(&listed)));
         // Some(on): healthy, with the replay on or off by choice; None: stopped on its own.
         let replay_on = match &replay.session {
             Some(s) => s.error().is_none().then(|| s.replay_on()),
@@ -1176,11 +1264,8 @@ fn watch_recording(app: &AppHandle) {
         if revival.back(replay_on) {
             notify(app, "Instant Replay is back on", "Saving clips works again.");
         }
-        // Twice in a row, so a monitor blinking out for a moment doesn't throw the replay away.
-        // shortcut: the move starts a new session, so the replay so far is dropped without a word:
-        // the last minutes on the stand-in monitor, or (window mode, HDR video on) everything
-        // before each lasting drag of the game to the other kind of monitor; keep the old buffer
-        // or tell the user if people miss clips.
+        // Twice in a row, so a monitor blinking out for a moment doesn't restart the replay. The
+        // move starts a new session; the replay so far is kept for the next save (`before_move`).
         if let Some(moves) = moved
             && std::mem::replace(&mut moved_before, moves)
             && moves
@@ -1230,6 +1315,16 @@ fn watch_recording(app: &AppHandle) {
                     ),
                 );
             }
+            (Some(Revive::GiveUpChanging), Some(why)) => {
+                tracing::error!("Instant Replay gave up restarting while the monitors kept changing: {why}");
+                notify(
+                    app,
+                    "Instant Replay is off",
+                    &format!(
+                        "{why} Your monitors kept changing, and Backsight couldn't turn it back on. Once they're settled, turn Instant Replay off and on again."
+                    ),
+                );
+            }
             _ => {}
         }
     }
@@ -1265,14 +1360,26 @@ fn restart_replay(engine: &Engine, failed: bool) {
     if engine.quitting.load(Relaxed) {
         return;
     }
-    let replay = lock(&engine.replay);
+    // Asked before the lock: Windows can take a while to list the monitors.
+    let monitors = if failed { Vec::new() } else { backsight_engine::capture::wgc::monitors() };
+    let mut replay = lock(&engine.replay);
     let still = match &replay.session {
         Some(s) if failed => s.error().is_some(),
-        Some(s) => s.error().is_none() && s.monitor_moved(),
+        Some(s) => s.error().is_none() && s.monitor_moved(&monitors),
         None => failed && replay.start_error.is_some(),
     };
     if !still || recording(&replay) {
         return; // turned off, restarted or recording since the check
+    }
+    // A move keeps what the replay has so far: the next save writes it as a clip of its own
+    // (the new session may record another size or HDR, so it can't join the new one's).
+    if !failed
+        && let Some(s) = &replay.session
+        && let Ok(clip) = s.prepare_clip()
+    {
+        let (at, length, from) = (std::time::Instant::now(), s.replay_length(), replay.session_number);
+        replay.before_move.push(Kept { at, length, from, clip });
+        keep_recent(&mut replay.before_move, at, None); // the new session's buffer starts empty
     }
     drop(replay);
     match Settings::load() {
@@ -1294,6 +1401,10 @@ const RESTART_GAPS: [std::time::Duration; REPLAY_RESTARTS as usize] =
     [std::time::Duration::from_secs(5), std::time::Duration::from_secs(15), std::time::Duration::from_secs(60)];
 /// Running this long after a restart counts as working again: a later failure starts a fresh count.
 const RESTART_RESET: std::time::Duration = std::time::Duration::from_secs(60);
+/// Fresh rounds of restarts that changed monitors may start, each after a longer wait
+/// (`RESTART_GAPS`), until Instant Replay works again: a monitor that keeps blinking, with a
+/// failure that lasts, would otherwise restart it every few seconds forever.
+const MONITOR_ROUNDS: u32 = 3;
 
 #[derive(Debug, PartialEq)]
 enum Revive {
@@ -1301,6 +1412,8 @@ enum Revive {
     Restart { tell: bool },
     /// Tell the user it stays off.
     GiveUp,
+    /// Tell the user it stays off, though the monitors keep changing (`MONITOR_ROUNDS`).
+    GiveUpChanging,
 }
 
 /// Decides, once a second, what to do about Instant Replay that stopped on its own.
@@ -1312,8 +1425,12 @@ struct Revival {
     /// The user was told it stays off.
     told_off: bool,
     /// The monitors connected at the last restart: a change (one plugged back in) is worth
-    /// another round of restarts, even after giving up.
+    /// another round of restarts, even after giving up, up to `MONITOR_ROUNDS`.
     monitors: Vec<String>,
+    /// Rounds started by a monitor change since it last worked.
+    rounds: u32,
+    /// The user was told it stays off while the monitors keep changing.
+    told_changing: bool,
 }
 
 impl Revival {
@@ -1346,15 +1463,22 @@ impl Revival {
             }
             return None;
         }
-        // Never sooner than the first gap, so monitors that keep changing can't restart in a loop.
-        if self.restarts > 0 && monitors != self.monitors && since.is_none_or(|d| d >= RESTART_GAPS[0]) {
+        // Each round waits longer before it starts, and there are only a few, so monitors that
+        // keep changing can't restart in a loop.
+        let round_gap = RESTART_GAPS[self.rounds.min(REPLAY_RESTARTS - 1) as usize];
+        if self.restarts > 0
+            && monitors != self.monitors
+            && self.rounds < MONITOR_ROUNDS
+            && since.is_none_or(|d| d >= round_gap)
+        {
             // A fresh round, as after the first restart: the user was already told it stopped.
             *self = Self {
                 restarts: 1,
                 last: Some(now),
                 gave_up: false,
-                told_off: self.told_off,
                 monitors: monitors.to_vec(),
+                rounds: self.rounds + 1,
+                ..std::mem::take(self)
             };
             return Some(Revive::Restart { tell: false });
         }
@@ -1364,7 +1488,12 @@ impl Revival {
         }
         if self.restarts >= REPLAY_RESTARTS {
             self.gave_up = true;
-            // A second round after a monitor change ends quietly: the user knows it's off.
+            // A later round ends quietly (the user knows it's off), except the last one, which
+            // says it stops trying while the monitors keep changing.
+            if self.rounds >= MONITOR_ROUNDS {
+                self.told_off = true;
+                return (!std::mem::replace(&mut self.told_changing, true)).then_some(Revive::GiveUpChanging);
+            }
             return (!std::mem::replace(&mut self.told_off, true)).then_some(Revive::GiveUp);
         }
         self.restarts += 1;
@@ -1500,45 +1629,44 @@ fn on_hotkey(app: &AppHandle, action: Action) {
                 }
             }
             let done = Done(app.clone());
-            let prepared = {
-                let replay = lock(&engine.replay);
-                match (&replay.session, &replay.start_error) {
+            let (earlier, prepared) = {
+                let mut replay = lock(&engine.replay);
+                let room = replay.session.as_ref().map(ReplaySession::replay_room);
+                keep_recent(&mut replay.before_move, std::time::Instant::now(), room);
+                let running = replay.session.is_some().then_some(replay.session_number);
+                let earlier = kept_to_save(&mut replay.before_move, running);
+                let prepared = match (&replay.session, &replay.start_error) {
                     _ if replay.starting => Err("Instant Replay is still starting. Try again in a moment.".into()),
                     (Some(s), _) => s.prepare_clip(),
                     (None, Some(e)) => Err(e.clone()),
                     (None, None) => Err("Instant Replay is off. Turn it on to save a clip.".into()),
-                }
+                };
+                (earlier, prepared)
             };
             let app = app.clone();
             let saving = backsight_engine::shutdown::saving();
             // Quitting (and Windows shutting down) waits for the clip's file.
             let started = spawn_finishing(&engine, move || {
                 let (_done, _saving) = (done, saving);
-                let (title, body) = match prepared.and_then(|write| write()) {
-                    Ok(path) => {
-                        let settings = lock(&app.state::<Engine>().applied).clone();
-                        let shape =
-                            settings.as_ref().map_or(Shape::Wide, |s| Shape::from_setting(&s.replay.clip_shape));
-                        let job = vertical::Job::after_save(&path, shape);
-                        let _ = app.emit("library-changed", ());
-                        let name = path.file_name().unwrap_or_default().to_string_lossy();
-                        let body = match shape {
-                            Shape::Vertical if job.is_some() => "Making the vertical clip now.".to_owned(),
-                            _ => in_library(&name),
-                        };
-                        let only_vertical = matches!(shape, Shape::Vertical);
-                        if let Some(settings) = &settings
-                            && !only_vertical
-                        {
-                            captions::after_save(&path, settings);
-                        }
-                        if let (Some(job), Some(settings)) = (job, settings) {
-                            make_vertical(&app, job, settings, only_vertical);
-                        }
-                        ("Clip saved", body)
+                let earlier: Vec<_> = earlier.into_iter().map(Clip::save).collect();
+                let now = prepared.and_then(Clip::save);
+                if now.is_ok() || earlier.iter().any(Result::is_ok) {
+                    let _ = app.emit("library-changed", ());
+                }
+                let settings = lock(&app.state::<Engine>().applied).clone();
+                let shape = settings.as_ref().map_or(Shape::Wide, |s| Shape::from_setting(&s.replay.clip_shape));
+                let mut making = false;
+                for path in earlier.iter().chain([&now]).filter_map(|r| r.as_ref().ok()) {
+                    let job = vertical::Job::after_save(path, shape);
+                    making |= job.is_some() && matches!(shape, Shape::Vertical);
+                    // A vertical job captions the clip itself, before it burns the captions in.
+                    match (job, &settings) {
+                        (Some(job), Some(settings)) => make_vertical(&app, job, settings.clone()),
+                        (None, Some(settings)) => captions::after_save(path, settings),
+                        _ => {}
                     }
-                    Err(e) => ("Couldn't save the clip", e),
-                };
+                }
+                let (title, body) = saved_notice(&earlier, now, making);
                 notify(&app, title, &body);
             });
             if !started {
@@ -2187,6 +2315,8 @@ fn shut_down(engine: &Engine) {
     let _saving = backsight_engine::shutdown::saving();
     // Set first too: whoever holds `apply` sees it as soon as it looks.
     engine.quitting.store(true, Relaxed);
+    // First: a job woken by `captions::stop` must already see that Backsight is quitting.
+    vertical::stopping();
     captions::stop();
     let stopping = {
         let _apply = lock(&engine.apply);
@@ -2386,7 +2516,7 @@ fn main() {
                 drop(file);
                 // Before the hotkeys: a clip saved from here on has its own job.
                 let verticals = settings.general.video_dir().map(|f| vertical::unfinished(&f)).unwrap_or_default();
-                verticals.into_iter().for_each(|job| make_vertical(&app, job, settings.clone(), false));
+                verticals.into_iter().for_each(|job| make_vertical(&app, job, settings.clone()));
                 start_hotkeys(&app, &settings);
                 apply_replay(&engine, &settings);
                 // Not under the startup lock: copying a long recording takes a while.
@@ -2624,7 +2754,7 @@ mod tests {
                     stopped += u32::from(tell);
                     running = plugged && s >= gone.end + ready;
                 }
-                Some(Revive::GiveUp) => off += 1,
+                Some(Revive::GiveUp | Revive::GiveUpChanging) => off += 1,
                 None => {}
             }
             if running && s >= gone.end {
@@ -2658,13 +2788,79 @@ mod tests {
     fn monitors_that_keep_changing_never_restart_in_a_loop() {
         let t0 = std::time::Instant::now();
         let mut r = Revival::default();
-        let starts = (0..600u64)
-            .filter(|&s| {
-                let monitors = vec![format!("monitor {s}")];
-                r.step(true, &monitors, t0 + std::time::Duration::from_secs(s)).is_some()
-            })
-            .count();
-        assert!(starts <= 600 / 5 + 1, "at most one every 5 s: {starts}");
+        let (mut starts, mut last, mut told) = (0, 0, Vec::new());
+        for s in 0..3600u64 {
+            // A monitor blinking every few seconds while capture keeps failing to start.
+            let monitors = vec![format!("monitor {}", s / 3)];
+            match r.step(true, &monitors, t0 + std::time::Duration::from_secs(s)) {
+                Some(Revive::Restart { .. }) => (starts, last) = (starts + 1, s),
+                Some(other) => told.push(other),
+                None => {}
+            }
+        }
+        assert!(starts <= REPLAY_RESTARTS * (1 + MONITOR_ROUNDS), "a few rounds, then it stops: {starts}");
+        assert!(last < 300, "nothing after the last round: {last}");
+        assert_eq!(told, [Revive::GiveUpChanging], "told once, and why");
+
+        // Working again for a minute starts afresh: a later unplug gets its rounds again.
+        r.step(false, &[], t0 + std::time::Duration::from_secs(3600 + 60));
+        assert_eq!(r.step(true, &[], t0 + std::time::Duration::from_secs(3700)), Some(Revive::Restart { tell: true }));
+    }
+
+    #[test]
+    fn the_replay_from_before_a_move_is_saved_with_the_next_clip() {
+        use backsight_engine::replay::{Packet, StreamKind};
+        let (t0, s) = (std::time::Instant::now(), std::time::Duration::from_secs);
+        // A minute of video kept by a move (`restart_replay`): a keyframe every 10 s, 1000 bytes a second.
+        let kept = |at, from| {
+            let second = |t: i64| Packet {
+                stream: StreamKind::Video,
+                pts_us: t * 1_000_000,
+                dts_us: t * 1_000_000,
+                duration_us: 0,
+                keyframe: t % 10 == 0,
+                data: vec![0; 1000].into(),
+            };
+            let clip = Clip::new((0..60).map(second).collect(), |_| Ok(PathBuf::from("before.mp4")));
+            Kept { at, length: s(60), from, clip }
+        };
+        let mut before_move = vec![kept(t0, 0), kept(t0 + s(60), 1)];
+        keep_recent(&mut before_move, t0 + s(60), None);
+        assert_eq!(before_move.len(), 1, "older than the replay length: nothing of it would be in a clip");
+        keep_recent(&mut before_move, t0 + s(80), None);
+        assert_eq!(before_move[0].clip.bytes(), 50_000, "the last 40 s, from the keyframe before them");
+        keep_recent(&mut before_move, t0 + s(80), Some(49_000));
+        assert_eq!(
+            before_move[0].clip.bytes(),
+            40_000,
+            "trimmed from its start, a keyframe at a time, to fit the RAM left"
+        );
+        keep_recent(&mut before_move, t0 + s(80), Some(5_000));
+        assert!(before_move.is_empty(), "not even its last 10 s fit");
+        // A monitor that keeps sleeping and waking: only the newest few are kept.
+        let mut before_move: Vec<_> = (0..5).map(|i| kept(t0 + s(i), i)).collect();
+        keep_recent(&mut before_move, t0 + s(5), None);
+        assert_eq!(before_move.iter().map(|k| k.from).collect::<Vec<_>>(), [3, 4]);
+
+        // A save during the move, before the new session took over: the running one has it all.
+        assert!(kept_to_save(&mut before_move, Some(4)).len() == 1 && before_move.is_empty(), "taken, once");
+        let mut before_move = vec![kept(t0, 4)];
+        let earlier: Vec<_> = kept_to_save(&mut before_move, Some(5)).into_iter().map(Clip::save).collect();
+        let clip = |name: &str| Ok(PathBuf::from(name));
+        let (title, body) = saved_notice(&earlier, clip("now.mp4"), false);
+        assert_eq!(title, "Clips saved");
+        assert!(body.contains("now.mp4") && body.contains("separate clip"), "{body}");
+
+        assert_eq!(saved_notice(&[], clip("a.mp4"), false).0, "Clip saved");
+        let starting = "Instant Replay is still starting. Try again in a moment.".to_owned();
+        let (title, body) = saved_notice(&[clip("before.mp4")], Err(starting.clone()), false);
+        assert!(title == "Clip saved" && body.contains("before.mp4"), "the new session isn't up yet: {body}");
+        let full = "Backsight couldn't save the clip. Check that the drive has free space.".to_owned();
+        assert_eq!(saved_notice(&[Err(full.clone())], Err(starting), false), ("Couldn't save the clip", full.clone()));
+        let (title, body) = saved_notice(&[Err(full.clone())], clip("now.mp4"), false);
+        assert!(title == "Clip saved" && body.contains("now.mp4") && body.ends_with(&full), "{body}");
+        let (_, body) = saved_notice(&[clip("before.mp4")], clip("now.mp4"), true);
+        assert_eq!(body, "Making the vertical clip now.");
     }
 
     #[test]

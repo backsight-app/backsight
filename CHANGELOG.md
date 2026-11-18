@@ -4,6 +4,21 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## Unreleased
 
+### Added
+
+- Vertical clips for YouTube Shorts, TikTok and Reels: the new Clip shape setting on the Instant Replay page makes each saved clip Wide (as before, the default), Vertical (only a tall 9:16 clip) or Both. The tall clip is cut from the middle of the picture in the background after the save, so saving stays instant; a pop-up says when it is ready. If Backsight closes before it is done, the next start finishes it. If it can't be made, the clip is kept wide and nothing is lost. Recordings always stay wide.
+- With captions on, a vertical clip has the words in its picture: white text with a black outline near the bottom, clear of the phone apps' buttons.
+
+## 0.1.7 - 2026-11-18
+
+### Added
+
+- A new look for the whole app: calm dark greys, one violet accent and new fonts. Home shows the game being watched, today's videos, the replay ready to save with one Save clip button and a timeline, Record and Screenshot tiles, what happens after each clip, the microphone, and your latest captures. The side menu shows how many files are new in Library and how much space is left for clips.
+- Backsight keeps itself up to date: an installed copy checks for a newer version when it starts, every hour and when you open its window. Home then says "Update ready" with a Restart to update button. An update found as Backsight starts, before any game, installs by itself in a few seconds. See docs/privacy.md.
+- The installer offers to close a running Backsight ("Close it and continue?") instead of stopping, once the installed copy is 0.1.7 or newer.
+
+## 0.1.4 to 0.1.6 - 2026-11-18
+
 ### Changed
 
 - New default hotkeys, easy to reach and remember: Alt+C saves a clip (Alt+Shift+C turns Instant Replay on or off), Alt+R starts or stops recording (Alt+Shift+R pauses), Alt+S takes a screenshot (Alt+Shift+S the window, Ctrl+Alt+S an area), Alt+T mutes the microphone, Alt+B adds a marker and Alt+Shift+O opens Backsight. The first defaults were NVIDIA's own keys, and with NVIDIA's overlay on, pressing them did nothing in Backsight. If you already use Backsight you keep your keys, including the Alt+X and Alt+V keys of the previous build; when they clash with NVIDIA's, Home's "Give Backsight other keys" moves them to the new ones.

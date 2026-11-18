@@ -27,8 +27,9 @@ const rDefaults = { "toggle-recording": "Alt+R", "pause-recording": "Alt+Shift+R
 const rFallback = { "toggle-recording": "Alt+V", "pause-recording": "Alt+Shift+V" };
 keys = { "toggle-recording": "Alt+R", "pause-recording": "Alt+Shift+R" };
 r = useOtherKeys(keys, [clash("toggle-recording", "Alt+R")], rDefaults, previous, rFallback, [{ key: "alt+r", nvidia: "x" }]);
-assert.deepEqual(r, { moved: ["toggle-recording"], stuck: [] });
-assert.deepEqual(keys, { "toggle-recording": "Alt+V", "pause-recording": "Alt+Shift+R" });
+// Pause follows record to its fallback, so the pair stays together.
+assert.deepEqual(r, { moved: ["toggle-recording", "pause-recording"], stuck: [] });
+assert.deepEqual(keys, { "toggle-recording": "Alt+V", "pause-recording": "Alt+Shift+V" });
 keys = { "save-replay": "Alt+F9", "open-app": "Alt+C" };
 r = useOtherKeys(keys, [clash("save-replay", "Alt+F9")], defaults, previous, fallback, []);
 assert.equal(keys["save-replay"], "Alt+X", "default taken by Open Backsight");
