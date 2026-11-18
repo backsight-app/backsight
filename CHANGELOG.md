@@ -2,9 +2,11 @@
 
 All notable changes are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## First public release - unreleased
+## 0.1.3 - 2026-11-18
 
-The first public release. Backsight keeps the last 2 minutes of your game ready to save as a clip, records whole sessions, and takes screenshots. Every setting comes with a plain-language explanation. It starts light (1080p, 60 frames a second), lives near the clock when its window is closed, and rescues a recording cut off by a crash or power cut. It works through Windows' own screen capture, with no hooks and nothing placed inside games. Updates come from the Update button on the General page. Backsight makes no network connections otherwise (see docs/privacy.md).
+Versions are numbered 0.1.<build>; each one on the Releases page lists its own changes.
+
+Backsight's first public release. It keeps the last 2 minutes of your game ready to save as a clip, records whole sessions, and takes screenshots. Every setting comes with a plain-language explanation. It starts light (1080p, 60 frames a second), lives near the clock when its window is closed, and rescues a recording cut off by a crash or power cut. It works through Windows' own screen capture, with no hooks and nothing placed inside games. Updates come from the Update button on the General page. Backsight makes no network connections otherwise (see docs/privacy.md).
 
 Everything below was added, changed or fixed while getting there.
 
