@@ -48,6 +48,17 @@ if (-not $libclang) {
     Fail "libclang was not found." "Install LLVM ('winget install LLVM.LLVM', needs admin), or without admin run 'python -m pip install --user libclang' and set LIBCLANG_PATH to the folder holding libclang.dll (see docs/DEVELOPMENT.md)."
 }
 
+# CMake (builds whisper.cpp for captions). Visual Studio's C++ tools include one that isn't on PATH.
+if (-not (Have "cmake")) {
+    $vsPath = if (Test-Path $vswhere) { & $vswhere -latest -products * -property installationPath }
+    $vsCmake = if ($vsPath) { Join-Path $vsPath "Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin" }
+    if ($vsCmake -and (Test-Path (Join-Path $vsCmake "cmake.exe"))) {
+        $env:PATH = "$vsCmake;$env:PATH"
+    } else {
+        Fail "CMake was not found." "In the Visual Studio Installer, modify Build Tools 2022 and tick 'C++ CMake tools for Windows', or install CMake from https://cmake.org/download/ and open a new PowerShell window."
+    }
+}
+
 Write-Host "All tools found. Fetching FFmpeg..." -ForegroundColor Cyan
 & (Join-Path $PSScriptRoot "fetch-ffmpeg.ps1")
 if ($LASTEXITCODE) { Fail "Fetching FFmpeg failed." "Read the message above. fetch-ffmpeg.ps1 needs the GitHub CLI (gh) signed in; see docs/DEVELOPMENT.md." }

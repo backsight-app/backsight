@@ -16,6 +16,8 @@ export interface LibraryItem {
   video_codec: string | null;
   audio_tracks: number | null;
   thumbnail: string | null;
+  /** A captions file sits next to it (ADR 0016). */
+  captions: boolean;
 }
 export interface Library {
   items: LibraryItem[];
@@ -140,6 +142,9 @@ export function applyFilters(items: LibraryItem[], f: Filters, tab: Tab, now = D
       within(i.width !== null && i.height !== null ? Math.min(i.width, i.height) : null, r.resolution),
   );
 }
+
+/** A video taller than it is wide, such as a vertical clip (ADR 0015). */
+export const isVertical = (i: LibraryItem) => i.kind === "video" && !!i.width && !!i.height && i.height > i.width;
 
 export const totalBytes = (items: LibraryItem[]) => items.reduce((n, i) => n + i.bytes, 0);
 

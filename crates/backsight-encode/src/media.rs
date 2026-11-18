@@ -10,9 +10,10 @@ use crate::{
 use rsmpeg::{
     avcodec::{AVCodec, AVCodecContext},
     avformat::AVFormatContextInput,
-    avutil::{AVFrame, ra},
+    avutil::{AVChannelLayout, AVFrame, ra},
     error::RsmpegError,
     ffi,
+    swresample::SwrContext,
     swscale::SwsContext,
 };
 use serde::{Deserialize, Serialize};
@@ -39,7 +40,7 @@ const PREVIEW_FPS: u32 = 30;
 const SNIPPETS: i64 = 4;
 const SNIPPET_US: i64 = 1_500_000;
 
-fn open_input(path: &Path) -> Result<AVFormatContextInput> {
+pub(crate) fn open_input(path: &Path) -> Result<AVFormatContextInput> {
     let c = CString::new(path.to_str().ok_or("path is not valid Unicode")?).map_err(|e| e.to_string())?;
     // Also runs avformat_find_stream_info, which fills in sizes, frame rates and durations.
     AVFormatContextInput::open(&c).map_err(|e| format!("can't open {}: {e}", path.display()))
@@ -382,6 +383,81 @@ pub fn preview(src: &Path, dst: &Path) -> Result<()> {
         return Err(e);
     }
     o.mux.finish().map(|_| ())
+}
+
+/// The sample rate captions read speech at (Whisper's).
+pub const SPEECH_RATE: i32 = 16_000;
+
+/// Audio track `track` of `path` (counting audio tracks only; the last one when `None`) as mono
+/// floats at [`SPEECH_RATE`], from the file's start: silence fills any gap before the track's
+/// first sample, so times match the video. For captions; runs after the save, never per frame.
+pub fn read_speech(path: &Path, track: Option<usize>) -> Result<Vec<f32>> {
+    let mut input = open_input(path)?;
+    let audio: Vec<usize> = (0..input.streams().len())
+        .filter(|&i| input.streams()[i].codecpar().codec_type == ffi::AVMEDIA_TYPE_AUDIO)
+        .collect();
+    let stream = match track {
+        Some(t) => audio.get(t).copied(),
+        None => audio.last().copied(),
+    }
+    .ok_or("the file has no such sound track")?;
+    let s = &input.streams()[stream];
+    let tb = s.time_base;
+    let codec = AVCodec::find_decoder(s.codecpar().codec_id).ok_or("FFmpeg can't decode this sound track")?;
+    let mut ctx = AVCodecContext::new(&codec);
+    ctx.apply_codecpar(&s.codecpar()).map_err(|e| e.to_string())?;
+    ctx.set_pkt_timebase(tb);
+    ctx.open(None).map_err(|e| format!("can't open the sound decoder: {e}"))?;
+    let mono = AVChannelLayout::from_nb_channels(1);
+    let mut swr =
+        SwrContext::new(&mono, ffi::AV_SAMPLE_FMT_FLT, SPEECH_RATE, &ctx.ch_layout, ctx.sample_fmt, ctx.sample_rate)
+            .map_err(|e| format!("can't resample this sound track: {e}"))?;
+    swr.init().map_err(|e| format!("can't resample this sound track: {e}"))?;
+    let start_us = if input.start_time == NOPTS { 0 } else { input.start_time };
+
+    let mut out = Vec::new();
+    let mut first = true;
+    let mut drain = |ctx: &mut AVCodecContext, swr: &mut SwrContext, out: &mut Vec<f32>| -> Result<()> {
+        loop {
+            match ctx.receive_frame() {
+                Ok(f) => {
+                    if std::mem::take(&mut first) && f.best_effort_timestamp != NOPTS {
+                        let lead_us = to_us(f.best_effort_timestamp, tb) - start_us;
+                        out.resize((lead_us.max(0) * i64::from(SPEECH_RATE) / 1_000_000) as usize, 0.0);
+                    }
+                    resample(swr, Some(&f), out)?;
+                }
+                Err(RsmpegError::DecoderDrainError | RsmpegError::DecoderFlushedError) => return Ok(()),
+                Err(e) => return Err(format!("decoding the sound failed: {e}")),
+            }
+        }
+    };
+    while let Some(p) = input.read_packet().map_err(|e| format!("reading failed: {e}"))? {
+        if p.stream_index as usize == stream {
+            ctx.send_packet(Some(&p)).map_err(|e| format!("decoding the sound failed: {e}"))?;
+            drain(&mut ctx, &mut swr, &mut out)?;
+        }
+    }
+    ctx.send_packet(None).map_err(|e| format!("decoding the sound failed: {e}"))?;
+    drain(&mut ctx, &mut swr, &mut out)?;
+    // The resampler's last few samples.
+    while resample(&mut swr, None, &mut out)? > 0 {}
+    Ok(out)
+}
+
+/// Appends `frame` (or, with `None`, what the resampler still holds) to `out`; returns the count.
+fn resample(swr: &mut SwrContext, frame: Option<&AVFrame>, out: &mut Vec<f32>) -> Result<usize> {
+    let n = frame.map_or(0, |f| f.nb_samples);
+    let room = swr.get_out_samples(n).max(0) as usize;
+    let len = out.len();
+    out.resize(len + room, 0.0);
+    let mut dst = out[len..].as_mut_ptr().cast::<u8>();
+    let src = frame.map_or(std::ptr::null(), |f| f.extended_data as *const *const u8);
+    // SAFETY: `dst` points at `room` free f32 samples (mono, packed: one plane); `src` is the
+    // decoded frame's plane pointers for `n` samples, or null to flush.
+    let got = unsafe { swr.convert(&mut dst, room as i32, src, n) }.map_err(|e| format!("resampling failed: {e}"))?;
+    out.truncate(len + got as usize);
+    Ok(got as usize)
 }
 
 #[cfg(test)]

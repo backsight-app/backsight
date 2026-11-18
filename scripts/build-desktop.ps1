@@ -19,6 +19,13 @@ if (-not $env:LIBCLANG_PATH -and (Get-Command python -ErrorAction SilentlyContin
     }
 }
 
+# CMake builds whisper.cpp (captions); Visual Studio's C++ tools carry one that isn't on PATH.
+if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+    $Vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    $VsPath = if (Test-Path $Vswhere) { & $Vswhere -latest -products * -property installationPath }
+    if ($VsPath) { $env:PATH = (Join-Path $VsPath 'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin') + ";$env:PATH" }
+}
+
 # Keep the builder's Windows user name out of the program: rustc embeds source paths (crate
 # registry, this checkout) in panic messages. The last matching prefix wins, so the profile goes first.
 $CargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE '.cargo' }
@@ -29,6 +36,11 @@ $TargetRoot = if ($env:CARGO_TARGET_DIR) {
     if ([IO.Path]::IsPathRooted($env:CARGO_TARGET_DIR)) { $env:CARGO_TARGET_DIR } else { [IO.Path]::GetFullPath((Join-Path $ProjectRoot $env:CARGO_TARGET_DIR)) }
 } else { Join-Path $ProjectRoot 'target' }
 $Executable = Join-Path $TargetRoot 'release/backsight.exe'
+# whisper.cpp's asserts name their source files (__FILE__), which cargo copies under the target
+# folder; trim that folder off. Same flags as .cargo/config.toml plus the trim (env wins over it).
+$Trim = "/d1trimfile:$([IO.Path]::GetFullPath($TargetRoot).TrimEnd('\'))\"
+$env:CMAKE_C_FLAGS_RELEASE = "-nologo -MD -O2 -Ob2 -DNDEBUG $Trim"
+$env:CMAKE_CXX_FLAGS_RELEASE = "-utf-8 -nologo -MD -O2 -Ob2 -DNDEBUG $Trim"
 $SymbolsName = "$(Get-Date -Format 'yyyy-MM-dd-HHmm')-$(git -C $ProjectRoot log -1 --format=%h)"
 
 # Checks the program just built and keeps its PDB, before the next build replaces both.

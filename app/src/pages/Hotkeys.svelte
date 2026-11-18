@@ -22,7 +22,7 @@
 
 <div class="stack">
   <p class="intro muted">
-    Click a box and press the keys you want. Every <Term id="hotkey">hotkey</Term> works while you're in a game.
+    Click a box and press the keys you want, or pick No key to turn one off. Every <Term id="hotkey">hotkey</Term> works while you're in a game.
   </p>
 
   {#each groups as group}
@@ -40,12 +40,22 @@
               </p>
             {/if}
           </div>
-          <HotkeyInput
-            label={action.label}
-            value={keys[action.id]}
-            conflict={conflicts[action.id]}
-            onchange={(combo) => (keys[action.id] = combo)}
-          />
+          <div class="key">
+            <HotkeyInput
+              label={action.label}
+              value={keys[action.id]}
+              conflict={conflicts[action.id]}
+              onchange={(combo) => (keys[action.id] = combo)}
+            />
+            <!-- No key at all, e.g. when another app such as NVIDIA's overlay keeps this one. -->
+            <button
+              type="button"
+              class="btn"
+              aria-label={`${action.label}: no key`}
+              disabled={!keys[action.id]}
+              onclick={() => (keys[action.id] = "")}>No key</button
+            >
+          </div>
         </div>
       {/each}
     </section>
@@ -66,6 +76,10 @@
   }
   .row:first-of-type {
     border-top: none;
+  }
+  .key {
+    display: flex;
+    gap: 8px;
   }
   .text {
     display: grid;

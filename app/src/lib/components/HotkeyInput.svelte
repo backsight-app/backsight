@@ -1,7 +1,7 @@
 <script lang="ts" module>
   import { invoke, isTauri } from "@tauri-apps/api/core";
 
-  // While a box listens, the live hotkeys ignore presses (Alt+F9 would start a recording). Turned
+  // While a box listens, the live hotkeys ignore presses (Alt+V would start a recording). Turned
   // back on a moment later: the hotkeys see a press before this page does.
   let resume: ReturnType<typeof setTimeout> | undefined;
   function pauseHotkeys(on: boolean) {
@@ -72,7 +72,7 @@
   class="hotkey"
   class:recording
   class:conflict={!!conflict}
-  aria-label={`${label}: ${value || "not set"}. Press to change.`}
+  aria-label={`${label}: ${value || "no key"}. Press to change.`}
   onclick={() => (recording = true)}
   onblur={() => (recording = false)}
 >

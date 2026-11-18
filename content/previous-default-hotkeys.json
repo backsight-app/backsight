@@ -1,0 +1,11 @@
+{
+  "save-replay": "Alt+F10",
+  "toggle-replay": "Alt+Shift+F10",
+  "toggle-recording": "Alt+F9",
+  "pause-recording": "Alt+Shift+F9",
+  "screenshot": "Alt+F1",
+  "screenshot-window": "Alt+Shift+F1",
+  "screenshot-region": "Ctrl+Alt+F1",
+  "toggle-mic": "Alt+F8",
+  "add-marker": "Alt+F7"
+}

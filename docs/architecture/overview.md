@@ -66,6 +66,7 @@ flowchart LR
 | `crates/backsight-config` | Settings schema, defaults, atomic save/load, hotkey parsing and conflicts | `content/default-settings.json` |
 | `crates/backsight-encode` | Encoder catalog and option mapping; FFmpeg encode, mux, MKV → MP4 remux, screenshot encoding, encoder probe | config, `content/encoders.json` |
 | `crates/backsight-engine` | WGC capture, WASAPI audio and mixer, replay buffer, sessions, recording, recovery of interrupted recordings, screenshots, Raw Input hotkeys, library, start with Windows | config, encode |
+| `crates/backsight-captions` | Captions for saved clips: the model download, the queue that runs one low-priority captions process at a time, speech finding and Whisper (whisper.cpp), `.srt` writing ([ADR 0016](../adr/0016-on-device-captions.md)) | config, encode |
 | `app/src-tauri` | Tray, window lifecycle, notifications, the region picker window, IPC bridge between UI and engine | config, engine |
 | `app/src` | Settings UI (Home, Library, Instant Replay, Video, Audio, Screenshots, Hotkeys, General, Diagnostics), tooltips, hotkey editor, region picker | `content/*` |
 

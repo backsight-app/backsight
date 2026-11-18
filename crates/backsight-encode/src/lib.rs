@@ -16,5 +16,6 @@ pub mod probe;
 pub mod remux;
 pub mod screenshot;
 pub mod session;
+pub mod vertical;
 
 pub use catalog::{Catalog, OptionDef};

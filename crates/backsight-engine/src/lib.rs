@@ -30,4 +30,5 @@ pub mod shutdown;
 pub mod sounds;
 pub mod stack;
 pub mod system;
+pub mod vertical;
 pub mod watchdog;

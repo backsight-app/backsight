@@ -26,7 +26,7 @@
     {/each}
   </span>
 {:else}
-  <span class="unset">Not set</span>
+  <span class="unset">No key</span>
 {/if}
 
 <style>

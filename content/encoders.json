@@ -262,5 +262,10 @@
   "captureTargets": [
     { "value": "monitor", "label": "Whole monitor", "glossary": "capture-target-monitor", "hint": "Recommended" },
     { "value": "window", "label": "Game window only", "glossary": "capture-target-window" }
+  ],
+  "clipShapes": [
+    { "value": "wide", "label": "Wide", "glossary": "clip-shape-wide", "hint": "Recommended" },
+    { "value": "vertical", "label": "Vertical (for phones)", "glossary": "clip-shape-vertical" },
+    { "value": "both", "label": "Both", "glossary": "clip-shape-both" }
   ]
 }

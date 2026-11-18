@@ -231,9 +231,17 @@ mod tests {
         assert!(!keys.contains_key("CustomOverlayBHKey"), "an unset shortcut is no key");
     }
 
+    fn nvidia_defaults() -> Vec<(String, Hotkey)> {
+        DEFAULT_KEYS.iter().map(|(n, k)| ((*n).to_owned(), k.parse().unwrap())).collect()
+    }
+
     #[test]
-    fn backsight_defaults_clash_with_nvidia_defaults() {
-        let clashes = find_clashes(&Settings::default(), &saved_keys(&nvidia_app_defaults()));
+    fn previous_backsight_defaults_clash_with_nvidia_defaults() {
+        let previous: BTreeMap<Action, String> =
+            serde_json::from_str(include_str!("../../../content/previous-default-hotkeys.json")).unwrap();
+        let mut s = Settings::default();
+        s.hotkeys.extend(previous);
+        let clashes = find_clashes(&s, &saved_keys(&nvidia_app_defaults()));
         let found: Vec<_> = clashes.iter().map(|c| (c.action, c.key.as_str(), c.nvidia)).collect();
         assert!(found.contains(&(Action::SaveReplay, "Alt+F10", "saves NVIDIA's Instant Replay")), "{found:?}");
         assert!(found.contains(&(Action::ToggleRecording, "Alt+F9", "starts and stops NVIDIA's recording")));
@@ -242,17 +250,18 @@ mod tests {
     }
 
     #[test]
-    fn the_alternative_keys_clear_every_clash_with_nvidia_defaults() {
-        let alternatives: BTreeMap<Action, String> =
-            serde_json::from_str(include_str!("../../../content/hotkey-alternatives.json")).unwrap();
-        // The setup page swaps in the whole set, so the keys stay grouped.
-        let mut s = Settings::default();
-        s.hotkeys.extend(alternatives);
-        let defaults: Vec<_> = DEFAULT_KEYS.iter().map(|(n, k)| ((*n).to_owned(), k.parse().unwrap())).collect();
-        assert!(find_clashes(&s, &defaults).is_empty());
+    fn default_keys_clear_every_clash_with_nvidia_defaults() {
+        // The clash card moves keys to these defaults, so they must be clear of NVIDIA's.
+        let s = Settings::default();
+        assert!(find_clashes(&s, &nvidia_defaults()).is_empty(), "Alt+R, Alt+Z and the Alt+F keys stay NVIDIA's");
         assert!(find_clashes(&s, &saved_keys(&nvidia_app_defaults())).is_empty());
-        let parsed = s.parsed_hotkeys().expect("alternatives parse");
-        assert!(backsight_config::conflicts(&parsed).is_empty(), "alternatives don't clash with each other");
+    }
+
+    #[test]
+    fn a_cleared_key_never_clashes() {
+        let mut s = Settings::default();
+        s.hotkeys.values_mut().for_each(String::clear);
+        assert!(find_clashes(&s, &nvidia_defaults()).is_empty());
     }
 
     /// Shows what this PC has with --nocapture; never fails on a PC without NVIDIA.

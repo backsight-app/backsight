@@ -28,7 +28,8 @@
   },
   "replay": {
     "enabled": true,
-    "length_seconds": 120
+    "length_seconds": 120,
+    "clip_shape": "wide"
   },
   "audio": {
     "encoder": "aac",
@@ -37,6 +38,7 @@
     "microphone_device": "default",
     "game_audio_only": false,
     "separate_tracks": false,
+    "captions": false,
     "encoder_options": {}
   },
   "screenshot": {
@@ -46,16 +48,16 @@
     "copy_to_clipboard": true
   },
   "hotkeys": {
-    "save-replay": "Alt+F10",
-    "toggle-replay": "Alt+Shift+F10",
-    "toggle-recording": "Alt+F9",
-    "pause-recording": "Alt+Shift+F9",
-    "screenshot": "Alt+F1",
-    "screenshot-window": "Alt+Shift+F1",
-    "screenshot-region": "Ctrl+Alt+F1",
-    "toggle-mic": "Alt+F8",
+    "save-replay": "Alt+X",
+    "toggle-replay": "Alt+Shift+X",
+    "toggle-recording": "Alt+V",
+    "pause-recording": "Alt+Shift+V",
+    "screenshot": "Alt+S",
+    "screenshot-window": "Alt+Shift+S",
+    "screenshot-region": "Ctrl+Alt+S",
+    "toggle-mic": "Alt+T",
     "push-to-talk": "",
-    "add-marker": "Alt+F7",
+    "add-marker": "Alt+B",
     "open-app": "Alt+Shift+C"
   },
   "setup": {

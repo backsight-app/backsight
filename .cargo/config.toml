@@ -4,3 +4,11 @@
 FFMPEG_INCLUDE_DIR = { value = "third_party/ffmpeg/include", relative = true }
 FFMPEG_LIBS_DIR = { value = "third_party/ffmpeg/lib", relative = true }
 FFMPEG_LINK_MODE = "dynamic"
+# whisper.cpp (captions, through whisper-rs) is built by CMake. GGML_NATIVE=OFF: code for any
+# CPU with AVX2, not just the build PC's; otherwise an older CPU crashes with "illegal
+# instruction". The cmake crate replaces the Release flags with ones that lack /O2 (unoptimized,
+# about 10 times slower), so they are set here in full; whisper-rs-sys passes CMAKE_* and GGML_*
+# variables on to CMake. The workspace Cargo.toml keeps that build in the Release configuration.
+GGML_NATIVE = "OFF"
+CMAKE_C_FLAGS_RELEASE = "-nologo -MD -O2 -Ob2 -DNDEBUG"
+CMAKE_CXX_FLAGS_RELEASE = "-utf-8 -nologo -MD -O2 -Ob2 -DNDEBUG"

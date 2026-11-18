@@ -1,7 +1,7 @@
 <script lang="ts">
   // The NVIDIA overlay shares some of Backsight's keys: says which, and offers other keys (Setup and Home).
   import defaults from "../../../../content/default-settings.json";
-  import alternatives from "../../../../content/hotkey-alternatives.json";
+  import previous from "../../../../content/previous-default-hotkeys.json";
   import { ACTIONS } from "../hotkeys";
   import { useOtherKeys, type Clash } from "../nvidia";
   import { app } from "../settings.svelte";
@@ -14,7 +14,7 @@
 
   const label = (action: string) => ACTIONS.find((a) => a.id === action)?.label ?? action;
   function swap() {
-    const r = useOtherKeys(app.settings.hotkeys as Record<string, string>, clashes, defaults.hotkeys, alternatives);
+    const r = useOtherKeys(app.settings.hotkeys as Record<string, string>, clashes, defaults.hotkeys, previous);
     swapped = r.moved;
     unswapped = r.stuck;
   }
@@ -38,7 +38,7 @@
   {#if unswapped.length}
     <p class="note">
       {unswapped.map(label).join(", ")} still {unswapped.length === 1 ? "shares its key" : "share their keys"} with
-      NVIDIA, because the usual other key is taken. Pick a new one in Hotkeys.
+      NVIDIA, because its usual key is taken. Pick a new one in Hotkeys.
     </p>
   {/if}
   <div class="keys">

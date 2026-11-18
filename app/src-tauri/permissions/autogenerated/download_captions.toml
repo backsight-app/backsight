@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-download-captions"
+description = "Enables the download_captions command without any pre-configured scope."
+commands.allow = ["download_captions"]
+
+[[permission]]
+identifier = "deny-download-captions"
+description = "Denies the download_captions command without any pre-configured scope."
+commands.deny = ["download_captions"]

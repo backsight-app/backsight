@@ -49,7 +49,8 @@ jobs:
         shell: pwsh
       - run: ./scripts/fetch-ffmpeg.check.ps1
         shell: pwsh
-      # FFmpeg dev files for rsmpeg; LLVM (for bindgen) is preinstalled on windows-latest.
+      # FFmpeg dev files for rsmpeg. LLVM (for bindgen) and CMake (builds whisper.cpp for captions)
+      # are preinstalled on windows-latest.
       - uses: actions/cache@v6
         with:
           path: third_party/ffmpeg

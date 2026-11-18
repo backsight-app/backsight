@@ -12,6 +12,7 @@ authors.workspace = true
 tauri-build.workspace = true
 
 [dependencies]
+backsight-captions.workspace = true
 backsight-config.workspace = true
 backsight-encode.workspace = true
 backsight-engine.workspace = true

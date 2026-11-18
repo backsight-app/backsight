@@ -33,6 +33,71 @@
       ? [{ value: a.microphone_device, label: "Chosen microphone (not plugged in)" }]
       : []),
   ]);
+
+  // Captions (ADR 0016): the model download, then the on/off setting.
+  type Captions = { installed: boolean; downloading: boolean; cpu_supported: boolean; download_bytes: number };
+  type Progress = { done: number; total: number; finished: boolean; error: string | null };
+  let cap: Captions | null = $state(null);
+  let percent = $state(0);
+  let capError = $state("");
+  let stopping = false; // a stop the user asked for isn't shown as a problem
+  const mb = $derived(cap ? Math.round(cap.download_bytes / 1e6) : 0);
+  async function refreshCaptions() {
+    try {
+      cap = await invoke<Captions>("captions_status");
+    } catch (e) {
+      capError = String(e);
+    }
+  }
+  $effect(() => {
+    if (!isTauri()) return;
+    refreshCaptions();
+    let unlisten: (() => void) | undefined;
+    let gone = false;
+    import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen<Progress>("captions-download", (e) => {
+          const p = e.payload;
+          percent = p.total ? Math.floor((100 * p.done) / p.total) : 0;
+          if (!p.finished) {
+            if (cap) cap.downloading = true;
+            return;
+          }
+          if (p.error && !stopping) capError = p.error;
+          stopping = false;
+          refreshCaptions();
+        }),
+      )
+      .then((u) => (gone ? u() : (unlisten = u)));
+    return () => {
+      gone = true;
+      unlisten?.();
+    };
+  });
+  async function downloadCaptions() {
+    capError = "";
+    percent = 0;
+    try {
+      await invoke("download_captions");
+      if (cap) cap.downloading = true;
+    } catch (e) {
+      capError = String(e);
+    }
+  }
+  function stopDownload() {
+    stopping = true;
+    invoke("stop_captions_download");
+  }
+  async function removeCaptions() {
+    capError = "";
+    try {
+      await invoke("remove_captions");
+      a.captions = false;
+    } catch (e) {
+      capError = String(e);
+    }
+    refreshCaptions();
+  }
 </script>
 
 <div class="stack">
@@ -57,6 +122,31 @@
     </Row>
   </section>
 
+  {#if cap || capError}
+    <section class="card">
+      <header><h2>Captions</h2></header>
+      {#if cap && !cap.cpu_supported}
+        <Row term="captions" note="This PC's processor is too old to make captions." />
+      {:else if cap?.installed}
+        <Row term="captions" note={a.captions && !(a.separate_tracks && a.microphone) ? "Turn on Microphone and Separate audio tracks for clean captions." : ""}>
+          <Toggle label="Captions" checked={a.captions} onchange={(v) => (a.captions = v)} />
+          <button type="button" class="btn" onclick={removeCaptions}>Remove</button>
+        </Row>
+      {:else if cap?.downloading}
+        <Row term="captions" label="Downloading captions">
+          <progress max="100" value={percent} aria-label="Captions download"></progress>
+          <span class="value">{percent}%</span>
+          <button type="button" class="btn" onclick={stopDownload}>Stop</button>
+        </Row>
+      {:else if cap}
+        <Row term="captions">
+          <button type="button" class="btn primary" onclick={downloadCaptions}>Download captions ({mb} MB)</button>
+        </Row>
+      {/if}
+      {#if capError}<p class="cap-error" role="alert">{capError}</p>{/if}
+    </section>
+  {/if}
+
   <section class="card">
     <header><h2>Format</h2></header>
     <Row term="audio-encoder">
@@ -67,3 +157,20 @@
     {/if}
   </section>
 </div>
+
+<style>
+  progress {
+    width: 140px;
+    accent-color: var(--accent);
+  }
+  .value {
+    min-width: 40px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .cap-error {
+    font-size: 13px;
+    color: var(--warn);
+    padding: 0 0 12px;
+  }
+</style>

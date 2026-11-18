@@ -18,3 +18,5 @@ Each ADR records one decision: the context, what we chose, what we gave up. New 
 | [0012](0012-window-and-monitor-capture.md) | Capture a chosen monitor or the game's window, at a fixed output size | Accepted |
 | [0013](0013-rename-to-backsight.md) | Rename the app from Clipwise to Backsight | Accepted |
 | [0014](0014-updates-from-github-releases.md) | Installed copies update from GitHub Releases, only when asked | Accepted |
+| [0015](0015-vertical-clips.md) | Make vertical clips from the saved clip, in the background | Accepted |
+| [0016](0016-on-device-captions.md) | Caption the microphone on the PC with whisper.cpp, after the save | Accepted |

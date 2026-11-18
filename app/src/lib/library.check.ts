@@ -1,13 +1,13 @@
 // Self-check for library.ts. The app has no test runner, so run it directly:
 //   node --experimental-strip-types src/lib/library.check.ts   (from app/)
 import assert from "node:assert/strict";
-import { activeFilters, applyFilters, formatBytes, formatClock, groupByDay, noFilters, type LibraryItem } from "./library.ts";
+import { activeFilters, applyFilters, formatBytes, formatClock, groupByDay, isVertical, noFilters, type LibraryItem } from "./library.ts";
 
 const now = new Date(2026, 10, 8, 15, 0).getTime();
 const at = (daysAgo: number, hour = 12) => new Date(2026, 10, 8 - daysAgo, hour).getTime();
 const item = (o: Partial<LibraryItem>): LibraryItem => ({
   path: "p", name: "n", kind: "video", ext: "mp4", bytes: 1, created_ms: now, duration_ms: null, width: null, height: null,
-  fps: null, video_codec: null, audio_tracks: null, thumbnail: null, ...o,
+  fps: null, video_codec: null, audio_tracks: null, thumbnail: null, captions: false, ...o,
 });
 
 assert.equal(formatBytes(0), "0 B");
@@ -15,6 +15,10 @@ assert.equal(formatBytes(340 * 1024), "340 KB");
 assert.equal(formatBytes(1.2 * 1024 ** 3), "1.2 GB");
 assert.equal(formatBytes(512 * 1024 ** 2), "512 MB");
 assert.equal(formatClock(125_000), "2:05");
+assert.equal(isVertical(item({ width: 594, height: 1056 })), true);
+assert.equal(isVertical(item({ width: 1920, height: 1080 })), false);
+assert.equal(isVertical(item({ width: null, height: null })), false);
+assert.equal(isVertical(item({ kind: "screenshot", width: 1080, height: 1920 })), false);
 assert.equal(formatClock(3_725_000), "1:02:05");
 
 const items = [

@@ -14,6 +14,7 @@ authors = ["Backsight contributors"]
 backsight-config = { path = "crates/backsight-config" }
 backsight-encode = { path = "crates/backsight-encode" }
 backsight-engine = { path = "crates/backsight-engine" }
+backsight-captions = { path = "crates/backsight-captions" }
 
 directories = "6"
 serde = { version = "1", features = ["derive"] }
@@ -47,3 +48,13 @@ panic = "abort"
 # lines. On Windows the debug info only goes in the PDB; the exe names just `backsight.pdb`.
 debug = "line-tables-only"
 strip = false
+
+# whisper.cpp's CMake build type follows these (cmake crate): optimized and without debug info
+# gives "Release", the configuration .cargo/config.toml sets /O2 for. Also in debug builds, where
+# an unoptimized model run would take minutes.
+[profile.dev.package.whisper-rs-sys]
+opt-level = 3
+debug = false
+
+[profile.release.package.whisper-rs-sys]
+debug = false

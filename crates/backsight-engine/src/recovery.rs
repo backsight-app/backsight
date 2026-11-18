@@ -115,7 +115,7 @@ pub fn find_interrupted(folder: &Path) -> Vec<Interrupted> {
 }
 
 /// The files in `folder` and the folders directly inside it (one per game).
-fn files(folder: &Path) -> Vec<fs::DirEntry> {
+pub(crate) fn files(folder: &Path) -> Vec<fs::DirEntry> {
     let Ok(entries) = fs::read_dir(folder) else { return Vec::new() };
     let entries: Vec<_> = entries.flatten().collect();
     let games = entries.iter().filter(|e| e.file_type().is_ok_and(|t| t.is_dir()));

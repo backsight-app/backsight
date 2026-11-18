@@ -1,0 +1,29 @@
+[package]
+name = "backsight-captions"
+description = "Backsight captions: on-device speech to text for the microphone track of saved clips."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+backsight-config.workspace = true
+backsight-encode.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+# whisper.cpp, built from source with CMake, CPU only (no GPU features).
+whisper-rs = "0.16"
+sha2 = "0.10"
+# The model download. The versions and TLS setup the updater plugin already uses, so nothing new
+# is compiled but the small blocking wrapper.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+windows = { workspace = true, features = ["Win32_System_Threading"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

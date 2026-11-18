@@ -8,7 +8,8 @@
 | Rust | stable, MSVC target | `rustup default stable-x86_64-pc-windows-msvc` |
 | Visual Studio Build Tools | 2022 | "Desktop development with C++" workload and a Windows 11 SDK |
 | Node.js | 22+ | |
-| libclang | 18+ | Needed by `bindgen` for the FFmpeg bindings. See below |
+| libclang | 18+ | Needed by `bindgen` for the FFmpeg and whisper.cpp bindings. See below |
+| CMake | 3.14+ | Builds whisper.cpp (captions). Visual Studio's "C++ CMake tools for Windows" has one; see below |
 | FFmpeg dev files | 8.1.3 GPL shared, slim | Fetched by `scripts/fetch-ffmpeg.ps1` |
 | GitHub CLI (`gh`) | any | Signed in (`gh auth login`); fetches the FFmpeg build from the release assets |
 
@@ -22,6 +23,16 @@ Run `./scripts/fetch-ffmpeg.ps1` once after cloning (it uses `gh` to download th
 python -m pip install --user libclang
 $env:LIBCLANG_PATH = "$env:APPDATA\Python\Python312\site-packages\clang\native"   # add to your profile
 ```
+
+### CMake and whisper.cpp
+
+Captions use whisper.cpp, which `whisper-rs` compiles from source with CMake (CPU only). Visual Studio Build Tools include CMake ("C++ CMake tools for Windows", part of "Desktop development with C++"), but not on `PATH`. `scripts/build.ps1` and `scripts/build-desktop.ps1` add it themselves; for plain `cargo` commands, put it first on `PATH`:
+
+```powershell
+$env:PATH = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;$env:PATH"
+```
+
+`.cargo/config.toml` sets `GGML_NATIVE=OFF`, so the build runs on any CPU with AVX2 (most from 2015 on; Backsight checks and switches captions off on older ones) instead of only on the CPU that built it, and sets the Release compiler flags in full, because the `cmake` crate otherwise drops `/O2` and Whisper runs about ten times slower. The workspace `Cargo.toml` keeps that build in CMake's Release configuration, also in debug builds. The first build of whisper.cpp takes a few minutes. Its speech models are not in the repository or the installer: the app downloads them when someone presses **Download captions** ([ADR 0016](adr/0016-on-device-captions.md)).
 
 ## Everyday commands
 
@@ -47,7 +58,7 @@ Run `./scripts/build.ps1`. It checks the prerequisites above (Rust MSVC toolchai
 
 Run `./scripts/build-desktop.ps1` from PowerShell to build the release application,
 copy its FFmpeg DLLs into `dist-desktop/Backsight/`, and create a **Backsight** desktop
-shortcut. Open the shortcut or `Launch Backsight.bat` in the repository root.
+shortcut. Open the shortcut.
 Keep the DLLs beside `backsight.exe` when moving the application folder.
 
 The desktop artwork is `assets/brand/backsight-desktop.svg`: a film-reel frame
@@ -103,6 +114,7 @@ The asset scripts drive the Microsoft Edge that ships with Windows through `play
 │   ├── src-tauri/            Tauri shell (tray, window lifecycle, pop-ups, IPC)
 │   └── scripts/              Asset and screenshot rendering
 ├── crates/
+│   ├── backsight-captions/    Captions: model download, Whisper (whisper.cpp), .srt files
 │   ├── backsight-config/      Settings schema, persistence, hotkeys
 │   ├── backsight-encode/      Encoder catalog, FFmpeg encode and mux, remux, screenshot encoding
 │   └── backsight-engine/      Capture, audio, replay buffer, recording, recovery, screenshots, hotkeys

@@ -5,6 +5,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod captions;
 mod cli;
 mod probe_child;
 mod report;
@@ -22,6 +23,7 @@ use backsight_engine::{
     screenshot::{self, Frozen, Saved},
     session::ReplaySession,
     sounds::{self, Cue},
+    vertical::{self, Shape},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -475,7 +477,9 @@ fn kind_of(title: &str) -> (&'static str, Cue) {
         "Starting the recording" | "Still getting ready" | "Still finishing" | "Already recording" => {
             ("info", Cue::Marker)
         }
-        "Recording saved" | "Clip saved" | "Unfinished recording saved" => ("saved", Cue::Saved),
+        "Recording saved" | "Clip saved" | "Unfinished recording saved" | "Vertical clip saved" => {
+            ("saved", Cue::Saved)
+        }
         "Screenshot saved" | "Screenshot saved; copy failed" => ("screenshot", Cue::Screenshot),
         "Recording paused" => ("pause", Cue::Pause),
         "Marker added" => ("marker", Cue::Marker),
@@ -1072,6 +1076,26 @@ fn mark_for_mp4(saved: Vec<PathBuf>) -> Vec<PathBuf> {
     mkvs
 }
 
+/// Makes a clip's vertical copy on its own thread (ADR 0015): never waited for by the next save
+/// or by quitting (the next start picks it up again), and says when it is there.
+/// `caption`: the vertical clip is the only one kept (Vertical), so it gets the captions.
+fn make_vertical(app: &AppHandle, job: vertical::Job, settings: Settings, caption: bool) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let (title, body) = match job.run(&settings) {
+            Ok(path) => {
+                if caption {
+                    captions::after_save(&path, &settings);
+                }
+                ("Vertical clip saved", in_library(&path.file_name().unwrap_or_default().to_string_lossy()))
+            }
+            Err(e) => ("Couldn't make the vertical clip", e),
+        };
+        let _ = app.emit("library-changed", ());
+        notify(&app, title, &body);
+    });
+}
+
 /// Converts recordings' MKV files to MP4 (the MKV is always kept), telling the user if one can't be.
 fn convert_to_mp4(app: &AppHandle, mkvs: &[PathBuf]) {
     for mkv in mkvs {
@@ -1479,8 +1503,26 @@ fn on_hotkey(app: &AppHandle, action: Action) {
                 let (_done, _saving) = (done, saving);
                 let (title, body) = match prepared.and_then(|write| write()) {
                     Ok(path) => {
+                        let settings = lock(&app.state::<Engine>().applied).clone();
+                        let shape =
+                            settings.as_ref().map_or(Shape::Wide, |s| Shape::from_setting(&s.replay.clip_shape));
+                        let job = vertical::Job::after_save(&path, shape);
                         let _ = app.emit("library-changed", ());
-                        ("Clip saved", in_library(&path.file_name().unwrap_or_default().to_string_lossy()))
+                        let name = path.file_name().unwrap_or_default().to_string_lossy();
+                        let body = match shape {
+                            Shape::Vertical if job.is_some() => "Making the vertical clip now.".to_owned(),
+                            _ => in_library(&name),
+                        };
+                        let only_vertical = matches!(shape, Shape::Vertical);
+                        if let Some(settings) = &settings
+                            && !only_vertical
+                        {
+                            captions::after_save(&path, settings);
+                        }
+                        if let (Some(job), Some(settings)) = (job, settings) {
+                            make_vertical(&app, job, settings, only_vertical);
+                        }
+                        ("Clip saved", body)
                     }
                     Err(e) => ("Couldn't save the clip", e),
                 };
@@ -2094,6 +2136,7 @@ fn shut_down(engine: &Engine) {
     let _saving = backsight_engine::shutdown::saving();
     // Set first too: whoever holds `apply` sees it as soon as it looks.
     engine.quitting.store(true, Relaxed);
+    captions::stop();
     let stopping = {
         let _apply = lock(&engine.apply);
         let mut replay = lock(&engine.replay);
@@ -2135,6 +2178,10 @@ fn main() {
             replay_menu_action,
             get_diagnostics,
             list_microphones,
+            captions::captions_status,
+            captions::download_captions,
+            captions::stop_captions_download,
+            captions::remove_captions,
             list_monitors,
             list_library,
             library_preview,
@@ -2225,6 +2272,7 @@ fn main() {
                 tray = tray.icon(icon.clone());
             }
             tray.build(app)?;
+            captions::start(app.handle());
             // Start with Windows passes --minimized: only the tray icon then.
             if !std::env::args().any(|a| a == "--minimized") {
                 show_main_window(app.handle());
@@ -2274,6 +2322,9 @@ fn main() {
                 }
                 *lock(&engine.applied) = Some(settings.clone());
                 drop(file);
+                // Before the hotkeys: a clip saved from here on has its own job.
+                let verticals = settings.general.video_dir().map(|f| vertical::unfinished(&f)).unwrap_or_default();
+                verticals.into_iter().for_each(|job| make_vertical(&app, job, settings.clone(), false));
                 start_hotkeys(&app, &settings);
                 apply_replay(&engine, &settings);
                 // Not under the startup lock: copying a long recording takes a while.

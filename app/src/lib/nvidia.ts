@@ -29,22 +29,22 @@ export const clashSignature = (clashes: Clash[]) =>
     .join(",");
 
 /**
- * Untouched default keys get the whole other set, so they stay grouped. Keys you set yourself
- * stay: then only the clashing ones move, and only to a key nothing else uses. Changes `keys`;
- * returns the actions moved and the clashing ones that couldn't be.
+ * Keys still exactly the previous default set (which NVIDIA's overlay shared) all move to today's
+ * defaults, so they stay grouped. Otherwise only the clashing ones move, and only to a default key
+ * nothing else uses. Changes `keys`; returns the actions moved and the clashing ones that couldn't be.
  */
 export function useOtherKeys(
   keys: Record<string, string>,
   clashes: Clash[],
   defaults: Record<string, string>,
-  alternatives: Record<string, string>,
+  previous: Record<string, string>,
 ): { moved: string[]; stuck: string[] } {
-  const untouched = Object.entries(defaults).every(([a, k]) => keys[a] === k);
-  const moving = untouched ? Object.keys(alternatives) : clashes.map((c) => c.action);
+  const untouched = Object.entries(previous).every(([a, k]) => keys[a] === k);
+  const moving = untouched ? Object.keys(previous) : clashes.map((c) => c.action);
   const moved: string[] = [];
   const stuck: string[] = [];
   for (const action of moving) {
-    const key = alternatives[action];
+    const key = defaults[action];
     const taken = Object.entries(keys).some(([a, k]) => a !== action && k === key);
     if (key && !taken) {
       keys[action] = key;

@@ -8,14 +8,20 @@
   <img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0-2E3A5C?style=flat-square">
 </p>
 
+<p align="center">
+  <a href="https://github.com/backsight-app/backsight/releases/latest"><b>Download Backsight</b></a> (free, for Windows 10 and 11)
+</p>
+
+**How to install:** open the link above, download the file ending in `_x64-setup.exe` and double-click it. You don't need admin rights. Windows may say **"Windows protected your PC"** because Backsight isn't signed with a paid certificate. Click **More info**, then **Run anyway**. On first start Backsight checks your graphics card for a few seconds and suggests the best setting for it, then you can start right away. If your antivirus complains, see the [full install guide](docs/install.md).
+
 **Backsight** saves your best gaming moments on Windows. It quietly keeps the last 2 minutes of your game, so when something great happens you press one key and it becomes a clip. It can also record whole sessions and take screenshots.
 
 Think of it as a lighter, simpler NVIDIA ShadowPlay. Every setting comes with a short plain-English explanation, so you never have to guess what something means.
 
 ## What it does
 
-- **Instant Replay.** The last 2 minutes are always ready. Press **Alt+F10** to save them as a clip.
-- **Recording.** Press **Alt+F9** to start and stop. You can pause, split long recordings into parts and add markers you can jump to later.
+- **Instant Replay.** The last 2 minutes are always ready. Press **Alt+X** to save them as a clip.
+- **Recording.** Press **Alt+V** to start and stop. You can pause, split long recordings into parts and add markers you can jump to later.
 - **Screenshots.** The whole screen, just one window, or an area you drag. They are also copied, so you can paste them straight into a chat.
 - **Sound.** Your game and your microphone, with mute and push-to-talk. You can also record only the game's sound, or keep your voice on its own track.
 - **The whole screen or just the game.** Record your whole monitor, or only the game's window so chats and pop-ups stay out of your clips.
@@ -29,12 +35,6 @@ Think of it as a lighter, simpler NVIDIA ShadowPlay. Every setting comes with a 
 
 ## Install
 
-1. Download the installer (`Backsight_…_x64-setup.exe`) from the [Releases page](https://github.com/backsight-app/backsight/releases/latest) and double-click it. You don't need admin rights.
-2. Windows may warn you because Backsight isn't signed with a paid certificate. Click **More info**, then **Run anyway**.
-3. On first start Backsight checks your graphics card for a few seconds and suggests the best setting for it. You can start right away with **Start using Backsight**.
-
-The full guide, including what to do if Windows or your antivirus complains, is in [docs/install.md](docs/install.md).
-
 To update, open the General page and press **Check** under Updates, then **Install**. Your settings and clips stay. Uninstalling also keeps your clips. Backsight only goes online when you press those buttons; see the [privacy statement](docs/privacy.md).
 
 ## Use it
@@ -43,16 +43,18 @@ Backsight starts with Instant Replay on and records your main screen at 1080p, 6
 
 | Key | What it does |
 | --- | --- |
-| **Alt+F10** | Save the last 2 minutes as a clip |
-| **Alt+Shift+F10** | Turn Instant Replay on or off |
-| **Alt+F9** | Start or stop recording |
-| **Alt+Shift+F9** | Pause or resume a recording |
-| **Alt+F7** | Add a marker to a recording |
-| **Alt+F8** | Mute or unmute your microphone |
-| **Alt+F1** | Screenshot of the whole screen |
-| **Alt+Shift+F1** | Screenshot of the window in front |
-| **Ctrl+Alt+F1** | Screenshot of an area you drag |
+| **Alt+X** | Save the last 2 minutes as a clip |
+| **Alt+Shift+X** | Turn Instant Replay on or off |
+| **Alt+V** | Start or stop recording (V for video) |
+| **Alt+Shift+V** | Pause or resume a recording |
+| **Alt+B** | Add a marker (a bookmark) to a recording |
+| **Alt+T** | Mute or unmute your microphone (T for talk) |
+| **Alt+S** | Screenshot of the whole screen |
+| **Alt+Shift+S** | Screenshot of the window in front |
+| **Ctrl+Alt+S** | Screenshot of an area you drag |
 | **Alt+Shift+C** | Open Backsight |
+
+You can change any key on the Hotkeys page, or pick **No key** to turn one off.
 
 You can change any of these on the Hotkeys page, including mouse side buttons. If the NVIDIA app already uses a key, setup offers different ones and Home shows which keys you have.
 
@@ -77,9 +79,9 @@ When you close the window, Backsight keeps running near the clock. Right-click i
 
 - You are responsible for what you record. Check that you have the right to record other people's voices and copyrighted video before you share a clip.
 
-## For developers
+## For developers (building from source)
 
-Backsight is written in Rust with a Tauri and Svelte window. To build it on a fresh PC, run `scripts/build.ps1`; to run the tests or help out, start with [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The rest of the technical documentation (how it works, design decisions, testing) is listed in [docs/README.md](docs/README.md).
+You don't need this to use Backsight; download it above. Backsight is written in Rust with a Tauri and Svelte window. To build it on a fresh PC, run `scripts/build.ps1`; to run the tests or help out, start with [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The rest of the technical documentation (how it works, design decisions, testing) is listed in [docs/README.md](docs/README.md).
 
 ## Thanks
 

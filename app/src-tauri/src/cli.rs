@@ -8,6 +8,8 @@ pub fn run() -> Option<i32> {
         "--probe-encoders" => Some(crate::probe_child::run()),
         // A problem report on the desktop, also when Backsight itself is frozen.
         "--report" => Some(crate::report::run()),
+        // Captions for a saved clip, in their own low-priority process (ADR 0016).
+        backsight_captions::CHILD_FLAG => Some(backsight_captions::child_process()),
         _ => None,
     }
 }

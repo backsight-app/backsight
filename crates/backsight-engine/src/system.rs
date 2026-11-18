@@ -1,4 +1,5 @@
-//! Small Windows calls: installed memory, the local time, the clipboard and playing a sound.
+//! Small Windows calls: installed memory, the local time, the clipboard, playing a sound and
+//! background priority.
 
 use std::{os::windows::ffi::OsStrExt, path::Path, time::Duration};
 use windows::{
@@ -10,6 +11,9 @@ use windows::{
             DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData},
             Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock},
             SystemInformation::{GetLocalTime, GlobalMemoryStatusEx, MEMORYSTATUSEX},
+            Threading::{
+                GetCurrentThread, SetThreadPriority, THREAD_MODE_BACKGROUND_BEGIN, THREAD_MODE_BACKGROUND_END,
+            },
         },
         UI::{
             Shell::{SHOpenFolderAndSelectItems, SHParseDisplayName, ShellExecuteW},
@@ -21,6 +25,25 @@ use windows::{
     },
     core::{PCWSTR, w},
 };
+
+/// While alive, the calling thread runs in Windows' background mode: low CPU, disk and memory
+/// priority, so slow work after a save never takes time from a game.
+pub struct Background(std::marker::PhantomData<*const ()>);
+
+pub fn background_mode() -> Background {
+    // SAFETY: GetCurrentThread's pseudo-handle is always valid for the calling thread.
+    if let Err(e) = unsafe { SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN) } {
+        tracing::warn!("background priority not set: {e}");
+    }
+    Background(std::marker::PhantomData)
+}
+
+impl Drop for Background {
+    fn drop(&mut self) {
+        // SAFETY: as above, on the same thread (`Background` is not `Send`).
+        let _ = unsafe { SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END) };
+    }
+}
 
 /// Starts playing a WAV file held in memory and returns at once. Windows reads `wav` while it
 /// plays, hence `'static`; a newer sound stops the one playing.

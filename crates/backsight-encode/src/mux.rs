@@ -36,7 +36,12 @@ pub fn free_name(folder: &Path, stem: &str, ext: &str, besides: Option<&Path>) -
             part.push(suffix);
             Some(Path::new(&part)) != besides && Path::new(&part).exists()
         };
-        p.exists() || [".part", RECORDING_PART, ".chapters.part"].into_iter().any(with)
+        // A clip waiting for its vertical copy (ADR 0015) still owns its name.
+        let waiting = p.with_file_name(format!(
+            "{} (vertical).{ext}.source.part",
+            p.file_stem().unwrap_or_default().to_string_lossy()
+        ));
+        p.exists() || waiting.exists() || [".part", RECORDING_PART, ".chapters.part"].into_iter().any(with)
     };
     (1..).map(|n| folder.join(name(n))).find(|p| !taken(p)).expect("some name is free")
 }
@@ -427,7 +432,16 @@ pub(crate) fn close_output(out: AVFormatContextOutput) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::chapter_spans;
+    use super::{chapter_spans, free_name};
+
+    #[test]
+    fn a_clip_waiting_for_its_vertical_copy_keeps_its_name() {
+        let dir = std::env::temp_dir().join(format!("backsight-free-name-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("G T (vertical).mp4.source.part"), b"").unwrap();
+        assert_eq!(free_name(&dir, "G T", "mp4", None), dir.join("G T (2).mp4"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn markers_become_sorted_chapters_inside_the_file() {

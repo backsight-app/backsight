@@ -10,7 +10,7 @@
   import { codecLabel } from "../lib/content";
   import {
     activeFilters, applyFilters, datePresets, durationPresets, filtersFor, formatBytes, formatClock, formatsIn,
-    formatTime, groupByDay, noFilters, resolutionPresets, sizePresets, tabKind, totalBytes,
+    formatTime, groupByDay, isVertical, noFilters, resolutionPresets, sizePresets, tabKind, totalBytes,
     type Library, type LibraryItem, type Preset, type Tab,
   } from "../lib/library";
   import { app } from "../lib/settings.svelte";
@@ -430,6 +430,9 @@
                   {#if it.thumbnail}
                     <img src={thumbSrc(it.thumbnail)} alt="" loading="lazy" decoding="async" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")} />
                   {/if}
+                  {#if isVertical(it)}<span class="tall">Vertical</span>{/if}
+                  <!-- "CC": "Captions" doesn't fit beside the length on the small picture. -->
+                  {#if it.captions}<span class="cc" title="Has captions">CC</span>{/if}
                   {#if it.duration_ms !== null}<span class="dur">{formatClock(it.duration_ms)}</span>{/if}
                 </div>
                 <div class="main">
@@ -691,6 +694,24 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+  .tall {
+    position: absolute;
+    left: 4px;
+    top: 3px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: rgb(11 15 26 / 0.8);
+    font-size: 11px;
+  }
+  .cc {
+    position: absolute;
+    left: 4px;
+    bottom: 3px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: rgb(11 15 26 / 0.8);
+    font-size: 11px;
   }
   .dur {
     position: absolute;

@@ -437,6 +437,26 @@
     "pros": ["Never miss a moment", "No huge recordings to clean up"],
     "cons": ["Uses some RAM while it's on"]
   },
+  "clip-shape": {
+    "term": "Clip shape",
+    "short": "Wide like your screen, tall for phones, or both.",
+    "eli5": "Sites like YouTube Shorts, TikTok and Reels want tall clips. Vertical cuts the middle of the picture into a tall clip after you save; it takes a little while in the background and never slows the save. Recordings always stay wide."
+  },
+  "clip-shape-wide": {
+    "term": "Wide",
+    "short": "Clips look exactly like your screen.",
+    "eli5": "Nothing extra happens after a save. Best for YouTube, Discord and watching on a PC."
+  },
+  "clip-shape-vertical": {
+    "term": "Vertical (for phones)",
+    "short": "Each clip becomes a tall clip of the middle of your screen.",
+    "eli5": "Backsight saves the clip, then turns it into a tall one named '(vertical)'. The sides of the picture are cut off. If that fails, you keep the wide clip."
+  },
+  "clip-shape-both": {
+    "term": "Both",
+    "short": "Keep the wide clip and also get a tall one.",
+    "eli5": "You get two files: the normal clip and a '(vertical)' copy of its middle. Uses a bit more disk space."
+  },
   "replay-length": {
     "term": "Replay length",
     "short": "How far back a saved clip goes.",
@@ -531,6 +551,13 @@
     "eli5": "The first track contains all your sound for normal playback. Each enabled source also gets its own track, so you can adjust it later in an editor.",
     "pros": ["Total control while editing"],
     "cons": ["Most players and sites only play the first track", "MKV and MOV handle this best"]
+  },
+  "captions": {
+    "term": "Captions",
+    "short": "Write out what you say in each clip.",
+    "eli5": "After a clip is saved, Backsight listens to it right here on your PC and writes your words into a .srt file next to the clip. Nothing is sent anywhere. Video players like VLC and sites like YouTube show that file as subtitles.",
+    "pros": ["Viewers can follow with the sound off", "Works offline after a one-time download of about 61 MB"],
+    "cons": ["Turn on Separate audio tracks, or voices in the game may be written out too", "Takes a little while after each save"]
   },
 
   "screenshot-format": {

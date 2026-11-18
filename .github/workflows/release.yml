@@ -55,6 +55,9 @@ jobs:
           # The signed update files (.sig, latest.json) only here: local builds have no key.
           (Get-Content $Conf -Raw) -replace '"version": "[^"]*"', "`"version`": `"$Version`"" -replace '"bundle": \{', '"bundle": { "createUpdaterArtifacts": true,' | Set-Content $Conf -NoNewline
           (Get-Content Cargo.toml -Raw) -replace '(\[workspace\.package\]\r?\nversion = )"[^"]*"', "`$1`"$Version`"" | Set-Content Cargo.toml -NoNewline
+          # The two edits above (and the Cargo.lock they cause) are the release's own: don't let them
+          # stamp the build "plus uncommitted changes" (app/src-tauri/build.rs asks git status).
+          git update-index --skip-worktree $Conf Cargo.toml Cargo.lock
           $Previous = git describe --tags --match 'v*' --abbrev=0 2>$null
           $Range = if ($Previous) { "$Previous..HEAD" } else { 'HEAD' }
           $Notes = (git log $Range --no-merges --pretty='- %s') -join "`n"

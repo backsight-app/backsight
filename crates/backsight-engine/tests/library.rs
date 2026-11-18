@@ -94,6 +94,14 @@ fn library_scans_probes_caches_and_previews() {
     fs::write(&jxr, b"not really JPEG XR").unwrap();
     fs::write(videos.join("saving.mp4.part"), b"half a clip").unwrap();
     fs::write(shots.join("notes.txt"), b"not media").unwrap();
+    fs::write(
+        videos.join("short.srt"),
+        "1
+00:00:00,000 --> 00:00:01,000
+Hi.
+",
+    )
+    .unwrap();
     for (i, p) in [&long, &png, &short, &jxr].into_iter().enumerate() {
         set_created(p, i as u64 + 1); // long is newest
     }
@@ -111,6 +119,7 @@ fn library_scans_probes_caches_and_previews() {
     assert!(mp4.duration_ms.is_some_and(|d| d.abs_diff(2000) < 150), "{:?}", mp4.duration_ms);
     assert_eq!((mp4.width, mp4.height, mp4.fps), (Some(256), Some(144), Some(30.0)));
     assert_eq!((mp4.video_codec.as_deref(), mp4.audio_tracks), (Some("H.264"), Some(1)));
+    assert!(mp4.captions && !lib.items[0].captions, "short.srt is short.mp4's captions, and not a library item");
     let thumb = mp4.thumbnail.clone().expect("a video thumbnail");
     let info = ffprobe(&thumb, &["-show_entries", "stream=codec_name,width,height"]);
     let s = &info["streams"][0];

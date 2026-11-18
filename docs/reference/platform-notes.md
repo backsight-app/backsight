@@ -117,6 +117,24 @@ Read only: Backsight never writes NVIDIA's keys or settings. None of this is doc
 - On/off: the same key has `IsShadowPlayEnabled` and `IsShadowPlayEnabledUser` (0 with the overlay off). The NVIDIA App overlay runs as `C:\Program Files\NVIDIA Corporation\NVIDIA App\CEF\NVIDIA Overlay.exe`; GeForce Experience's as `NVIDIA Share.exe`. `nvcontainer.exe` runs either way, so says nothing. Backsight treats the overlay as on when either overlay process runs or `IsShadowPlayEnabledUser` is non-zero. *(Not checked with the overlay turned on.)*
 - Raw Input doesn't consume keys, so with a clash both apps act on the same press (two clips).
 
+## Default hotkeys (`content/default-settings.json`)
+
+Checked 2026-11. What other apps that run during games already use, so Backsight's defaults stay clear of it:
+
+- **NVIDIA App overlay:** Alt+Z overlay, Alt+R performance overlay and Alt+Shift+R to cycle its stats ([NVIDIA support 5084](https://nvidia.custhelp.com/app/answers/detail/a_id/5084/~/nvidia-app-in-game-performance-and-latency-overlay)), Alt+F9 record ([NVIDIA App article](https://www.nvidia.com/en-us/geforce/news/nvidia-app-download-and-features/)), plus Alt+F10, Alt+Shift+F10, Alt+F1, Alt+F2, Alt+F3 and Ctrl+Alt+M (NVIDIA overlay section above). A tester's Alt+F10 did nothing in Backsight with the overlay on: NVIDIA got the key and Backsight's Raw Input never saw it.
+- **AMD Software (Adrenalin):** Alt+R opens the overlay, on by default ([AMD DH-026](https://www.amd.com/en/resources/support-articles/faqs/DH-026.html)); newer release notes add Alt+Z for a sidebar; its recording keys are Ctrl+Shift+letter (Ctrl+Shift+S saves a replay per third-party lists; AMD's own page shows them only as a picture).
+- **Discord:** Alt+C saves a Clip ([Discord support 16861982215703](https://support.discord.com/hc/en-us/articles/16861982215703)); Ctrl+Shift+M mute and Ctrl+Shift+D deafen ([Discord blog](https://discord.com/blog/how-to-use-keyboard-shortcuts-on-discord-create-custom-keybinds)).
+- **Xbox Game Bar:** all Win-based: Win+G, Win+Alt+R record, Win+Alt+G save the last 30 s, Win+Alt+PrtScn screenshot, Win+Alt+M mic ([Microsoft support](https://support.microsoft.com/en-gb/windows/fix-problems-with-xbox-game-bar-on-windows-74a718a1-2fbf-2ce3-5fbe-e959be352277)).
+- **Steam:** Shift+Tab overlay ([Steam support](https://help.steampowered.com/faqs/view/3978-072C-18DF-FBF9)), F12 screenshot.
+- **OBS Studio:** no hotkeys by default.
+- **Windows:** Alt+Tab, Alt+F4, Alt+Esc, Alt+Space (window menu, PowerToys Run), Alt+Enter (full screen in many games), Alt+PrtScn. Left Alt+Shift alone switches keyboard layout, but not when a third key is pressed in between, so Alt+Shift+letter is safe. Windows has no other Alt+letter shortcuts.
+
+**Chosen (2026-11):** Alt+X save clip, Alt+Shift+X replay on/off, Alt+V record, Alt+Shift+V pause, Alt+S screenshot, Alt+Shift+S window, Ctrl+Alt+S area, Alt+T mic, Alt+B marker, Alt+Shift+C open Backsight, push-to-talk no key. Letters a left thumb on Alt and fingers near WASD reach, mnemonic where a free letter allowed (V video, S shot, T talk, B bookmark); not R (NVIDIA, AMD), Z (NVIDIA), C (Discord), and not W, A, D, Q, E or F, which games bind for movement and abilities. Discord's Alt+C was the tester's own pick for saving a clip; it was left out because a Discord Clips user would get two clips per press.
+
+**Side effects to know:**
+- Raw Input never swallows a key (`RIDEV_INPUTSINK` without `RIDEV_NOLEGACY`), so the focused window still gets the press. A game sees the letter (Alt+S can be "S" for a frame); a normal desktop app gets `WM_SYSKEYDOWN` and may open a menu whose underlined letter matches (Alt+V opens View in Notepad) or beep. Fullscreen games have no menu bar, so while gaming only the game's own use of the letter matters; people whose game binds one can change it or pick No key.
+- Existing settings keep their keys (only fresh installs and missing entries get the new set). `content/previous-default-hotkeys.json` lets the NVIDIA clash card move an unchanged old set as a group.
+
 ## WASAPI
 
 - Initialize COM as **MTA** on each audio thread.
@@ -282,3 +300,22 @@ Measured on an NVIDIA PC capturing an external 1440p HDR monitor into 1080p, wit
 - `zerolatency` only sets `rcParams.zeroReorderDelay`; it doesn't change FFmpeg's hold-back.
 - The encoder check still opens NVENC with two B-frames (`probe.rs`), so a card that can't do them is known before someone turns them on.
 - **WGC dirty regions on an HDR monitor** (recent Windows 11 builds): any change, even one small animating window, is reported as one rectangle covering the whole screen, and no frame came with an empty list. On an SDR monitor a still screen simply sends no frames. Dirty regions therefore don't help still detection; the replay rests when WGC sends nothing.
+
+## Captions (whisper.cpp through whisper-rs 0.16, ADR 0016)
+
+- **The `cmake` crate builds C/C++ without `/O2` on MSVC.** It passes cc's flags, built with `opt_level(0)`, as `CMAKE_<LANG>_FLAGS_<CONFIG>`, which replaces CMake's defaults: the Visual Studio project gets an empty `<Optimization>`, so `/Od`. Whisper base then took over 3 minutes for 60 s of speech instead of about 25 s. The crate skips that variable when it is already defined, and `whisper-rs-sys` defines every `CMAKE_*`, `GGML_*` and `WHISPER_*` environment variable, so `.cargo/config.toml` sets `CMAKE_C_FLAGS_RELEASE`/`CMAKE_CXX_FLAGS_RELEASE` in full. The configuration is `Release` only when the package is optimized without debug info (`OPT_LEVEL`, `DEBUG`), hence the `whisper-rs-sys` profile overrides in the workspace `Cargo.toml`. Check: the `ggml-cpu.vcxproj` under the build's `out/build/ggml/src` shows `<Optimization>MaxSpeed</Optimization>` for Release. `build.rs` reruns only when its inputs change: `cargo clean -p whisper-rs-sys` after changing these.
+- **`GGML_NATIVE=OFF`** turns on AVX, AVX2, BMI2, FMA and F16C (`INS_ENB`) and nothing newer (no AVX-512), so the build needs a CPU with those. `cpu_supported()` checks them with `is_x86_feature_detected!` before loading anything. Runtime CPU dispatch (`GGML_CPU_ALL_VARIANTS`) needs `GGML_BACKEND_DL` and DLLs per variant; not used.
+- **whisper-rs's `WhisperState::full` calls `whisper_full_with_state`, which skips the built-in VAD** (only `whisper_full` runs it): `enable_vad(true)` silently does nothing. Backsight runs `WhisperVadContext::segments_from_samples` itself (times in centiseconds, as `f32`), joins the stretches with 0.1 s of silence and maps times back (`cues.rs`). Whisper's token end times often run 0.1–0.3 s into the next stretch, so an end is never mapped past the stretch its start is in. `WhisperVadContext::new` and `set_vad_model_path` leak their path `CString` (whisper-rs 0.16); a few bytes per process.
+- **Silero VAD v6.2.0** (`ggml-silero-v6.2.0.bin`) loads in whisper.cpp 1.8.3 (the version in whisper-rs-sys 0.15).
+- **Background mode for every thread.** `THREAD_MODE_BACKGROUND_BEGIN` covers only the calling thread, and ggml starts its worker threads at normal priority (no OpenMP: one threadpool per graph compute, `GGML_SCHED_PRIO_NORMAL`, not settable through whisper.cpp). So captions run in their own process, which sets `PROCESS_MODE_BACKGROUND_BEGIN` on itself ([SetPriorityClass](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-setpriorityclass); `windows` 0.62: `SetPriorityClass(HANDLE, PROCESS_CREATION_FLAGS) -> Result<()>`). Background disk priority made the first model read take 72 s once on a busy drive (0.3 s normally), so the process reads the models first and enters background mode after.
+- **Measured** on a test laptop (Core i5-12500H, 12 cores/16 threads; other programs keeping the CPU at about 75%), base q5_1, greedy, 2 threads, speech joined by VAD:
+
+  | Audio | Background mode | Time |
+  | --- | --- | --- |
+  | 60 s, about 33 s of talking | caller thread only (one ggml thread normal) | 22–33 s |
+  | 58 s, about 7 s of talking | caller thread only | 11–12 s |
+  | 60 s, 33 s of talking, no VAD | normal priority, 4 threads | 16 s |
+  | 71 s, about 40 s of talking (the app's process path) | whole process | 48 s |
+  | 58 s, about 7 s of talking (the app's process path) | whole process | 28 s |
+
+  Without VAD the silent 58 s took 16 s and Whisper placed every line at the wrong time (speech at 8 s shown from 0 s). Model load 0.2–0.3 s warm. Peak working set 265–315 MB, peak commit about 800 MB, all freed when the process ends. VAD alone: 0.7–1.3 s per minute. Token timestamps and `max_len` cost nothing measurable. Background mode on a busy PC roughly doubles the time; it is what keeps the game's frames. *(verify the game's FPS while a caption job runs.)*

@@ -147,10 +147,19 @@ fn default_capture_monitor() -> String {
     video_default("capture_monitor")
 }
 
+fn default_clip_shape() -> String {
+    let defaults: serde_json::Value = serde_json::from_str(DEFAULTS_JSON).expect("valid JSON");
+    defaults["replay"]["clip_shape"].as_str().expect("a clip shape default in content/default-settings.json").to_owned()
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Replay {
     pub enabled: bool,
     pub length_seconds: u32,
+    /// `"wide"`, `"vertical"` or `"both"`: whether saving a clip also makes a 9:16 copy (ADR 0015).
+    /// Missing from older files (then the default); anything unknown means wide.
+    #[serde(default = "default_clip_shape")]
+    pub clip_shape: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -162,7 +171,15 @@ pub struct Audio {
     pub microphone_device: String,
     pub game_audio_only: bool,
     pub separate_tracks: bool,
+    /// Write captions next to each saved clip (ADR 0016). Missing from older files (then the default).
+    #[serde(default = "default_audio_captions")]
+    pub captions: bool,
     pub encoder_options: BTreeMap<String, EncoderOptions>,
+}
+
+fn default_audio_captions() -> bool {
+    let defaults: serde_json::Value = serde_json::from_str(DEFAULTS_JSON).expect("valid JSON");
+    defaults["audio"]["captions"].as_bool().expect("an audio captions default in content/default-settings.json")
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -431,14 +448,14 @@ mod tests {
 ",
                 "",
             );
-        text = text.replacen("hdr = false\n", "", 1);
+        text = text.replacen("hdr = false\n", "", 1).replacen("captions = false\n", "", 1);
         text = text.replace("name_after_game = true\n", "").replace("folder_per_game = false\n", "");
         text = text.replace("capture_target = \"monitor\"\n", "").replace("capture_monitor = \"\"\n", "");
         assert!(!text.contains("sounds") && !text.contains("_game") && !text.contains("capture_target"), "{text}");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, text).unwrap();
         let loaded = Settings::load_from(&path).unwrap();
-        assert!(!loaded.video.hdr);
+        assert!(!loaded.video.hdr && !loaded.audio.captions);
         assert!(loaded.general.sounds && loaded.general.recording_indicator, "defaults filled in");
         assert_eq!(loaded.general.popup_position, None, "no saved spot: the corner");
         assert!(loaded.general.name_after_game && !loaded.general.folder_per_game, "file naming defaults");
@@ -489,6 +506,19 @@ mod tests {
     fn default_hotkeys_are_valid_and_conflict_free() {
         let parsed = Settings::default().parsed_hotkeys().expect("default hotkeys parse");
         assert!(conflicts(&parsed).is_empty());
+    }
+
+    #[test]
+    fn cleared_hotkeys_save_load_and_never_conflict() {
+        let path = temp_path("cleared");
+        let mut s = Settings::default();
+        s.hotkeys.values_mut().for_each(String::clear);
+        s.save_to(&path).unwrap();
+        let loaded = Settings::load_from(&path).unwrap();
+        assert_eq!(loaded.hotkeys.len(), 11);
+        assert!(loaded.hotkeys.values().all(String::is_empty), "no key stays no key, not the default");
+        assert!(loaded.parsed_hotkeys().unwrap().is_empty());
+        fs::remove_dir_all(path.parent().unwrap()).ok();
     }
 
     #[test]

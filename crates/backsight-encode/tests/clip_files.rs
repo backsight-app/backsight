@@ -146,3 +146,18 @@ fn p010_hdr_signaling_survives_replay_and_recording_containers() {
         }
     }
 }
+
+#[test]
+fn speech_reading_gives_16_khz_mono_from_the_start() {
+    use backsight_encode::media::{SPEECH_RATE, read_speech};
+    let clip = make_clip("mp4", "aac", 2);
+    let speech = read_speech(&clip, None).unwrap();
+    let seconds = speech.len() as f32 / SPEECH_RATE as f32;
+    assert!((1.9..2.2).contains(&seconds), "{seconds} s");
+    // The 440 Hz tone at half volume, folded to mono: loud, not silence or noise.
+    let rms = (speech.iter().map(|s| s * s).sum::<f32>() / speech.len() as f32).sqrt();
+    assert!(rms > 0.2, "rms {rms}");
+    assert_eq!(read_speech(&clip, Some(0)).unwrap().len(), speech.len(), "track 0 is the only, and last, one");
+    assert!(read_speech(&clip, Some(1)).is_err(), "no second sound track");
+    let _ = std::fs::remove_file(clip);
+}

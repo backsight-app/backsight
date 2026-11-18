@@ -168,7 +168,8 @@
         <div class="rec" class:problem={live.recording_message} role="status">
           <span class="dot"></span>
           {#if live.recording_message}
-            Recording stopped: {live.recording_message} Press <Kbd combo={s.hotkeys["toggle-recording"]} /> to finish.
+            Recording stopped: {live.recording_message}
+            {#if s.hotkeys["toggle-recording"]}Press <Kbd combo={s.hotkeys["toggle-recording"]} /> to finish.{:else}Recording has no key: give it one in <a href="#hotkeys">Hotkeys</a> to finish.{/if}
           {:else}
             {live.recording_paused ? "Paused" : "Recording"} · {formatDuration(Math.floor(live.recording_seconds))}
           {/if}
@@ -177,8 +178,9 @@
       <h2>Ready when you are.</h2>
       <p>
         {#if s.replay.enabled}
-          Backsight always keeps the last {formatDuration(s.replay.length_seconds)}. Press
-          <Kbd combo={s.hotkeys["save-replay"]} /> to save it as a clip.
+          Backsight always keeps the last {formatDuration(s.replay.length_seconds)}.
+          {#if s.hotkeys["save-replay"]}Press <Kbd combo={s.hotkeys["save-replay"]} /> to save it as a clip.{:else}Saving
+            a clip has no key: give it one in <a href="#hotkeys">Hotkeys</a>.{/if}
         {/if}
         Your clips are in <a href="#library">Library</a>. You can close this window: Backsight keeps running near the
         clock (click ^ if you don't see its icon).
@@ -250,7 +252,10 @@
   {#if live?.mic_muted}
     <div class="notice info" role="status">
       <Icon name="info" size={18} />
-      <span>Your microphone is muted. Press <Kbd combo={s.hotkeys["toggle-mic"]} /> to unmute.</span>
+      <span
+        >Your microphone is muted. {#if s.hotkeys["toggle-mic"]}Press <Kbd combo={s.hotkeys["toggle-mic"]} /> to unmute.{:else}Muting
+          has no key: give it one in <a href="#hotkeys">Hotkeys</a> to unmute.{/if}</span
+      >
     </div>
   {/if}
   {#if live?.game_audio_from && !live?.audio_problem}

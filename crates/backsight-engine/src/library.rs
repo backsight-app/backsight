@@ -39,6 +39,8 @@ pub struct LibraryItem {
     pub audio_tracks: Option<u32>,
     /// An image the WebView can show: a cached JPEG for videos, the file itself for screenshots.
     pub thumbnail: Option<PathBuf>,
+    /// A video with its captions file next to it (`clip.srt` for `clip.mp4`, ADR 0016).
+    pub captions: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -196,6 +198,7 @@ fn item(f: Found, c: &Cached, thumb: PathBuf) -> LibraryItem {
         video_codec: codec,
         audio_tracks: video.then_some(info.audio_tracks).filter(|_| c.info.is_some()),
         thumbnail,
+        captions: video && f.path.with_extension("srt").is_file(),
         ext: f.ext,
         path: f.path,
     }

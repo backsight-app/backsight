@@ -2,6 +2,17 @@
 
 All notable changes are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Changed
+
+- New default hotkeys, quicker to reach and clear of the NVIDIA, AMD, Discord and Xbox overlay keys: Alt+X saves a clip (Alt+Shift+X turns Instant Replay on or off), Alt+V starts or stops recording (Alt+Shift+V pauses), Alt+S takes a screenshot (Alt+Shift+S the window, Ctrl+Alt+S an area), Alt+T mutes the microphone and Alt+B adds a marker. The old defaults were NVIDIA's own keys, and with NVIDIA's overlay on, pressing them did nothing in Backsight. If you already use Backsight you keep your keys; when they clash with NVIDIA's, Home's "Give Backsight other keys" moves them to the new ones.
+
+### Added
+
+- A No key button beside every hotkey, to turn a key off (for example when another app keeps it). Home says plainly when an action has no key.
+- Captions: Backsight can write out what you say in each saved clip, as a .srt file next to it that video players and YouTube show as subtitles. It works on your PC and sends nothing anywhere, after a one-time download of about 61 MB from the Audio page. Off until you turn it on.
+
 ## 0.1.3 - 2026-11-18
 
 Versions are numbered 0.1.<build>; each one on the Releases page lists its own changes.

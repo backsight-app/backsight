@@ -44,6 +44,7 @@ function make(count: number): LibraryItem[] {
       video_codec: shot || missing ? null : rnd() < 0.75 ? "h264" : "hevc",
       audio_tracks: shot || missing ? null : 2,
       thumbnail: missing ? null : svg(hue, game),
+      captions: !shot && rnd() < 0.2,
     });
     t -= Math.floor((rnd() < 0.15 ? 14 * 3600_000 : 40 * 60_000) * (0.3 + rnd() * 1.4));
   }

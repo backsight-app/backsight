@@ -52,3 +52,12 @@ license = "MIT"
 path = "LICENSE"
 license = "MIT"
 checksum = "42c8695fbc468866d9756be99af0ba4e37d733f8daa3c8827c8d80b8bec1b2f9"
+
+# The crate is Unlicense and carries no license file; the whisper.cpp and ggml code it compiles
+# into Backsight is MIT.
+[whisper-rs-sys.clarify]
+license = "Unlicense AND MIT"
+[[whisper-rs-sys.clarify.files]]
+path = "whisper.cpp/LICENSE"
+license = "MIT"
+checksum = "e562a2ddfaf8280537795ac5ecd34e3012b6582a147ef69ba6a6a5c08c84757d"

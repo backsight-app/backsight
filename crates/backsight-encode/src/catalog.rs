@@ -19,6 +19,8 @@ pub struct Catalog {
     pub frame_rates: Vec<Choice>,
     /// What video capture records: the monitor or the game's window.
     pub capture_targets: Vec<Choice>,
+    /// Shape of saved clips: wide, vertical or both (ADR 0015).
+    pub clip_shapes: Vec<Choice>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -266,6 +268,7 @@ mod tests {
                 .iter()
                 .chain(&c.frame_rates)
                 .chain(&c.capture_targets)
+                .chain(&c.clip_shapes)
                 .map(|ch| ch.glossary.as_deref().unwrap_or("<none>")),
         );
         let options = all_options(c);
@@ -329,6 +332,7 @@ mod tests {
         assert!(c.resolutions.iter().any(|ch| ch.value.as_str() == Some(s.video.resolution.as_str())));
         assert!(c.frame_rates.iter().any(|ch| ch.value.as_integer() == Some(i64::from(s.video.fps))));
         assert!(c.capture_targets.iter().any(|ch| ch.value.as_str() == Some(s.video.capture_target.as_str())));
+        assert!(c.clip_shapes.iter().any(|ch| ch.value.as_str() == Some(s.replay.clip_shape.as_str())));
     }
 
     #[test]

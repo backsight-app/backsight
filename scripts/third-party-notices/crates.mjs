@@ -13,9 +13,10 @@ const handTexts = {
   "webview2-com-sys": "webview2-rs.txt",
   "webview2-com-macros": "webview2-rs.txt",
 };
-// Without a file, cargo-about prints the license's standard text. That is complete for these;
+// Without a file, cargo-about prints the license's standard text. That is complete for these (the
+// Unlicense names no one);
 // the others name a copyright holder, so a missing file needs a hand-supplied text.
-const standardText = new Set(["Apache-2.0", "MPL-2.0"]);
+const standardText = new Set(["Apache-2.0", "MPL-2.0", "Unlicense"]);
 
 const groups = []; // { title, text, crates }
 const byFile = new Map();

@@ -2,6 +2,7 @@
   import Icon from "../lib/components/Icon.svelte";
   import Kbd from "../lib/components/Kbd.svelte";
   import Row from "../lib/components/Row.svelte";
+  import Select from "../lib/components/Select.svelte";
   import Toggle from "../lib/components/Toggle.svelte";
   import { catalog, estimateKbps, formatDuration, megabytes } from "../lib/content";
   import { app } from "../lib/settings.svelte";
@@ -27,6 +28,9 @@
         oninput={(e) => (r.length_seconds = Number(e.currentTarget.value))}
       />
       <span class="value">{formatDuration(r.length_seconds)}</span>
+    </Row>
+    <Row term="clip-shape">
+      <Select name="clip-shape" label="Clip shape" value={r.clip_shape} choices={catalog.clipShapes} onchange={(x) => (r.clip_shape = x)} />
     </Row>
   </section>
 

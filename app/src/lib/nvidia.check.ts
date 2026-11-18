@@ -3,21 +3,26 @@
 import assert from "node:assert/strict";
 import { clashesFor, clashSignature, useOtherKeys } from "./nvidia.ts";
 
-const defaults = { "save-replay": "Alt+F10", screenshot: "Alt+F1", "toggle-mic": "Alt+M" };
-const alternatives = { "save-replay": "Ctrl+Shift+F10", screenshot: "Ctrl+Shift+F1" };
+const previous = { "save-replay": "Alt+F10", screenshot: "Alt+F1" };
+const defaults = { "save-replay": "Alt+X", screenshot: "Alt+S", "toggle-mic": "Alt+T" };
 const clash = (action: string, key: string) => ({ action, key, nvidia: "x" });
 
-// Untouched defaults: the whole other set moves, clashing or not.
-let keys: Record<string, string> = { ...defaults };
-let r = useOtherKeys(keys, [clash("save-replay", "Alt+F10")], defaults, alternatives);
+// Still the previous default set: all of it moves to today's defaults, clashing or not.
+let keys: Record<string, string> = { ...previous, "toggle-mic": "Alt+M" };
+let r = useOtherKeys(keys, [clash("save-replay", "Alt+F10")], defaults, previous);
 assert.deepEqual(r, { moved: ["save-replay", "screenshot"], stuck: [] });
-assert.deepEqual(keys, { "save-replay": "Ctrl+Shift+F10", screenshot: "Ctrl+Shift+F1", "toggle-mic": "Alt+M" });
+assert.deepEqual(keys, { "save-replay": "Alt+X", screenshot: "Alt+S", "toggle-mic": "Alt+M" });
 
 // Keys set by hand: only the clashing one moves, and never onto a key in use.
-keys = { ...defaults, "toggle-mic": "Ctrl+Shift+F1" };
-r = useOtherKeys(keys, [clash("save-replay", "Alt+F10"), clash("screenshot", "Alt+F1")], defaults, alternatives);
+keys = { ...previous, "toggle-mic": "Alt+S", "add-marker": "Alt+F7" };
+keys["save-replay"] = "Alt+F9";
+r = useOtherKeys(keys, [clash("save-replay", "Alt+F9"), clash("screenshot", "Alt+F1")], defaults, previous);
 assert.deepEqual(r, { moved: ["save-replay"], stuck: ["screenshot"] });
+assert.equal(keys["save-replay"], "Alt+X");
 assert.equal(keys.screenshot, "Alt+F1");
+// A cleared key ("no key") never clashes.
+assert.deepEqual(clashesFor({ "save-replay": "" }, [{ key: "Alt+F10", nvidia: "x" }]), []);
+
 // Clashes follow the live hotkeys, matching keys the way the engine does (case, modifier order).
 const overlay = [
   { key: "Alt+F10", nvidia: "saves NVIDIA's Instant Replay" },
