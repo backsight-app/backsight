@@ -1,7 +1,7 @@
 <script lang="ts" module>
   import { invoke, isTauri } from "@tauri-apps/api/core";
 
-  // While a box listens, the live hotkeys ignore presses (Alt+V would start a recording). Turned
+  // While a box listens, the live hotkeys ignore presses (Alt+R would start a recording). Turned
   // back on a moment later: the hotkeys see a press before this page does.
   let resume: ReturnType<typeof setTimeout> | undefined;
   function pauseHotkeys(on: boolean) {

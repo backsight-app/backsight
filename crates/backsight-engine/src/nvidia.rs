@@ -250,11 +250,22 @@ mod tests {
     }
 
     #[test]
-    fn default_keys_clear_every_clash_with_nvidia_defaults() {
-        // The clash card moves keys to these defaults, so they must be clear of NVIDIA's.
+    fn defaults_clash_only_on_alt_r_and_the_fallback_keys_clear_it() {
+        // Alt+R records in Backsight and opens NVIDIA's performance overlay; the rest are clear.
         let s = Settings::default();
-        assert!(find_clashes(&s, &nvidia_defaults()).is_empty(), "Alt+R, Alt+Z and the Alt+F keys stay NVIDIA's");
+        let found: Vec<_> = find_clashes(&s, &nvidia_defaults()).iter().map(|c| (c.action, c.key.clone())).collect();
+        assert_eq!(found, [(Action::ToggleRecording, "Alt+R".to_owned())]);
         assert!(find_clashes(&s, &saved_keys(&nvidia_app_defaults())).is_empty());
+
+        // The clash card moves a key whose default is NVIDIA's (or taken) to its fallback key.
+        let fallback: BTreeMap<Action, String> =
+            serde_json::from_str(include_str!("../../../content/fallback-hotkeys.json")).unwrap();
+        let mut s = Settings::default();
+        s.hotkeys.extend(fallback);
+        assert!(find_clashes(&s, &nvidia_defaults()).is_empty());
+        assert!(find_clashes(&s, &saved_keys(&nvidia_app_defaults())).is_empty());
+        let parsed = s.parsed_hotkeys().expect("fallback keys parse");
+        assert!(backsight_config::conflicts(&parsed).is_empty(), "fallback keys don't clash with the defaults");
     }
 
     #[test]

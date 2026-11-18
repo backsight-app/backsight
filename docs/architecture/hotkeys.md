@@ -21,19 +21,19 @@ Canonical strings such as `Ctrl+Alt+F10` or `Mouse4`, in the order Ctrl, Alt, Sh
 
 | Action | Default | Why |
 | --- | --- | --- |
-| Save Instant Replay | Alt+X | Next to the thumb on Alt; Alt+C is Discord's clip key |
-| Turn Instant Replay on or off | Alt+Shift+X | Same key with Shift |
-| Start or stop recording | Alt+V | V for video; Alt+R is NVIDIA's and AMD's overlay key |
-| Pause or resume recording | Alt+Shift+V | Same key with Shift |
+| Save Instant Replay | Alt+C | C for clip; also Discord's clip key |
+| Turn Instant Replay on or off | Alt+Shift+C | Same key with Shift |
+| Start or stop recording | Alt+R | R for record; also NVIDIA's and AMD's performance overlay key |
+| Pause or resume recording | Alt+Shift+R | Same key with Shift |
 | Screenshot: whole screen | Alt+S | S for shot |
 | Screenshot: active window | Alt+Shift+S | Same key with Shift |
 | Screenshot: pick an area | Ctrl+Alt+S | Same key with Ctrl |
 | Mute or unmute mic | Alt+T | T for talk; Ctrl+Alt+M and Ctrl+Shift+M are NVIDIA's and Discord's |
 | Push to talk | (no key) | Usually a mouse button; let the user choose |
 | Add a marker | Alt+B | B for bookmark |
-| Open Backsight | Alt+Shift+C | Avoids Alt+Z, the NVIDIA overlay key |
+| Open Backsight | Alt+Shift+O | O for open; avoids Alt+Z, the NVIDIA overlay key |
 
-The first releases used NVIDIA's own keys as defaults (Alt+F10, Alt+F9, Alt+F1 and neighbours), and with NVIDIA's overlay on, its keys won. Existing settings keep their keys; `content/previous-default-hotkeys.json` lists the old set, and Home's NVIDIA clash card ("Give Backsight other keys") moves a clashing key to today's default, or the whole old set when none was changed. Why these keys and what else was checked: [platform-notes.md, "Default hotkeys"](../reference/platform-notes.md#default-hotkeys).
+The first releases used NVIDIA's own keys as defaults (Alt+F10, Alt+F9, Alt+F1 and neighbours), and with NVIDIA's overlay on, its keys won. Existing settings keep their keys; `content/previous-default-hotkeys.json` lists the old set, and Home's NVIDIA clash card ("Give Backsight other keys") moves a clashing key to today's default, or the whole old set when none was changed. When that default is itself one of NVIDIA's keys or already in use (Alt+R is NVIDIA's performance overlay key), the key in `content/fallback-hotkeys.json` is used instead (Alt+V record, Alt+Shift+V pause, Alt+X save, Alt+Shift+X replay on/off: the previous defaults). Settings that already hold that previous Alt+X set keep it; nothing is migrated. Why these keys and what else was checked: [platform-notes.md, "Default hotkeys"](../reference/platform-notes.md#default-hotkeys).
 
 Every action can have no key (an empty string): the Hotkeys page has a No key button beside each box, and Backspace while a box listens does the same. An empty key is saved as `""`, loads as no key (not the default), and never counts as a clash.
 

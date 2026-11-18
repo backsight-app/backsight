@@ -6,7 +6,8 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ### Changed
 
-- New default hotkeys, quicker to reach and clear of the NVIDIA, AMD, Discord and Xbox overlay keys: Alt+X saves a clip (Alt+Shift+X turns Instant Replay on or off), Alt+V starts or stops recording (Alt+Shift+V pauses), Alt+S takes a screenshot (Alt+Shift+S the window, Ctrl+Alt+S an area), Alt+T mutes the microphone and Alt+B adds a marker. The old defaults were NVIDIA's own keys, and with NVIDIA's overlay on, pressing them did nothing in Backsight. If you already use Backsight you keep your keys; when they clash with NVIDIA's, Home's "Give Backsight other keys" moves them to the new ones.
+- New default hotkeys, easy to reach and remember: Alt+C saves a clip (Alt+Shift+C turns Instant Replay on or off), Alt+R starts or stops recording (Alt+Shift+R pauses), Alt+S takes a screenshot (Alt+Shift+S the window, Ctrl+Alt+S an area), Alt+T mutes the microphone, Alt+B adds a marker and Alt+Shift+O opens Backsight. The first defaults were NVIDIA's own keys, and with NVIDIA's overlay on, pressing them did nothing in Backsight. If you already use Backsight you keep your keys, including the Alt+X and Alt+V keys of the previous build; when they clash with NVIDIA's, Home's "Give Backsight other keys" moves them to the new ones.
+- Alt+R is also NVIDIA's (and AMD's) key for its performance overlay, so with NVIDIA's overlay on, one press would start a recording and show NVIDIA's stats. Home points this out, and "Give Backsight other keys" moves recording to Alt+V. Alt+C is also Discord's clip key; if you use Discord Clips, change one of them on the Hotkeys page.
 
 ### Added
 

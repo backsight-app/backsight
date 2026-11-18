@@ -48,17 +48,17 @@
     "copy_to_clipboard": true
   },
   "hotkeys": {
-    "save-replay": "Alt+X",
-    "toggle-replay": "Alt+Shift+X",
-    "toggle-recording": "Alt+V",
-    "pause-recording": "Alt+Shift+V",
+    "save-replay": "Alt+C",
+    "toggle-replay": "Alt+Shift+C",
+    "toggle-recording": "Alt+R",
+    "pause-recording": "Alt+Shift+R",
     "screenshot": "Alt+S",
     "screenshot-window": "Alt+Shift+S",
     "screenshot-region": "Ctrl+Alt+S",
     "toggle-mic": "Alt+T",
     "push-to-talk": "",
     "add-marker": "Alt+B",
-    "open-app": "Alt+Shift+C"
+    "open-app": "Alt+Shift+O"
   },
   "setup": {
     "done": false

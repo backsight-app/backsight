@@ -20,8 +20,8 @@ Think of it as a lighter, simpler NVIDIA ShadowPlay. Every setting comes with a 
 
 ## What it does
 
-- **Instant Replay.** The last 2 minutes are always ready. Press **Alt+X** to save them as a clip.
-- **Recording.** Press **Alt+V** to start and stop. You can pause, split long recordings into parts and add markers you can jump to later.
+- **Instant Replay.** The last 2 minutes are always ready. Press **Alt+C** to save them as a clip.
+- **Recording.** Press **Alt+R** to start and stop. You can pause, split long recordings into parts and add markers you can jump to later.
 - **Screenshots.** The whole screen, just one window, or an area you drag. They are also copied, so you can paste them straight into a chat.
 - **Sound.** Your game and your microphone, with mute and push-to-talk. You can also record only the game's sound, or keep your voice on its own track.
 - **The whole screen or just the game.** Record your whole monitor, or only the game's window so chats and pop-ups stay out of your clips.
@@ -43,20 +43,20 @@ Backsight starts with Instant Replay on and records your main screen at 1080p, 6
 
 | Key | What it does |
 | --- | --- |
-| **Alt+X** | Save the last 2 minutes as a clip |
-| **Alt+Shift+X** | Turn Instant Replay on or off |
-| **Alt+V** | Start or stop recording (V for video) |
-| **Alt+Shift+V** | Pause or resume a recording |
+| **Alt+C** | Save the last 2 minutes as a clip (C for clip) |
+| **Alt+Shift+C** | Turn Instant Replay on or off |
+| **Alt+R** | Start or stop recording (R for record) |
+| **Alt+Shift+R** | Pause or resume a recording |
 | **Alt+B** | Add a marker (a bookmark) to a recording |
 | **Alt+T** | Mute or unmute your microphone (T for talk) |
 | **Alt+S** | Screenshot of the whole screen |
 | **Alt+Shift+S** | Screenshot of the window in front |
 | **Ctrl+Alt+S** | Screenshot of an area you drag |
-| **Alt+Shift+C** | Open Backsight |
+| **Alt+Shift+O** | Open Backsight |
 
 You can change any key on the Hotkeys page, or pick **No key** to turn one off.
 
-You can change any of these on the Hotkeys page, including mouse side buttons. If the NVIDIA app already uses a key, setup offers different ones and Home shows which keys you have.
+You can change any of these on the Hotkeys page, including mouse side buttons. If the NVIDIA app already uses a key, setup offers different ones and Home shows which keys you have. Alt+R also opens the NVIDIA and AMD performance overlays, and Alt+C saves a Discord clip: for NVIDIA, Home's "Give Backsight other keys" button moves recording to Alt+V; for the others, pick a new key on the Hotkeys page.
 
 Clips go to **Videos\Backsight** and screenshots to **Pictures\Backsight**. You can pick other folders in the settings.
 

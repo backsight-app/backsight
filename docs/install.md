@@ -23,11 +23,11 @@ Backsight checks your graphics card for a few seconds. You can start right away.
 
 When you close the window, Backsight keeps running. Its icon is near the clock (click the ^ arrow if you don't see it). Right-click the icon to quit.
 
-- Alt+X: save a clip of the last 2 minutes
-- Alt+V: start or stop a recording
+- Alt+C: save a clip of the last 2 minutes
+- Alt+R: start or stop a recording
 - Alt+S: screenshot
 
-Backsight's Home page shows your keys. You can change them on the Hotkeys page, or pick No key to turn one off. If you used Backsight before these keys came in, you keep your old keys; if the NVIDIA app uses the same ones, Home offers to give Backsight the new ones.
+Backsight's Home page shows your keys. You can change them on the Hotkeys page, or pick No key to turn one off. If you used Backsight before these keys came in, you keep your old keys; if the NVIDIA app uses the same ones, Home offers to give Backsight other keys. Alt+R is also the NVIDIA app's performance overlay key, so with NVIDIA's overlay on, Home offers Alt+V for recording instead.
 
 When a clip is saved you hear a short sound and see "Clip saved" in a corner of the screen. Watch it in Backsight's Library.
 

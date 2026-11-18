@@ -1,10 +1,12 @@
 <script lang="ts">
   // The NVIDIA overlay shares some of Backsight's keys: says which, and offers other keys (Setup and Home).
   import defaults from "../../../../content/default-settings.json";
+  import fallback from "../../../../content/fallback-hotkeys.json";
   import previous from "../../../../content/previous-default-hotkeys.json";
   import { ACTIONS } from "../hotkeys";
-  import { useOtherKeys, type Clash } from "../nvidia";
+  import { useOtherKeys, type Clash, type OverlayKey } from "../nvidia";
   import { app } from "../settings.svelte";
+  import { invoke } from "../uiwatch";
   import Kbd from "./Kbd.svelte";
   import Term from "./Term.svelte";
 
@@ -13,8 +15,11 @@
   let unswapped = $state<string[]>([]);
 
   const label = (action: string) => ACTIONS.find((a) => a.id === action)?.label ?? action;
-  function swap() {
-    const r = useOtherKeys(app.settings.hotkeys as Record<string, string>, clashes, defaults.hotkeys, previous);
+  async function swap() {
+    // NVIDIA's own keys, so a default that is one of them (Alt+R) isn't picked.
+    const overlay = await invoke<OverlayKey[]>("nvidia_overlay_keys").catch(() => clashes);
+    const keys = app.settings.hotkeys as Record<string, string>;
+    const r = useOtherKeys(keys, clashes, defaults.hotkeys, previous, fallback, overlay);
     swapped = r.moved;
     unswapped = r.stuck;
   }

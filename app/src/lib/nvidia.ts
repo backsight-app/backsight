@@ -30,23 +30,29 @@ export const clashSignature = (clashes: Clash[]) =>
 
 /**
  * Keys still exactly the previous default set (which NVIDIA's overlay shared) all move to today's
- * defaults, so they stay grouped. Otherwise only the clashing ones move, and only to a default key
- * nothing else uses. Changes `keys`; returns the actions moved and the clashing ones that couldn't be.
+ * defaults, so they stay grouped. Otherwise only the clashing ones move. A key moves to its default,
+ * or to its `fallback` when the default is itself an NVIDIA key (Alt+R) or something else uses it.
+ * Changes `keys`; returns the actions moved and the clashing ones that couldn't be.
  */
 export function useOtherKeys(
   keys: Record<string, string>,
   clashes: Clash[],
   defaults: Record<string, string>,
   previous: Record<string, string>,
+  fallback: Record<string, string>,
+  overlay: OverlayKey[],
 ): { moved: string[]; stuck: string[] } {
   const untouched = Object.entries(previous).every(([a, k]) => keys[a] === k);
   const moving = untouched ? Object.keys(previous) : clashes.map((c) => c.action);
   const moved: string[] = [];
   const stuck: string[] = [];
   for (const action of moving) {
-    const key = defaults[action];
-    const taken = Object.entries(keys).some(([a, k]) => a !== action && k === key);
-    if (key && !taken) {
+    const free = (key?: string) =>
+      !!key &&
+      !overlay.some((o) => same(o.key) === same(key)) &&
+      !Object.entries(keys).some(([a, k]) => a !== action && k && same(k) === same(key));
+    const key = [defaults[action], fallback[action]].find(free);
+    if (key) {
       keys[action] = key;
       moved.push(action);
     } else stuck.push(action);
