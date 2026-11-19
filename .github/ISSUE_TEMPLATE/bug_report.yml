@@ -18,7 +18,7 @@ body:
     attributes:
       label: Backsight version
       description: Shown under About on the General page.
-      placeholder: "0.1.8"
+      placeholder: "0.1.13"
     validations:
       required: true
   - type: input

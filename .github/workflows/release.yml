@@ -60,7 +60,15 @@ jobs:
           git update-index --skip-worktree $Conf Cargo.toml Cargo.lock
           $Previous = git describe --tags --match 'v*' --abbrev=0 2>$null
           $Range = if ($Previous) { "$Previous..HEAD" } else { 'HEAD' }
-          $Notes = (git log $Range --no-merges --pretty='- %s') -join "`n"
+          # Notes: the top CHANGELOG.md section (### Major / ### Minor). A section whose version is
+          # already tagged is an old one (the push didn't update the changelog): list commits instead.
+          $Top = [regex]::Match((Get-Content CHANGELOG.md -Raw), '(?ms)^## ([^\r\n]+)\r?\n(.*?)(?=^## |\z)')
+          $TopVersion = [regex]::Match($Top.Groups[1].Value, '^\d+\.\d+\.\d+').Value
+          # Relative links don't work on the Releases page.
+          $Notes = $Top.Groups[2].Value.Trim() -replace '\]\((?!https?:)', "](https://github.com/${{ github.repository }}/blob/main/"
+          if (-not $Notes -or ($TopVersion -and (git tag -l "v$TopVersion"))) {
+            $Notes = (git log $Range --no-merges --pretty='- %s') -join "`n"
+          }
           "version=$Version" >> $env:GITHUB_OUTPUT
           "notes<<EOF`n$Notes`nEOF" >> $env:GITHUB_OUTPUT
       - uses: tauri-apps/tauri-action@v0

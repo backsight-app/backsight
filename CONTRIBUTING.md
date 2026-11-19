@@ -9,6 +9,7 @@ Setup and commands are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 - New settings have a glossary entry written to [brand-and-voice.md](docs/design/brand-and-voice.md)
 - UI changes include an updated screenshot if they change what the README shows
 - Hard-to-reverse decisions have an [ADR](docs/adr/README.md)
+- User-visible changes add a short line under `### Major` or `### Minor` in the top section of [CHANGELOG.md](CHANGELOG.md); that section becomes the release notes
 
 ## Pull requests
 
