@@ -205,20 +205,10 @@ pub fn monitor_origin(monitor: HMONITOR) -> Result<(i32, i32)> {
 /// The focused top-level window to screenshot, or `None` when the whole monitor fits better: no
 /// focus, the desktop or taskbar, a minimized window, or a Backsight window.
 pub fn foreground_window() -> Option<HWND> {
-    use windows::Win32::UI::WindowsAndMessaging::{
-        GetClassNameW, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
-    };
-    let mut class = [0u16; 64];
-    let mut pid = 0;
-    // SAFETY: plain window queries; `class` and `pid` are valid locals and a stale handle only fails them.
-    let (window, len, usable) = unsafe {
-        let window = GetForegroundWindow();
-        let len = GetClassNameW(window, &mut class);
-        GetWindowThreadProcessId(window, Some(&mut pid));
-        (window, len, IsWindowVisible(window).as_bool() && !IsIconic(window).as_bool())
-    };
-    let class = String::from_utf16_lossy(&class[..len.max(0) as usize]);
-    (usable && len > 0 && !is_shell_class(&class) && pid != std::process::id()).then_some(window)
+    match super::foreground::focus(None)? {
+        super::foreground::Focus::Window { window, .. } => Some(HWND(window as _)),
+        super::foreground::Focus::Shell => None,
+    }
 }
 
 /// Explorer's desktop (`Progman`, `WorkerW`) and taskbars: capturing them as a window is useless.
@@ -235,17 +225,28 @@ pub fn exclude_from_capture(hwnd: isize) -> windows::core::Result<()> {
     unsafe { SetWindowDisplayAffinity(HWND(hwnd as _), WDA_EXCLUDEFROMCAPTURE) }
 }
 
-/// Copies a captured frame to the CPU as tightly packed, top-down, opaque BGRA.
-pub fn read_pixels(gpu: &Gpu, frame: Frame<'_>) -> windows::core::Result<(Vec<u8>, u32, u32)> {
-    use windows::Win32::Graphics::Direct3D11::*;
+/// Copies a captured frame to the CPU as tightly packed, top-down, opaque BGRA, or opaque scRGB
+/// FP16 when `hdr` (from [`Capture::hdr_monitor`] or [`Capture::hdr_window`]).
+pub fn read_pixels(gpu: &Gpu, frame: Frame<'_>, hdr: bool) -> windows::core::Result<(Vec<u8>, u32, u32)> {
+    use windows::Win32::{
+        Foundation::E_INVALIDARG,
+        Graphics::{Direct3D11::*, Dxgi::Common::*},
+    };
     let (width, height) = frame.size;
+    let (format, bpp) = if hdr { (DXGI_FORMAT_R16G16B16A16_FLOAT, 8) } else { (DXGI_FORMAT_B8G8R8A8_UNORM, 4) };
+    let mut source = D3D11_TEXTURE2D_DESC::default();
+    // SAFETY: the frame's texture is live and the descriptor is a writable local.
+    unsafe { frame.texture.GetDesc(&mut source) };
+    if width == 0 || height == 0 || width > source.Width || height > source.Height || source.Format != format {
+        return Err(Error::new(E_INVALIDARG, "Unexpected capture texture size or format."));
+    }
     let desc = D3D11_TEXTURE2D_DESC {
         Width: width,
         Height: height,
         MipLevels: 1,
         ArraySize: 1,
-        Format: windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM,
-        SampleDesc: windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+        Format: format,
+        SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
         Usage: D3D11_USAGE_STAGING,
         CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
         ..Default::default()
@@ -257,9 +258,10 @@ pub fn read_pixels(gpu: &Gpu, frame: Frame<'_>) -> windows::core::Result<(Vec<u8
     let texture = texture.expect("texture created");
     let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
     let area = D3D11_BOX { left: 0, top: 0, front: 0, right: width, bottom: height, back: 1 };
-    let row = width as usize * 4;
+    let row = width as usize * bpp;
     let mut pixels = vec![0; row * height as usize];
-    // SAFETY: same-device BGRA textures; area fits the content, and Map waits for the copy.
+    // SAFETY: same-device textures of one format (checked above); area fits the content, and Map
+    // waits for the copy.
     unsafe {
         gpu.context.CopySubresourceRegion(&texture, 0, 0, 0, 0, frame.texture, 0, Some(&area));
         gpu.context.Map(&texture, 0, D3D11_MAP_READ, 0, Some(&mut mapped))?;
@@ -273,8 +275,14 @@ pub fn read_pixels(gpu: &Gpu, frame: Frame<'_>) -> windows::core::Result<(Vec<u8
         gpu.context.Unmap(&texture, 0);
     }
     // The desktop image is opaque even when its surface's unused alpha bytes are zero.
-    for pixel in pixels.as_chunks_mut::<4>().0 {
-        pixel[3] = 255;
+    if hdr {
+        for pixel in pixels.as_chunks_mut::<8>().0 {
+            pixel[6..8].copy_from_slice(&0x3c00u16.to_le_bytes()); // half-float 1.0
+        }
+    } else {
+        for pixel in pixels.as_chunks_mut::<4>().0 {
+            pixel[3] = 255;
+        }
     }
     Ok((pixels, width, height))
 }

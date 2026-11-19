@@ -8,7 +8,7 @@
   import { feed } from "../lib/feed.svelte";
   import { formatClock, formatTime, isVertical, todayStats, type LibraryItem } from "../lib/library";
   import { isTauri } from "@tauri-apps/api/core";
-  import { loadScan } from "../lib/setup";
+  import { installUpdate, loadScan } from "../lib/setup";
   import { invoke } from "../lib/uiwatch";
   import { onMount, untrack } from "svelte";
   import { app, type ReplayStatus } from "../lib/settings.svelte";
@@ -73,8 +73,14 @@
   });
   // Other apps share some hotkeys. Their keys are read each time Home opens (off the UI thread in
   // Rust), once the saved hotkeys are in (the probe checks those); the clash follows the hotkeys as
-  // they change, Setup's swap included. After "Give Backsight other keys" the new keys are probed.
+  // they change, Setup's swap included. After "Give Backsight other keys" the card stays up to say how it went.
   let scan = $state<Scan>({ apps: [], taken: [] });
+  let swapped = $state(false);
+  // A failed check keeps the apps found before.
+  function onswap(r: Scan) {
+    if (!r.failed) scan = r;
+    swapped = true;
+  }
   const rescan = () => loadScan($state.snapshot(s)).then((r) => (scan = r));
   let scanned = false;
   $effect(() => {
@@ -98,6 +104,7 @@
     }
   }
   function dismissClashes() {
+    swapped = false;
     dismissed = clashSignature(clashes);
     try {
       localStorage.setItem(DISMISSED, dismissed);
@@ -130,18 +137,10 @@
   async function restartToUpdate() {
     installing = true;
     installError = "";
-    const { listen } = await import("@tauri-apps/api/event");
-    const unlisten = await listen<{ done: number; total: number | null }>("update-progress", (e) => {
-      if (e.payload.total) percent = Math.floor((100 * e.payload.done) / e.payload.total);
-    });
-    try {
-      await invoke("install_update");
-    } catch (e) {
+    await installUpdate((p) => (percent = p)).catch((e) => {
       installError = String(e);
       installing = false;
-    } finally {
-      unlisten();
-    }
+    });
   }
 
   // Buttons do what their keys do; a failure shows in place of the tip under Save clip.
@@ -338,10 +337,10 @@
       <button type="button" class="btn" onclick={dismissCrash}>Dismiss</button>
     </div>
   {/if}
-  {#if clashes.length && clashSignature(clashes) !== dismissed}
+  {#if swapped || (clashes.length && clashSignature(clashes) !== dismissed)}
     <div class="notice" role="status">
       <Icon name="alert" size={16} />
-      <div class="clashes"><OverlayClashes {clashes} onswap={rescan} /></div>
+      <div class="clashes"><OverlayClashes {clashes} {onswap} /></div>
       <button type="button" class="btn" onclick={dismissClashes}>Dismiss</button>
     </div>
   {/if}

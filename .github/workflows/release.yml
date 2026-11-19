@@ -23,23 +23,21 @@ jobs:
       !github.event.repository.private
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          persist-credentials: false
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v7
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci
         working-directory: app
-      - uses: actions/cache@v6
-        with:
-          path: third_party/ffmpeg
-          key: ffmpeg-${{ hashFiles('scripts/fetch-ffmpeg.ps1') }}
+      # No cache here: a release downloads FFmpeg and checks its SHA-256 every time.
       - run: ./scripts/fetch-ffmpeg.ps1
         shell: pwsh
         env:
@@ -49,8 +47,15 @@ jobs:
       - name: Version and notes
         id: version
         shell: pwsh
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO: ${{ github.repository }}
         run: |
-          $Version = "0.1.${{ github.run_number }}"
+          # Only the newest main becomes a release: re-running an old CI run must not roll everyone back.
+          git fetch --no-tags origin main
+          if ((git rev-parse FETCH_HEAD) -ne $env:HEAD_SHA) { throw "$env:HEAD_SHA is not the newest main; not releasing it." }
+          $Version = "0.1.$env:RUN_NUMBER"
           $Conf = 'app/src-tauri/tauri.conf.json'
           # The signed update files (.sig, latest.json) only here: local builds have no key.
           (Get-Content $Conf -Raw) -replace '"version": "[^"]*"', "`"version`": `"$Version`"" -replace '"bundle": \{', '"bundle": { "createUpdaterArtifacts": true,' | Set-Content $Conf -NoNewline
@@ -60,18 +65,21 @@ jobs:
           git update-index --skip-worktree $Conf Cargo.toml Cargo.lock
           $Previous = git describe --tags --match 'v*' --abbrev=0 2>$null
           $Range = if ($Previous) { "$Previous..HEAD" } else { 'HEAD' }
-          # Notes: the top CHANGELOG.md section (### Major / ### Minor). A section whose version is
-          # already tagged is an old one (the push didn't update the changelog): list commits instead.
+          # Notes: the top CHANGELOG.md section (### Major / ### Minor), but only if CHANGELOG.md changed
+          # since the last release; otherwise the section is an old one, so list commits instead.
           $Top = [regex]::Match((Get-Content CHANGELOG.md -Raw), '(?ms)^## ([^\r\n]+)\r?\n(.*?)(?=^## |\z)')
-          $TopVersion = [regex]::Match($Top.Groups[1].Value, '^\d+\.\d+\.\d+').Value
           # Relative links don't work on the Releases page.
-          $Notes = $Top.Groups[2].Value.Trim() -replace '\]\((?!https?:)', "](https://github.com/${{ github.repository }}/blob/main/"
-          if (-not $Notes -or ($TopVersion -and (git tag -l "v$TopVersion"))) {
+          $Notes = $Top.Groups[2].Value.Trim() -replace '\]\((?!https?:)', "](https://github.com/$env:REPO/blob/main/"
+          $Changed = $true
+          if ($Previous) { git diff --quiet $Previous HEAD -- CHANGELOG.md; $Changed = $LASTEXITCODE -ne 0 }
+          if (-not $Notes -or -not $Changed) {
             $Notes = (git log $Range --no-merges --pretty='- %s') -join "`n"
           }
+          $global:LASTEXITCODE = 0  # git diff's 1 means "changed", not a failure of this step
           "version=$Version" >> $env:GITHUB_OUTPUT
-          "notes<<EOF`n$Notes`nEOF" >> $env:GITHUB_OUTPUT
-      - uses: tauri-apps/tauri-action@v0
+          $End = "N$([guid]::NewGuid().ToString('N'))"
+          "notes<<$End`n$Notes`n$End" >> $env:GITHUB_OUTPUT
+      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -88,6 +96,7 @@ jobs:
           # A draft until every file is up: latest.json must never point at a half-uploaded release.
           releaseDraft: true
           prerelease: false
-      - run: gh release edit v${{ steps.version.outputs.version }} --draft=false --latest
+      - run: gh release edit "v$env:VERSION" --draft=false --latest
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}

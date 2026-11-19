@@ -8,6 +8,7 @@
   import Row from "../lib/components/Row.svelte";
   import Toggle from "../lib/components/Toggle.svelte";
   import { app } from "../lib/settings.svelte";
+  import { installUpdate as install } from "../lib/setup";
 
   const g = $derived(app.settings.general);
 
@@ -53,18 +54,10 @@
     updateState = "installing";
     updateError = "";
     percent = null;
-    const { listen } = await import("@tauri-apps/api/event");
-    const unlisten = await listen<{ done: number; total: number | null }>("update-progress", (e) => {
-      if (e.payload.total) percent = Math.floor((100 * e.payload.done) / e.payload.total);
-    });
-    try {
-      await invoke("install_update");
-    } catch (e) {
+    await install((p) => (percent = p)).catch((e) => {
       updateError = String(e);
       updateState = "idle";
-    } finally {
-      unlisten();
-    }
+    });
   }
 
   // Leaving the page keeps the spots too.

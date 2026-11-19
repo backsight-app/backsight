@@ -1,5 +1,5 @@
 //! Other apps' hotkeys: which overlay, chat, recording and screenshot apps this PC has, what keys
-//! they use, and which of Backsight's keys clash with them. Read only: Backsight never changes
+//! they use, and which of Backsight's keys another program holds (the UI matches the rest). Read only: Backsight never changes
 //! another app's settings, never opens another process, and never hooks or sends keys. See
 //! platform-notes.md, "Other apps' hotkeys", and ADR 0017.
 //!
@@ -107,17 +107,6 @@ pub struct Taken {
     pub key: String,
 }
 
-/// A Backsight key that a detected app also uses.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct Clash {
-    pub action: Action,
-    pub key: String,
-    pub app: String,
-    pub app_id: String,
-    pub does: String,
-    pub passes: Passes,
-}
-
 /// One app in `content/overlays.json`.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -180,44 +169,8 @@ fn explained(apps: &[App], key: &str) -> bool {
         .any(|a| a.passes != Passes::Both && (a.running || !has_process(&a.id)) && a.keys.iter().any(|k| k.key == key))
 }
 
-/// Backsight keys that a detected app also uses, then keys another program holds (app id
-/// `taken`). Scans like [`scan`].
-pub fn clashes(settings: &Settings) -> Vec<Clash> {
-    let scan = scan(settings);
-    let mut out = find_clashes(settings, &scan.apps);
-    out.extend(scan.taken.into_iter().map(|t| Clash {
-        action: t.action,
-        key: t.key,
-        app: "another program".into(),
-        app_id: "taken".into(),
-        does: String::new(),
-        passes: Passes::Hidden,
-    }));
-    out
-}
-
 fn bound(settings: &Settings) -> impl Iterator<Item = (Action, Hotkey)> + '_ {
     settings.hotkeys.iter().filter_map(|(action, combo)| Some((*action, combo.parse().ok()?)))
-}
-
-fn find_clashes(settings: &Settings, apps: &[App]) -> Vec<Clash> {
-    let mut out = Vec::new();
-    for (action, hk) in bound(settings) {
-        let key = hk.to_string();
-        for app in apps {
-            for k in app.keys.iter().filter(|k| k.key == key) {
-                out.push(Clash {
-                    action,
-                    key: key.clone(),
-                    app: app.name.clone(),
-                    app_id: app.id.clone(),
-                    does: k.does.clone(),
-                    passes: app.passes,
-                });
-            }
-        }
-    }
-    out
 }
 
 fn apps() -> Vec<App> {
@@ -488,6 +441,38 @@ fn subkeys(root: HKEY, path: &str) -> Vec<String> {
 mod tests {
     use super::*;
 
+    /// A Backsight key that a detected app also uses. The UI finds these itself (`clashesFor` in
+    /// app/src/lib/overlays.ts); this copy tests the app list.
+    #[derive(Debug, PartialEq)]
+    struct Clash {
+        action: Action,
+        key: String,
+        app: String,
+        app_id: String,
+        does: String,
+        passes: Passes,
+    }
+
+    fn find_clashes(settings: &Settings, apps: &[App]) -> Vec<Clash> {
+        let mut out = Vec::new();
+        for (action, hk) in bound(settings) {
+            let key = hk.to_string();
+            for app in apps {
+                for k in app.keys.iter().filter(|k| k.key == key) {
+                    out.push(Clash {
+                        action,
+                        key: key.clone(),
+                        app: app.name.clone(),
+                        app_id: app.id.clone(),
+                        does: k.does.clone(),
+                        passes: app.passes,
+                    });
+                }
+            }
+        }
+        out
+    }
+
     fn entry(id: &str) -> &'static Entry {
         entries().iter().find(|e| e.id == id).unwrap()
     }
@@ -579,14 +564,21 @@ mod tests {
 
     #[test]
     fn the_ui_gets_plain_names() {
-        let mut s = Settings::default();
-        s.hotkeys.values_mut().for_each(String::clear);
-        s.hotkeys.insert(Action::ScreenshotRegion, "Ctrl+Alt+S".into());
-        let clash = serde_json::to_value(&find_clashes(&s, &all_defaults())[0]).unwrap();
-        assert_eq!(clash["action"], "screenshot-region");
-        assert_eq!(clash["key"], "Ctrl+Alt+S");
-        assert_eq!(clash["app_id"], "bandicam");
-        assert_eq!(clash["passes"], "unknown");
+        // The shapes `Scan` has in app/src/lib/overlays.ts.
+        let taken = Taken { action: Action::ScreenshotRegion, key: "Ctrl+Alt+S".into() };
+        let taken = serde_json::to_value(Scan { apps: vec![], taken: vec![taken] }).unwrap()["taken"][0].clone();
+        assert_eq!(taken, serde_json::json!({ "action": "screenshot-region", "key": "Ctrl+Alt+S" }));
+        let bandicam = serde_json::to_value(app(entry("bandicam"), true, None)).unwrap();
+        assert_eq!(bandicam["id"], "bandicam");
+        assert_eq!(bandicam["running"], true);
+        assert_eq!(bandicam["saved"], false);
+        assert_eq!(bandicam["passes"], "unknown");
+        assert_eq!(bandicam["scope"], "always");
+        assert!(
+            bandicam["name"].is_string()
+                && bandicam["keys"][0]["key"].is_string()
+                && bandicam["keys"][0]["does"].is_string()
+        );
         assert_eq!(serde_json::to_value(app(entry("steam"), false, None)).unwrap()["scope"], "in-game");
     }
 
@@ -690,6 +682,5 @@ mod tests {
             println!("{} (running {}, saved {}): {}", a.name, a.running, a.saved, keys.join(", "));
         }
         println!("taken: {:?}", scan.taken);
-        println!("clashes: {:?}", clashes(&Settings::default()));
     }
 }

@@ -322,7 +322,10 @@ impl Muxer {
                 }
             }
         }
-        let used = publish(&self.part, &self.path)?;
+        // The file is whole now: a failed rename must not let Drop delete it.
+        self.keep_part = true;
+        let used = publish(&self.part, &self.path)
+            .inspect_err(|e| tracing::warn!("{e}; the finished file is kept as {}", self.part.display()))?;
         self.path = PathBuf::new(); // published: Drop must leave it alone
         Ok((used, lost))
     }

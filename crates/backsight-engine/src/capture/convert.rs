@@ -28,13 +28,20 @@ pub struct Converter {
     in_size: (u32, u32),
 }
 
-/// More distinct textures than a capture pool ever has (`wgc::BUFFERS`); past it, start over.
-const MAX_VIEWS: usize = 8;
+/// The most textures a capture pool hands out (`wgc::BUFFERS` is 2, but WGC may use 3); past it
+/// the oldest view goes. `forget_views` drops them all when a new window capture starts, so a
+/// replaced pool's textures (66 MB each at 4K FP16) aren't kept alive.
+const MAX_VIEWS: usize = 3;
 
 const NO_VIDEO_PROCESSOR: &str =
     "Your graphics card can't convert video frames, so Backsight can't record. Install or update your graphics driver.";
 
-fn texture(gpu: &Gpu, (w, h): (u32, u32), format: DXGI_FORMAT, bind: D3D11_BIND_FLAG) -> Result<ID3D11Texture2D> {
+pub(super) fn texture(
+    gpu: &Gpu,
+    (w, h): (u32, u32),
+    format: DXGI_FORMAT,
+    bind: D3D11_BIND_FLAG,
+) -> Result<ID3D11Texture2D> {
     let desc = D3D11_TEXTURE2D_DESC {
         Width: w,
         Height: h,
@@ -163,7 +170,12 @@ impl Converter {
             match self.input_view(src) {
                 Ok(v) => {
                     if self.views.len() == MAX_VIEWS {
-                        self.views.clear();
+                        // Expected never: a pool cycling more textures than this makes a view a frame.
+                        static ONCE: std::sync::Once = std::sync::Once::new();
+                        ONCE.call_once(|| {
+                            tracing::warn!("video capture: more textures than its pool; views are remade")
+                        });
+                        self.views.remove(0);
                     }
                     self.views.push((src.clone(), v.clone()));
                     self.views_made += 1;
@@ -208,6 +220,11 @@ impl Converter {
     /// The capture size this converter was built for.
     pub fn input_size(&self) -> (u32, u32) {
         self.in_size
+    }
+
+    /// Drops the cached views (and the textures they hold): a new window capture has its own pool.
+    pub(crate) fn forget_views(&mut self) {
+        self.views.clear();
     }
 
     /// How many capture textures got their own input view; stays at the pool size when the

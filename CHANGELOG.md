@@ -2,6 +2,24 @@
 
 Each release lists **Major** and **Minor** changes. Versions are `0.1.<build>`; the newest section is also the release's notes on the [Releases page](https://github.com/backsight-app/backsight/releases).
 
+## 0.1.15 - 2026-11-19
+
+### Major
+
+- A recording left running while the PC sleeps no longer shows one frozen picture for the whole sleep: the gap is cut out like a pause.
+- Automatic updates never stop a recording that started while the update was downloading.
+- A finished clip is kept if its final rename fails, instead of being deleted.
+- "Give Backsight other keys" checks the new keys first, keeps a key's old binding if another program holds the new one, and shows "Done" with the new keys.
+
+### Minor
+
+- Captions: no error pop-up when quitting mid-job or when sound and microphone are both off; long clips get more time; messages name the final vertical clip.
+- A pop-up or recording dot whose page keeps crashing is no longer rebuilt forever.
+- Hotkeys still work after their key was let go in an administrator window.
+- Less background work while another program is in front of the game; less graphics memory held after switching game windows.
+- Library skips Windows system folders when the clips folder is a drive root.
+- Release pipeline hardened: actions pinned to exact versions, only the newest main is released, FFmpeg checked on every release.
+
 ## 0.1.14 - 2026-11-19
 
 ### Major

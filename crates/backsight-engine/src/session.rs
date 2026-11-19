@@ -1086,6 +1086,10 @@ impl Shared {
         let kept = || Held { texture: frame.texture.clone(), size: frame.size, _frame: frame.handle.cloned() };
         if first {
             input.settle.settled(); // the old window's size change no longer matters
+            match &mut input.converter {
+                VideoConverter::Sdr(c) => c.forget_views(),
+                VideoConverter::Hdr(c) => c.forget_views(),
+            }
         } else if !input.settle.observe(current, frame.size, frame.time) {
             // Still resizing: the pacer repeats the last picture; this one waits in case it's the last.
             input.resized = Some(kept());
@@ -1333,6 +1337,9 @@ fn follow_window(
     // The window frame count when it last changed, and when: a game in front that sends none
     // for `EXCLUSIVE_QUIET` may be in exclusive full screen.
     let (mut last_frames, mut last_frame_at) = (0, Instant::now());
+    // The last `launched` answer, keyed by (pid, start time, owner pid and start, began): the process
+    // snapshot behind it costs a few ms, too much to repeat 10 times a second.
+    let mut launch_cache = None;
     move |game| {
         if s.stopped() {
             release_held(&s);
@@ -1365,16 +1372,24 @@ fn follow_window(
             }
         }
         let captured = current.as_ref().map(|(c, ..)| *c).or(failed.map(|(id, _)| id));
-        let wanted = |p: &Program| match failed {
+        let mut wanted = |p: &Program| match failed {
             Some((id, until)) if id == (p.pid, p.window) => Instant::now() >= until,
             _ => {
                 // Started by the captured program, or by a listed launcher since this capture began
                 // (launchers are never captured themselves). Only asked when it could matter.
-                let launched = || {
-                    foreground::parent(p.pid).is_some_and(|(ppid, exe)| {
-                        owner.as_ref().is_some_and(|o| o.started(ppid, p.started))
-                            || (game::is_launcher(&exe) && p.started >= began)
-                    })
+                let mut launched = || {
+                    let key = (p.pid, p.started, owner.as_ref().map(|o| (o.pid, o.started)), began);
+                    if let Some((k, answer)) = launch_cache
+                        && k == key
+                    {
+                        return answer;
+                    }
+                    // A failed snapshot isn't cached: asked again next time.
+                    let Some((ppid, exe)) = foreground::parent(p.pid) else { return false };
+                    let answer = owner.as_ref().is_some_and(|o| o.started(ppid, p.started))
+                        || (game::is_launcher(&exe) && p.started >= began);
+                    launch_cache = Some((key, answer));
+                    answer
                 };
                 let other = captured.is_some_and(|(pid, _)| pid != p.pid);
                 let browser = other && game::is_browser(&p.exe);

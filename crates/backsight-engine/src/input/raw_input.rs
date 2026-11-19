@@ -310,7 +310,7 @@ fn run(
             WM_INPUT_DEVICE_CHANGE | WM_APP_RESET => matcher.reset().for_each(&mut on_event),
             _ => {}
         }
-        if matcher.holds_action() != polling {
+        if matcher.holds_key() != polling {
             polling = !polling;
             // SAFETY: a timer on our own window, from the thread that owns it.
             unsafe {

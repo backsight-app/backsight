@@ -296,7 +296,17 @@ fn freeze_report(main: &Watched, waited: Duration, version: &str) {
 static HOOKED: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 /// The main window is being made again: closing it must not quit Backsight.
 static RECREATING: AtomicBool = AtomicBool::new(false);
-static RECREATED: AtomicU32 = AtomicU32::new(0);
+/// Remakes per window this run. `main.rs` reopens the hud while pop-ups wait and the dot every
+/// second while recording, so without a count a page that crashes every time is made again forever.
+static RECREATED: [AtomicU32; 3] = [AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0)];
+const COUNTED: [&str; 3] = ["main", "hud", "dot"];
+/// Hud windows given up on this run: never opened again, and pop-ups no longer queued for them.
+static GAVE_UP: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+
+/// The hud window `label` crashed too often this run and stays closed.
+pub fn given_up(label: &str) -> bool {
+    lock(&GAVE_UP).as_ref().is_some_and(|g| g.contains(label))
+}
 
 /// The main window is being made again after a WebView2 failure (see `main.rs`'s window events).
 pub fn recreating() -> bool {
@@ -363,18 +373,33 @@ fn kind_name(kind: Option<i32>) -> &'static str {
 /// Runs on the main thread, inside WebView2's event: the window is changed afterwards, not here.
 fn on_process_failed(app: &AppHandle, label: &str, kind: Option<i32>) {
     let what = kind_name(kind);
-    match recovery(kind, RECREATED.load(Relaxed)) {
+    let count = COUNTED.iter().position(|c| *c == label).map(|i| &RECREATED[i]);
+    match recovery(kind, count.map_or(0, |c| c.load(Relaxed))) {
         Recovery::Log => tracing::warn!("window {label}: {what} (WebView2 restarts it)"),
         Recovery::GiveUp => {
-            tracing::error!("window {label}: {what}; it was made again {MAX_RECREATES} times already, so it's left")
+            tracing::error!("window {label}: {what}; it was made again {MAX_RECREATES} times already, so it's left");
+            if label == "main" {
+                return;
+            }
+            // A hud window: closed for this run, so nothing waits on its dead page.
+            lock(&GAVE_UP).get_or_insert_default().insert(label.to_owned());
+            if label == "hud" {
+                lock(&app.state::<crate::Engine>().hud_queue).clear();
+            }
+            let (app2, label2) = (app.clone(), label.to_owned());
+            let _ = app.run_on_main_thread(move || {
+                if let Some(w) = app2.get_webview_window(&label2) {
+                    let _ = w.destroy();
+                }
+            });
         }
         Recovery::Recreate => {
             if label == "main" && RECREATING.swap(true, Relaxed) {
                 return; // already being made again (a hung page reports again and again)
             }
-            // One browser-process crash reaches every window; only the main window's remakes count.
-            if label == "main" {
-                RECREATED.fetch_add(1, Relaxed);
+            // One browser-process crash reaches every window; each counted window keeps its own count.
+            if let Some(c) = count {
+                c.fetch_add(1, Relaxed);
             }
             tracing::error!("window {label}: {what}; making the window again");
             let (app2, label2) = (app.clone(), label.to_owned());

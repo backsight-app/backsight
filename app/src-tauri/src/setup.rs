@@ -64,8 +64,8 @@ pub struct SetupCheck {
     encoders: Vec<ProbeResult>,
     /// The encoder to switch to, when the chosen one doesn't work here.
     pick: Option<setup::Pick>,
-    /// Backsight hotkeys that another app on this PC also uses.
-    clashes: Vec<overlays::Clash>,
+    /// Other apps' hotkeys and keys another program holds; the page matches them to the hotkeys.
+    scan: overlays::Scan,
 }
 
 /// Everything the setup page shows, for the settings it has now.
@@ -78,14 +78,14 @@ pub async fn setup_check(app: AppHandle, settings: Settings) -> Result<SetupChec
             pick: setup::pick_encoder(&settings.video.encoder, &encoders, &cards),
             cards,
             encoders,
-            clashes: overlays::clashes(&settings),
+            scan: overlays::scan(&settings),
         }
     })
     .await
     .map_err(|e| e.to_string())
 }
 
-/// Other apps' hotkeys, and Backsight keys another program already holds, for Home and Hotkeys
+/// Other apps' hotkeys, and Backsight keys another program already holds, for Home, Setup and Hotkeys
 /// to compare with the hotkeys as they change. Reads the registry, files and the process list,
 /// so off the UI thread.
 #[tauri::command]

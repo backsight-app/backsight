@@ -14,7 +14,7 @@ Each milestone ends with something usable and a definition of done that is measu
 
 On hold: Authenticode signing of the installer, AMD encoder testing (no hardware), microphone switching mid-recording (hand check), the NVIDIA overlay clash check with the overlay on, the exclusive-fullscreen recording-cost gate. Later: see [Later](#later-).
 
-Releases: v0.1.3 to v0.1.8 are published on [GitHub Releases](https://github.com/backsight-app/backsight/releases), built and signed by CI as `0.1.<run>`. 0.1.9 is in progress. Changes per version: [CHANGELOG.md](../CHANGELOG.md).
+Releases: every version since v0.1.3 is on [GitHub Releases](https://github.com/backsight-app/backsight/releases), built and signed by CI as `0.1.<run>`. Changes per version: [CHANGELOG.md](../CHANGELOG.md).
 
 ## M0 · Foundation ✅
 

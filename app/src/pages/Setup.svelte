@@ -9,16 +9,23 @@
   import Term from "../lib/components/Term.svelte";
   import { fixCompatibility, formatDuration, vendorLabel, videoEncoder } from "../lib/content";
   import { ACTIONS } from "../lib/hotkeys";
-  import type { Clash } from "../lib/overlays";
+  import { clashesFor, takenClashes, type Scan } from "../lib/overlays";
   import { app } from "../lib/settings.svelte";
 
   type Check = {
     cards: { name: string; vendor: string }[];
     pick: { encoder: string; automatic: boolean } | null;
-    clashes: Clash[];
+    scan: Scan;
   };
 
   let check = $state<Check | null>(null);
+  // After "Give Backsight other keys" the card stays up to say how it went.
+  let swapped = $state(false);
+  // A failed check keeps the apps found before.
+  function onswap(r: Scan) {
+    if (check && !r.failed) check.scan = r;
+    swapped = true;
+  }
   let failed = $state("");
   let switchedFrom = $state("");
   // The chosen encoder failed the check but may only be busy: offer the switch, don't make it.
@@ -54,6 +61,9 @@
     );
     return () => clearTimeout(timer);
   });
+
+  const hotkeys = $derived(app.settings.hotkeys as Record<string, string>);
+  const clashes = $derived(check ? [...clashesFor(hotkeys, check.scan.apps), ...takenClashes(hotkeys, check.scan.taken)] : []);
 
   const encoder = $derived(videoEncoder(app.settings.video.encoder));
   const recorder = $derived(
@@ -135,8 +145,8 @@
       <h2>2. Hotkeys</h2>
       {#if !check && !failed}
         <p class="muted">Checking your hotkeys…</p>
-      {:else if check?.clashes.length}
-        <OverlayClashes clashes={check.clashes} />
+      {:else if check && (swapped || clashes.length)}
+        <OverlayClashes {clashes} {onswap} />
       {:else}
         {#if app.settings.replay.enabled}
           <p>

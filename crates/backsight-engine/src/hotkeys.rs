@@ -123,9 +123,10 @@ impl<A: Copy + Ord> Matcher<A> {
         }
     }
 
-    /// Whether a held key fired an action whose release is still to come.
-    pub fn holds_action(&self) -> bool {
-        self.held.iter().any(|(_, a)| a.is_some())
+    /// Whether any key is held. A key released out of sight (in an elevated window) would
+    /// otherwise stay held and swallow its next press as auto-repeat.
+    pub fn holds_key(&self) -> bool {
+        !self.held.is_empty()
     }
 
     /// Forgets held keys that `is_down` says are up, with a release for each action among them.
@@ -219,11 +220,13 @@ mod tests {
     fn keys_released_out_of_sight_are_forgotten() {
         let mut m = matcher();
         run(&mut m, &[(Key("W"), true), (Key("Mouse4"), true)]);
-        assert!(m.holds_action());
+        assert!(m.holds_key());
         // UAC prompt: Mouse4 went up on the secure desktop. W is still held.
         let released: Vec<_> = m.forget_released_keys(|k| k == "W").collect();
         assert_eq!(released, [Event::Released(Act::Talk)]);
-        assert!(!m.holds_action());
+        assert!(m.holds_key(), "W is still held");
+        assert!(m.forget_released_keys(|_| false).next().is_none(), "W fired nothing");
+        assert!(!m.holds_key());
         assert_eq!(run(&mut m, &[(Key("Mouse4"), false)]), [], "a late key-up is harmless");
         assert_eq!(run(&mut m, &[(Key("Mouse4"), true)]), [Event::Pressed(Act::Talk)], "the next press works");
         assert_eq!(m.forget_released_keys(|_| true).count(), 0, "held keys stay");

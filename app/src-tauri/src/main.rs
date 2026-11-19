@@ -598,7 +598,8 @@ fn notify(app: &AppHandle, title: &str, body: &str) {
     }
     let repeat =
         matches!(kind, "problem" | "info") && lock(&engine.shown).repeat(title, body, std::time::Instant::now());
-    if !repeat && settings.is_none_or(|s| s.general.notifications) {
+    // A pop-up window given up on (`uiwatch`) shows nothing; the sound above still plays.
+    if !repeat && settings.is_none_or(|s| s.general.notifications) && !uiwatch::given_up(HudPart::Popups.label()) {
         lock(&engine.hud_queue).push(Notice { kind, title: title.into(), body: body.into() });
         open_hud(app, HudPart::Popups);
     }
@@ -666,7 +667,8 @@ fn open_hud(app: &AppHandle, part: HudPart) {
 
 fn open_hud_now(app: &AppHandle, part: HudPart) {
     let engine = app.state::<Engine>();
-    if app.get_webview_window(part.label()).is_some() || engine.quitting.load(Relaxed) {
+    let gone = uiwatch::given_up(part.label()); // crashed too often this run
+    if app.get_webview_window(part.label()).is_some() || engine.quitting.load(Relaxed) || gone {
         return;
     }
     let (width, height) = part.size();
@@ -2554,8 +2556,13 @@ fn main() {
                     return;
                 }
                 let file = lock(&engine.settings_file); // a save may be in progress
-                // A settings file that fails to load starts nothing; the UI shows the error.
-                let Ok(mut settings) = Settings::load() else { return };
+                // A settings file that fails to load starts nothing; the UI shows the error. The
+                // watch still runs: fixing the file in the window starts recording later.
+                let Ok(mut settings) = Settings::load() else {
+                    drop((file, _apply));
+                    watch_recording(&app);
+                    return;
+                };
                 // Here, not in `setup` on the main thread: resolving a folder on an offline network
                 // drive can take a long time.
                 allow_library_files(&app, &settings);

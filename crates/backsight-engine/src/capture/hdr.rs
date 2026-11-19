@@ -1,7 +1,7 @@
 //! Convert linear scRGB capture into limited-range BT.2020 PQ P010 with a compute shader.
 //! The D3D11 video processor can't do this conversion (platform-notes.md, "HDR video").
 
-use super::{d3d::Gpu, target, wgc::Frame};
+use super::{convert::texture, d3d::Gpu, target, wgc::Frame};
 use backsight_encode::session::GpuFrame;
 use std::sync::OnceLock;
 use windows::{
@@ -69,8 +69,10 @@ void main(uint3 id : SV_DispatchThreadID) {
 }
 ";
 
-/// More distinct textures than a capture pool ever has (`wgc::BUFFERS`); past it, start over.
-const MAX_VIEWS: usize = 8;
+/// The most textures a capture pool hands out (`wgc::BUFFERS` is 2, but WGC may use 3); past it
+/// the oldest view goes. `forget_views` drops them all when a new window capture starts, so a
+/// replaced pool's textures (66 MB each at 4K FP16) aren't kept alive.
+const MAX_VIEWS: usize = 3;
 
 pub(crate) struct Converter {
     shader: ID3D11ComputeShader,
@@ -85,24 +87,6 @@ pub(crate) struct Converter {
     planes: [Option<ID3D11UnorderedAccessView>; 2],
     source: (u32, u32),
     groups: (u32, u32),
-}
-
-fn texture(gpu: &Gpu, (w, h): (u32, u32), format: DXGI_FORMAT, bind: D3D11_BIND_FLAG) -> Result<ID3D11Texture2D> {
-    let desc = D3D11_TEXTURE2D_DESC {
-        Width: w,
-        Height: h,
-        MipLevels: 1,
-        ArraySize: 1,
-        Format: format,
-        SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-        Usage: D3D11_USAGE_DEFAULT,
-        BindFlags: bind.0 as u32,
-        ..Default::default()
-    };
-    let mut tex = None;
-    // SAFETY: `desc` and the out-pointer are valid locals.
-    unsafe { gpu.device.CreateTexture2D(&desc, None, Some(&mut tex)) }?;
-    Ok(tex.expect("CreateTexture2D succeeded"))
 }
 
 /// The shader's bytecode, compiled the first time a converter is made: a resize rebuilds the
@@ -218,6 +202,11 @@ impl Converter {
         self.source
     }
 
+    /// Drops the cached views (and the textures they hold): a new window capture has its own pool.
+    pub(crate) fn forget_views(&mut self) {
+        self.views.clear();
+    }
+
     /// Converts a captured FP16 frame into the P010 output on the GPU. The caller holds the
     /// device lock (the immediate context is shared with the encoder).
     pub(crate) fn convert_from(&mut self, gpu: &Gpu, frame: &Frame<'_>) -> Result<()> {
@@ -274,10 +263,10 @@ impl Converter {
                 Ok(()) => {
                     let view = view.expect("view created");
                     if self.views.len() == MAX_VIEWS {
-                        // Expected never: it means WGC hands out new texture objects, so a view a frame.
+                        // Expected never: a pool cycling more textures than this makes a view a frame.
                         static ONCE: std::sync::Once = std::sync::Once::new();
                         ONCE.call_once(|| tracing::warn!("HDR capture: more textures than its pool; views are remade"));
-                        self.views.clear();
+                        self.views.remove(0);
                     }
                     self.views.push((src.clone(), view.clone()));
                     return Ok(view);

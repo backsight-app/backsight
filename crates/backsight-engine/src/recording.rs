@@ -46,6 +46,8 @@ use std::{
 
 /// How far before a resume press its keyframe may be shown and still be used.
 const RESUME_SLACK_US: i64 = 100_000;
+/// A longer gap between video packets (sleep, a stalled capture) is cut out like a pause.
+const MAX_GAP_US: i64 = 5_000_000;
 /// Packets waiting for the disk (about 9 s of 60 FPS video plus audio), besides the backlog.
 const MAX_PACKETS: usize = 1024;
 /// Bytes waiting for the disk, counted as the buffers' capacity.
@@ -245,12 +247,26 @@ impl Cuts {
         // Shown after every frame before it (an I or P frame): ending just before it leaves no
         // kept frame waiting for one that is cut.
         let anchor = pts > self.seen_pts;
+        // shortcut: a video stall over MAX_GAP_US that isn't a sleep also cuts the audio of that
+        // span; check that audio jumped too if stalls ever happen while the PC is awake.
+        let jumped = anchor && self.seen_pts != i64::MIN && pts - self.seen_pts > MAX_GAP_US;
         self.seen_pts = self.seen_pts.max(pts);
-        self.video_dts = dts;
+        let prev = std::mem::replace(&mut self.video_dts, dts);
         if self.open && anchor && self.presses.front().is_some_and(|&p| dts >= p) {
             self.presses.pop_front();
             self.open = false;
-            self.ended_at = Some(dts);
+            // A pause due on the first frame after a sleep still ends before the gap.
+            self.ended_at = Some(if jumped { dts.min(prev + duration.max(1)) } else { dts });
+        } else if self.open && jumped {
+            // The PC slept: cut the gap out like a pause, ending where the next frame was due, so
+            // the file doesn't show one frame for the whole time. With B-frames this frame's
+            // decode time is still from before the gap, and a resume there could remove nothing:
+            // resume at a keyframe decoded after it instead (the one after this, at worst).
+            // shortcut: no keyframe is asked for here, so up to one keyframe interval after wake
+            // is lost; ask the encoder for one if that shows in real clips.
+            self.open = false;
+            self.ended_at = Some(dts.min(prev + duration.max(1)));
+            self.presses.push_front(if dts - prev > MAX_GAP_US { dts } else { pts + RESUME_SLACK_US + 1 });
         }
         if !self.open {
             // The keyframe asked for at a resume can belong to a frame captured just before the
@@ -817,6 +833,24 @@ mod tests {
     /// [`run`], with or without B-frames (then decode time is display time), and audio for time
     /// t sent at t + `audio_at`.
     fn run_with(frames: i64, gop: i64, lag: i64, b_frames: bool, audio_at: i64, feed: &mut Feed, presses: &[i64]) {
+        run_sleeping(frames, gop, lag, b_frames, audio_at, feed, presses, (frames, 0));
+    }
+
+    /// [`run_with`], with the PC asleep for `sleep.1` µs before frame `sleep.0` is captured: every
+    /// time from then on (capture, encoder output, decode times as NVENC derives them from earlier
+    /// inputs) is that much later.
+    #[allow(clippy::too_many_arguments)] // test helper; each argument is a different knob
+    fn run_sleeping(
+        frames: i64,
+        gop: i64,
+        lag: i64,
+        b_frames: bool,
+        audio_at: i64,
+        feed: &mut Feed,
+        presses: &[i64],
+        sleep: (i64, i64),
+    ) {
+        let clock = |t: i64| if t >= sleep.0 * F { t + sleep.1 } else { t };
         let mut order = Vec::new(); // display indexes in decode order
         let mut i = 0;
         while i < frames {
@@ -839,11 +873,14 @@ mod tests {
         let mut packets: Vec<(i64, StreamKind, i64, i64, bool)> = order
             .iter()
             .enumerate()
-            .map(|(k, &n)| ((k as i64 + lag) * F, StreamKind::Video, n * F, (k as i64 - delay) * F, n % gop == 0))
+            .map(|(k, &n)| {
+                let (sent, dts) = (clock((k as i64 + lag) * F), clock((k as i64 - delay) * F));
+                (sent, StreamKind::Video, clock(n * F), dts, n % gop == 0)
+            })
             .collect();
         let mut t = -10 * A;
         while t < frames * F {
-            packets.push((t + audio_at, StreamKind::Audio(0), t, t, true));
+            packets.push((clock(t) + audio_at, StreamKind::Audio(0), clock(t), clock(t), true));
             t += A;
         }
         packets.sort_by_key(|p| p.0);
@@ -949,6 +986,47 @@ mod tests {
             assert!(r == 0 || r == shift, "{p:?} moved by {r}");
             assert_eq!(r == shift, p.5 >= 150 * F, "{p:?}");
         }
+    }
+
+    const HOUR: i64 = 3_600_000_000;
+
+    #[test]
+    fn a_sleep_is_cut_out_of_both_tracks_like_a_pause() {
+        for b_frames in [false, true] {
+            let (mut feed, sink) = channel(4096);
+            let writer = collect(sink);
+            run_sleeping(400, 60, 6, b_frames, A, &mut feed, &[], (100, HOUR));
+            drop(feed);
+            let out = writer.join().unwrap();
+            check_parts(&out); // no hour-long frame, audio seamless
+            let video = of(&out, StreamKind::Video);
+            assert!(video.iter().any(|v| v.4 >= 96 * F && v.4 < 100 * F), "kept up to the sleep");
+            assert!(video.iter().any(|v| v.4 == HOUR + 180 * F), "resumes within a keyframe or two");
+            // The same span gone from both tracks, the hour and at most a keyframe interval more.
+            let shift = removed(out.iter().find(|p| p.5 >= HOUR).unwrap());
+            assert!((HOUR..HOUR + 130 * F).contains(&shift), "removed {shift}");
+            for p in &out {
+                assert_eq!(removed(p), if p.5 >= HOUR { shift } else { 0 }, "{p:?} (b-frames: {b_frames})");
+            }
+        }
+    }
+
+    #[test]
+    fn a_resume_pressed_just_before_a_sleep_is_not_doubled() {
+        let (mut feed, sink) = channel(4096);
+        let writer = collect(sink);
+        // Paused at 50, resumed at 99: the keyframe it waits for (120) comes after the sleep.
+        run_sleeping(400, 60, 6, true, A, &mut feed, &[50 * F + 7, 99 * F + 7], (100, HOUR));
+        drop(feed);
+        let out = writer.join().unwrap();
+        check_parts(&out);
+        let video = of(&out, StreamKind::Video);
+        assert!(video.iter().all(|v| v.4 < 53 * F || v.4 >= HOUR + 120 * F), "paused span written");
+        assert!(video.iter().any(|v| v.4 == HOUR + 120 * F), "resumes on the first keyframe after waking");
+        let mut shifts: Vec<i64> = out.iter().map(removed).collect();
+        shifts.sort();
+        shifts.dedup();
+        assert_eq!(shifts.len(), 2, "one cut for the pause and the sleep: {shifts:?}");
     }
 
     #[test]

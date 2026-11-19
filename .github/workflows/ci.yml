@@ -21,13 +21,15 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       # The Tauri crate embeds the built UI, so build it first.
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm
@@ -54,7 +56,7 @@ jobs:
         shell: pwsh
       # FFmpeg dev files for rsmpeg. LLVM (for bindgen) and CMake (builds whisper.cpp for captions)
       # are preinstalled on windows-latest.
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: third_party/ffmpeg
           key: ffmpeg-${{ hashFiles('scripts/fetch-ffmpeg.ps1') }}
@@ -63,7 +65,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }} # the slim FFmpeg is a release asset of this repository
       # THIRD-PARTY-NOTICES.txt must list what the app is built from now (needs app/node_modules).
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2
         with:
           tool: cargo-about@0.9.3
       - run: ./scripts/third-party-notices.ps1 -Check

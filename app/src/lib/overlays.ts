@@ -17,7 +17,8 @@ export type App = {
 };
 /** A Backsight key some other program has reserved (`overlays::Taken`). */
 export type Taken = { action: string; key: string };
-export type Scan = { apps: App[]; taken: Taken[] };
+/** `failed`: the check didn't run (set by `loadScan`), so empty lists mean nothing. */
+export type Scan = { apps: App[]; taken: Taken[]; failed?: boolean };
 /** A Backsight hotkey that an app also uses (`overlays::Clash`). */
 export type Clash = { action: string; key: string; app: string; app_id: string; does: string; passes: string };
 

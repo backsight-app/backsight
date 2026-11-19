@@ -29,8 +29,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v7 # only this workflow, which ships with the sources as the build steps
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7; only this workflow, which ships with the sources as the build steps
         with:
+          persist-credentials: false
           sparse-checkout: .github/workflows/ffmpeg.yml
           sparse-checkout-cone-mode: false
       - name: Install the mingw-w64 toolchain
@@ -328,7 +329,7 @@ jobs:
           echo "SHA-256: \`$(cut -c1-64 "$NAME.zip.sha256")\`, $(stat -c%s "$NAME.zip") bytes" >> "$GITHUB_STEP_SUMMARY"
           ( cd "$NAME/bin" && ls -l --block-size=K *.dll ) | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ${{ env.NAME }}
           path: |
@@ -343,10 +344,12 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - run: ./scripts/fetch-ffmpeg.check.ps1
         shell: pwsh
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ env.NAME }}
           path: candidate
@@ -371,7 +374,7 @@ jobs:
           if ($LASTEXITCODE -or $media.streams[0].profile -ne 'Main 10' -or $media.streams[0].pix_fmt -ne 'yuv420p10le') {
             throw 'Candidate did not produce Main 10 video.'
           }
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
       - name: Run media tests against the candidate
         shell: pwsh
         run: |
@@ -385,7 +388,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ env.NAME }}
           path: pkg

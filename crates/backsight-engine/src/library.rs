@@ -134,13 +134,19 @@ fn webview_shows(ext: &str) -> bool {
 
 /// Every media file under `dir`, recursively. `.part` files (saves in progress) and anything
 /// unreadable are skipped; symlinked folders are not followed.
-fn walk(dir: &Path, seen: &mut HashSet<PathBuf>, out: &mut Vec<Found>) {
+fn walk(dir: &Path, top: bool, seen: &mut HashSet<PathBuf>, out: &mut Vec<Found>) {
     let Ok(entries) = fs::read_dir(dir) else { return };
     for entry in entries.flatten() {
         let path = entry.path();
         let Ok(kind) = entry.file_type() else { continue };
         if kind.is_dir() {
-            walk(&path, seen, out);
+            // A drive-root clips folder holds Windows' own folders ($RECYCLE.BIN, ...): not clips.
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let system = name.starts_with('$') || name.eq_ignore_ascii_case("System Volume Information");
+            if !(top && system) {
+                walk(&path, false, seen, out);
+            }
             continue;
         }
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
@@ -247,7 +253,7 @@ pub fn scan(video_dir: Option<&Path>, screenshot_dir: Option<&Path>, cache_dir: 
     let screenshot_dir = screenshot_dir.and_then(|d| std::path::absolute(d).ok());
     let (mut found, mut seen) = (Vec::new(), HashSet::new());
     for dir in [&video_dir, &screenshot_dir].into_iter().flatten() {
-        walk(dir, &mut seen, &mut found);
+        walk(dir, true, &mut seen, &mut found);
     }
 
     let index = cache_dir.join("library.json");

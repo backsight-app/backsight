@@ -15,9 +15,19 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// A job still running after this is stuck; it is killed. A 2-minute clip of talking takes
-/// about a minute and a half in background mode on a busy laptop CPU.
+/// A job still running after this (or twice the clip's length, if longer) is stuck; it is killed.
+/// A 2-minute clip of talking takes about a minute and a half in background mode on a busy laptop
+/// CPU.
 const LIMIT: Duration = Duration::from_secs(15 * 60);
+
+/// The kill limit for `clip`: a long clip of talking may need longer than [`LIMIT`].
+fn limit_for(clip: &std::path::Path) -> Duration {
+    limit(backsight_encode::media::probe(clip).ok().and_then(|i| i.duration_ms).map(Duration::from_millis))
+}
+
+fn limit(length: Option<Duration>) -> Duration {
+    LIMIT.max(length.unwrap_or_default() * 2)
+}
 
 pub struct Queue {
     jobs: Mutex<Option<mpsc::Sender<Job>>>,
@@ -39,7 +49,7 @@ impl Queue {
                 if stopped.load(Relaxed) {
                     break;
                 }
-                let outcome = run_child(&spawn, &job, &stopped, LIMIT);
+                let outcome = run_child(&spawn, &job, &stopped, limit_for(&job.clip));
                 done(&job, outcome);
             }
         });
@@ -152,6 +162,14 @@ mod tests {
         assert!(rx.recv_timeout(Duration::from_secs(1)).is_err(), "the waiting job never ran");
         q.push(job("after"));
         assert!(rx.recv_timeout(Duration::from_millis(300)).is_err());
+    }
+
+    #[test]
+    fn a_long_clip_gets_twice_its_length_and_an_unreadable_one_the_usual_limit() {
+        assert_eq!(limit(None), LIMIT);
+        assert_eq!(limit(Some(Duration::from_secs(60))), LIMIT);
+        assert_eq!(limit(Some(Duration::from_secs(20 * 60))), Duration::from_secs(40 * 60));
+        assert_eq!(limit_for(std::path::Path::new(r"C:\no\such\clip.mp4")), LIMIT);
     }
 
     #[test]

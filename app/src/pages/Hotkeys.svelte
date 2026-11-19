@@ -18,7 +18,7 @@
   const conflicts = $derived.by(() => {
     const out: Record<string, string> = {};
     for (const a of ACTIONS) {
-      const other = ACTIONS.find((b) => b.id !== a.id && keys[a.id] && keys[a.id] === keys[b.id]);
+      const other = ACTIONS.find((b) => b.id !== a.id && keys[a.id] && keys[b.id] && same(keys[a.id]) === same(keys[b.id]));
       if (other) out[a.id] = other.id;
     }
     return out;
@@ -27,7 +27,11 @@
   // Other apps' keys, read when the page opens once the saved hotkeys are in, and again after each
   // key you type, so a key another program holds is found; clashes follow the keys as you edit.
   let scan = $state<Scan | null>(null);
-  const rescan = () => loadScan($state.snapshot(app.settings)).then((r) => (scan = r));
+  let seq = 0;
+  const rescan = () => {
+    const mine = ++seq;
+    loadScan($state.snapshot(app.settings)).then((r) => mine === seq && (scan = r)); // only the newest scan counts
+  };
   let scanned = false;
   $effect(() => {
     if (!scanned && (app.loaded || !isTauri())) {

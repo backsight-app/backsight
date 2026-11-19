@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::sync::{Mutex, OnceLock, PoisonError, mpsc};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 static QUEUE: OnceLock<Queue> = OnceLock::new();
 
@@ -25,7 +25,10 @@ pub fn start(app: &AppHandle) {
                 match &outcome {
                     Outcome::Failed(e) => {
                         tracing::warn!("captions for {} failed: {e}", job.clip.display());
-                        crate::notify(&app, "Couldn't make captions", e);
+                        // Quitting kills the running job; that is no failure to tell about.
+                        if !app.state::<crate::Engine>().quitting.load(Relaxed) {
+                            crate::notify(&app, "Couldn't make captions", e);
+                        }
                     }
                     other => tracing::info!("captions for {}: {other:?}", job.clip.display()),
                 }
@@ -50,7 +53,12 @@ pub fn stop() {
 /// The captions job for `clip` when the setting is on and the models are there.
 fn job(clip: &Path, settings: &Settings) -> Option<Job> {
     let a = &settings.audio;
-    if !a.captions || !backsight_captions::cpu_supported() || !model::dir().is_ok_and(|d| model::installed(&d)) {
+    // No sound recorded: nothing to caption, and the job would only fail.
+    if !a.captions
+        || !(a.desktop || a.microphone)
+        || !backsight_captions::cpu_supported()
+        || !model::dir().is_ok_and(|d| model::installed(&d))
+    {
         return None;
     }
     // The microphone is the last track with separate tracks; otherwise the first track, the mix.

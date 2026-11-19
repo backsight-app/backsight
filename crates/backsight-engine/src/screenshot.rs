@@ -1,6 +1,5 @@
 //! One-shot screenshots of the monitor the game is on, of the focused window, or of an area picked
 //! on a frozen frame, saved first and optionally copied as an image.
-mod hdr_capture;
 
 use crate::{
     capture::{d3d::Gpu, foreground, wgc},
@@ -186,9 +185,6 @@ fn capture(settings: &Settings, target: Target, hdr: bool) -> Result<(Vec<u8>, u
     let gpu = Arc::new(Gpu::open("cpu").map_err(|e| user_error(NO_GPU, &e))?);
     let no_capture = if matches!(target, Target::Window(_)) { NO_WINDOW } else { NO_CAPTURE };
     let cursor = settings.screenshot.capture_cursor;
-    if hdr {
-        return hdr_capture::capture(gpu, target, cursor).map_err(|e| user_error(no_capture, &e));
-    }
     tracing::debug!("screenshot: open capture");
     let (send, receive) = mpsc::sync_channel(1);
     let device = gpu.clone();
@@ -198,12 +194,14 @@ fn capture(settings: &Settings, target: Target, hdr: bool) -> Result<(Vec<u8>, u
             return;
         }
         first = false;
-        let pixels = frame.and_then(|f| wgc::read_pixels(&device, f));
+        let pixels = frame.and_then(|f| wgc::read_pixels(&device, f, hdr));
         let _ = send.try_send(pixels);
     };
-    let capture = match target {
-        Target::Window(window) => wgc::Capture::window(&gpu, window, cursor, None, on_frame),
-        Target::Monitor(monitor) => wgc::Capture::monitor(&gpu, monitor, cursor, None, on_frame),
+    let capture = match (target, hdr) {
+        (Target::Window(window), false) => wgc::Capture::window(&gpu, window, cursor, None, on_frame),
+        (Target::Window(window), true) => wgc::Capture::hdr_window(&gpu, window, cursor, None, on_frame),
+        (Target::Monitor(monitor), false) => wgc::Capture::monitor(&gpu, monitor, cursor, None, on_frame),
+        (Target::Monitor(monitor), true) => wgc::Capture::hdr_monitor(&gpu, monitor, cursor, None, on_frame),
     }
     .map_err(|e| user_error(no_capture, &e))?;
     let result = receive.recv_timeout(Duration::from_secs(5));

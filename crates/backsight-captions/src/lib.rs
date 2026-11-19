@@ -141,6 +141,8 @@ pub fn child_main(args: &[String], mut out: impl io::Write) -> i32 {
 /// Captions `job` in this process with the models in `models`.
 pub fn run(job: &Job, models: &Path) -> Outcome {
     let name = job.clip.file_name().unwrap_or_default().to_string_lossy().into_owned();
+    // A vertical clip is captioned while still named "<clip>.source.part": show the final name.
+    let name = name.strip_suffix(".source.part").map_or(name.clone(), str::to_owned);
     if !cpu_supported() {
         return Outcome::Failed(OLD_CPU.into());
     }
@@ -195,7 +197,10 @@ fn write(path: &Path, text: &str) -> io::Result<Outcome> {
     let mut part = path.as_os_str().to_owned();
     part.push(".part");
     let part = PathBuf::from(part);
-    fs::write(&part, text)?;
+    if let Err(e) = fs::write(&part, text) {
+        let _ = fs::remove_file(&part);
+        return Err(e);
+    }
     match backsight_encode::fsutil::rename_no_replace(&part, path) {
         Ok(()) => Ok(Outcome::Written(path.to_path_buf())),
         Err(e) => {

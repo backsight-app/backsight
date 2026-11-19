@@ -60,7 +60,7 @@ if (-not (Have "cmake")) {
 }
 
 Write-Host "All tools found. Fetching FFmpeg..." -ForegroundColor Cyan
-& (Join-Path $PSScriptRoot "fetch-ffmpeg.ps1")
+try { & (Join-Path $PSScriptRoot "fetch-ffmpeg.ps1") } catch { Write-Host $_ -ForegroundColor Red; $global:LASTEXITCODE = 1 }
 if ($LASTEXITCODE) { Fail "Fetching FFmpeg failed." "Read the message above. fetch-ffmpeg.ps1 needs the GitHub CLI (gh) signed in; see docs/DEVELOPMENT.md." }
 
 Push-Location (Join-Path $Root "app")

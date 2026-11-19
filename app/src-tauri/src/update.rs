@@ -57,7 +57,7 @@ pub fn check_in_background(app: AppHandle) {
                 && first_try(&found.version)
             {
                 tracing::info!("update {}: found at start, installing", found.version);
-                let _ = tauri::async_runtime::block_on(install_update(app.clone()));
+                let _ = tauri::async_runtime::block_on(install(app.clone(), true));
             }
             std::thread::sleep(Duration::from_secs(3600));
         }
@@ -78,18 +78,24 @@ fn first_try(version: &str) -> bool {
 /// first, like Quit) and starts its installer, which opens Backsight again.
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<(), String> {
+    install(app, false).await
+}
+
+/// `auto`: started by the background check, so it gives up when a recording began meanwhile.
+async fn install(app: AppHandle, auto: bool) -> Result<(), String> {
     installed()?;
     // One at a time: two finished downloads would start two installers.
     static RUNNING: AtomicBool = AtomicBool::new(false);
     if RUNNING.swap(true, Relaxed) {
-        return Err("An update is already downloading.".into());
+        // Maybe the automatic one, which gives up if a recording started: pressing again works then.
+        return Err("An update is already downloading. Try again in a minute.".into());
     }
-    let result = download_and_install(&app).await;
+    let result = download_and_install(&app, auto).await;
     RUNNING.store(false, Relaxed);
     result
 }
 
-async fn download_and_install(app: &AppHandle) -> Result<(), String> {
+async fn download_and_install(app: &AppHandle, auto: bool) -> Result<(), String> {
     let closing = Arc::new(AtomicBool::new(false));
     let hook_app = app.clone();
     let hook_closing = closing.clone();
@@ -124,6 +130,14 @@ async fn download_and_install(app: &AppHandle) -> Result<(), String> {
         )
         .await
         .map_err(plain)?;
+    // The download can take minutes; a recording started meanwhile must not be stopped unasked.
+    // shortcut: a recording starting between this check and `install` is still finished and saved
+    // by `close_for_update` (like Quit); holding `apply` here would deadlock with `shut_down`, which
+    // takes it. Fix with a "closing for update" flag that starting checks, if it ever bites.
+    if auto && !crate::idle_for_update(app) {
+        tracing::info!("update {}: downloaded, but Backsight is busy now; Home offers it", update.version);
+        return Err("Backsight is busy; the update waits.".into());
+    }
     tracing::info!("update {}: downloaded {} bytes, installing", update.version, bytes.len());
     // On success this never returns: the process ends once the installer has started.
     let result = update.install(bytes);
