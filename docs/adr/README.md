@@ -12,11 +12,11 @@ Each ADR records one decision: the context, what we chose, what we gave up. New 
 | [0006](0006-data-driven-settings.md) | One data file drives options, UI and explanations | Accepted |
 | [0007](0007-raw-input-hotkeys.md) | Raw Input for global hotkeys | Accepted |
 | [0008](0008-interrupted-recording-files.md) | Mark unfinished recordings by name and recover them by copy | Accepted |
-| [0009](0009-local-test-build-updates.md) | Local test builds update from a folder, not the internet | Accepted |
+| [0009](0009-local-test-build-updates.md) | Local test builds update from a folder, not the internet | Accepted (public releases: ADR 0014) |
 | [0010](0010-own-pop-ups-and-sounds.md) | Backsight's own pop-ups, recording dot and sounds | Accepted |
 | [0011](0011-nsis-installer.md) | Ship a per-user NSIS installer | Accepted |
 | [0012](0012-window-and-monitor-capture.md) | Capture a chosen monitor or the game's window, at a fixed output size | Accepted |
 | [0013](0013-rename-to-backsight.md) | Rename the app from Clipwise to Backsight | Accepted |
-| [0014](0014-updates-from-github-releases.md) | Installed copies update from GitHub Releases, only when asked | Accepted |
+| [0014](0014-updates-from-github-releases.md) | Installed copies update from GitHub Releases | Accepted (amended 2026-11-18: automatic checks) |
 | [0015](0015-vertical-clips.md) | Make vertical clips from the saved clip, in the background | Accepted |
 | [0016](0016-on-device-captions.md) | Caption the microphone on the PC with whisper.cpp, after the save | Accepted |

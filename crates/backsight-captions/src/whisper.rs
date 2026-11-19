@@ -23,12 +23,14 @@ fn path_str(p: &Path) -> Result<&str, Error> {
 /// Transcribes `audio` (mono, 16 kHz) with the Whisper model at `model` and the VAD model at
 /// `vad`, on `threads` threads. `loaded` runs once both models are in memory (to lower this
 /// process's priority for the long part). `language` is a Whisper code such as `en`, or `auto`.
+/// `prompt` (see [`prompt`]) tells Whisper how names are spelled.
 /// Times are milliseconds from the start of `audio`; empty when nobody talks.
 pub fn transcribe(
     audio: &[f32],
     model: &Path,
     vad: &Path,
     language: &str,
+    prompt: &str,
     threads: usize,
     loaded: impl FnOnce(),
 ) -> Result<Vec<Segment>, Error> {
@@ -69,8 +71,11 @@ pub fn transcribe(
     params.set_print_realtime(false);
     params.set_print_special(false);
     params.set_print_timestamps(false);
-    // Each window on its own: one misheard phrase can't start a loop of repeats.
+    // No text carried over from an earlier run (within one clip, decoded text still feeds later windows).
     params.set_no_context(true);
+    // shortcut: whisper-rs 0.16 has no setter for whisper.cpp's `carry_initial_prompt` (the prompt in
+    // every window), so later text slowly pushes the prompt out; set it once whisper-rs has one.
+    params.set_initial_prompt(prompt);
     params.set_suppress_nst(true);
     // Short segments with word-level times, split at spaces: caption-sized pieces.
     params.set_token_timestamps(true);
@@ -103,4 +108,50 @@ pub fn transcribe(
         }
     }
     Ok(out)
+}
+
+/// Whisper's initial prompt for `clip`: spells "Backsight" and, when the file is named after the
+/// game (`<game> <YYYY-MM-DD HH.MM.SS>[ (n)].<ext>`), the game.
+pub fn prompt(clip: &Path) -> String {
+    let stem = clip.file_stem().unwrap_or_default().to_string_lossy();
+    // Drop the ` (2)` that keeps a second save in the same second apart.
+    let stem = match stem.rsplit_once(" (") {
+        Some((head, n))
+            if n.strip_suffix(')').is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())) =>
+        {
+            head
+        }
+        _ => &stem,
+    };
+    // `0` stands for any digit.
+    let fits = |s: &str, shape: &str| {
+        s.len() == shape.len()
+            && s.bytes().zip(shape.bytes()).all(|(c, p)| if p == b'0' { c.is_ascii_digit() } else { c == p })
+    };
+    let game = stem.rsplit_once(' ').and_then(|(rest, time)| {
+        let (game, date) = rest.rsplit_once(' ')?;
+        let named = fits(date, "0000-00-00") && fits(time, "00.00.00") && game != "Backsight";
+        named.then_some(game)
+    });
+    match game {
+        Some(game) => format!("A Backsight clip of {game}."),
+        None => "A Backsight clip.".into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::prompt;
+    use std::path::Path;
+
+    #[test]
+    fn prompt_names_the_game_from_the_file_name() {
+        let p = |s: &str| prompt(Path::new(s));
+        assert_eq!(p(r"C:\Videos\Valorant 2026-11-08 14.03.07.mp4"), "A Backsight clip of Valorant.");
+        assert_eq!(p(r"C:\V\World of Warcraft 2026-11-08 14.03.07 (2).mkv"), "A Backsight clip of World of Warcraft.");
+        assert_eq!(p(r"C:\V\Backsight 2026-11-08 14.03.07.mp4"), "A Backsight clip.", "no game known");
+        assert_eq!(p(r"C:\V\my best play.mp4"), "A Backsight clip.", "renamed by the user");
+        assert_eq!(p(r"C:\V\2026-11-08 14.03.07.mp4"), "A Backsight clip.", "no name before the time");
+        assert_eq!(p(r"C:\V\Game 2026-11-08 14-03-07.mp4"), "A Backsight clip.", "not the time's shape");
+    }
 }

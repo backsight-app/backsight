@@ -29,6 +29,6 @@ A recording in progress is named `<final name>.recording.part`, for example `Bac
 ## Consequences
 
 - Markers in an interrupted recording are lost: they are written when the file is finished.
-- `.recovered.part` originals stay in the video folder until the user removes them; the UI should offer that.
+- `.recovered.part` originals stay in the video folder until the user removes them: the Library's menu offers moving them to the Recycle Bin, after asking.
 - The ownership check depends on the `Backsight <stamp>` naming. If users can rename recordings in future, keep the `.recording.part` suffix and loosen the prefix check together.
 - A recovered recording needs free space equal to the copy until the user removes the original.

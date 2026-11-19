@@ -112,6 +112,39 @@ pub fn open_path(path: &Path, reveal: bool) -> windows::core::Result<()> {
     }
 }
 
+/// Moves files to the Recycle Bin. Windows asks first if one can't go there (a drive without a
+/// Recycle Bin) and would be deleted for good. Call on a blocking worker.
+pub fn recycle(paths: &[std::path::PathBuf]) -> Result<(), String> {
+    use windows::Win32::UI::Shell::{
+        FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_SILENT, FOF_WANTNUKEWARNING, SHFILEOPSTRUCTW,
+        SHFileOperationW,
+    };
+    if paths.is_empty() {
+        return Ok(());
+    }
+    // A list of NUL-terminated paths, ended by one more NUL.
+    let mut from: Vec<u16> =
+        paths.iter().flat_map(|p| dunce::simplified(p).as_os_str().encode_wide().chain([0])).collect();
+    from.push(0);
+    let mut op = SHFILEOPSTRUCTW {
+        hwnd: Default::default(),
+        wFunc: FO_DELETE,
+        pFrom: PCWSTR(from.as_ptr()),
+        pTo: PCWSTR::null(),
+        fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_WANTNUKEWARNING | FOF_SILENT).0 as u16,
+        fAnyOperationsAborted: false.into(),
+        hNameMappings: std::ptr::null_mut(),
+        lpszProgressTitle: PCWSTR::null(),
+    };
+    // SAFETY: `from` is double-NUL-terminated and outlives the call; `op` is fully initialized.
+    let code = unsafe { SHFileOperationW(&mut op) };
+    match (code, op.fAnyOperationsAborted.as_bool()) {
+        (0, false) => Ok(()),
+        (0, true) => Err("Nothing more was removed: the removal was cancelled.".into()),
+        (code, _) => Err(format!("Windows shell error {code:#x}")),
+    }
+}
+
 /// A plain message box, for the start modes that have no window of their own (`--report`).
 /// Returns when the user closes it.
 pub fn message_box(title: &str, text: &str) {

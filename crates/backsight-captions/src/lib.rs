@@ -160,6 +160,7 @@ pub fn run(job: &Job, models: &Path) -> Outcome {
         &models.join(model::WHISPER.name),
         &models.join(model::VAD.name),
         &job.language,
+        &whisper::prompt(&job.clip),
         threads_for(logical),
         background,
     );

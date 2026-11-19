@@ -274,3 +274,17 @@ fn encoders_at_their_defaults_clear_calibrated_quality_floors() {
         ("x264-default", Role::Default, "x264", vec![], Input::Same),
     ]);
 }
+
+#[test]
+#[ignore = "needs an Intel GPU with Quick Sync; takes a few minutes"]
+fn quick_sync_at_its_defaults_clears_the_quality_floors() {
+    let int = |v: i64| toml::Value::Integer(v);
+    let str = |v: &str| toml::Value::String(v.into());
+    check_samples(vec![
+        ("x264-near-lossless", Role::GoodControl, "x264", vec![("rc", str("cq")), ("cq", int(10))], Input::Same),
+        ("qsv-1mbps", Role::BadControl, "qsv-h264", vec![("rc", str("cbr")), ("bitrate", int(1000))], Input::Same),
+        ("qsv-bt601-matrix", Role::BadControl, "qsv-h264", vec![], Input::Bt601),
+        ("qsv-h264-default", Role::Default, "qsv-h264", vec![], Input::Same),
+        ("qsv-hevc-default", Role::Default, "qsv-hevc", vec![], Input::Same),
+    ]);
+}

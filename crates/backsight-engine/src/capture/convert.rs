@@ -236,7 +236,7 @@ impl Converter {
 }
 
 /// Reads NV12 textures back into encoder frames, for encoders without GPU input (CPU
-/// encoders, and Quick Sync for now). One GPU-to-CPU copy per frame.
+/// encoders, or a GPU encoder that refused GPU textures). One GPU-to-CPU copy per frame.
 pub struct Downloader {
     staging: ID3D11Texture2D,
     size: (u32, u32),

@@ -26,10 +26,11 @@ use windows::{
 /// Windows shell processes whose windows take focus but are never a game.
 // shortcut: UWP apps (ApplicationFrameHost.exe owns their window) count as the shell; resolve the
 // hosted app's process if users ask for Store games.
-const SHELL: [&str; 10] = [
+const SHELL: [&str; 11] = [
     "explorer.exe",
     "startmenuexperiencehost.exe",
     "shellexperiencehost.exe",
+    "shellhost.exe", // newer Windows 11 shell pieces (quick settings, flyouts)
     "searchhost.exe",
     "searchapp.exe",
     "applicationframehost.exe",

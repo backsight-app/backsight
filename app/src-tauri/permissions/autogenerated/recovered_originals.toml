@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-recovered-originals"
+description = "Enables the recovered_originals command without any pre-configured scope."
+commands.allow = ["recovered_originals"]
+
+[[permission]]
+identifier = "deny-recovered-originals"
+description = "Denies the recovered_originals command without any pre-configured scope."
+commands.deny = ["recovered_originals"]

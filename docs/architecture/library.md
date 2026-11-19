@@ -17,14 +17,16 @@ Everything lives in `%APPDATA%\Backsight\cache`:
 | File | What |
 | --- | --- |
 | `library.json` | Probe results per path, valid while the file's size and modified time match. Written atomically (temp file, then rename); a broken one is rebuilt. |
-| `library\<key>.jpg` | A video's thumbnail: the keyframe at about 10% in, at most 480 px each side. |
+| `library\<key>.jpg` | A video's thumbnail (the keyframe at about 10% in) or a JPEG XR screenshot's, at most 480 px each side. |
 | `library\<key>.mp4` | A video's hover preview, made on first request. |
 
 `<key>` is an FNV-1a hash of path, size and modified time, so an edited file gets new ones. After each scan, thumbnails and previews of files that are gone or changed are deleted, then the oldest previews (and after them thumbnails) until the folder is under 500 MB.
 
 New files are probed and thumbnailed on up to four threads. Measured on a desktop CPU (release build): 1,000 small clips take 7.6 s the first time and 0.12 s once cached.
 
-Screenshots need no thumbnail: the UI shows the file itself. JPEG XR (the HDR format) can't be shown by a WebView, so its `thumbnail` is null.
+Screenshots need no thumbnail: the UI shows the file itself. JPEG XR (the HDR format) can't be shown by a WebView, so it gets a JPEG thumbnail, decoded through Windows Imaging Component and tone-mapped with the same highlight roll-off as the screenshot picker and clipboard.
+
+A file that can't be read or thumbnailed is remembered as such until it changes, except in its first two minutes: right after a save, antivirus or the save itself may still hold it, so each scan tries again. Home rescans a new clip without a thumbnail twice, 3 s apart.
 
 ## Hover previews
 

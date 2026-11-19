@@ -71,6 +71,11 @@ pub fn take(settings: &Settings) -> Result<Saved, String> {
     shoot(settings, Target::Monitor(wgc::foreground_monitor()))
 }
 
+/// The whole monitor under the mouse: Home's Screenshot tile, pressed with Backsight's window hidden.
+pub fn take_under_mouse(settings: &Settings) -> Result<Saved, String> {
+    shoot(settings, Target::Monitor(wgc::cursor_monitor()))
+}
+
 /// Only the focused window, title bar included. Falls back to the whole monitor when no ordinary
 /// window has focus (the desktop, the taskbar, a minimized window or Backsight itself).
 pub fn take_window(settings: &Settings) -> Result<Saved, String> {
@@ -275,7 +280,7 @@ fn save(folder: &Path, name: &str, ext: &str, bytes: &[u8]) -> Result<PathBuf, S
 
 // shortcut: fixed highlight roll-off for the SDR picker and clipboard. Use display-aware tone
 // mapping if these previews need to match the brightness of a particular monitor.
-fn sdr_preview(rgba: &[u8]) -> Vec<u8> {
+pub(crate) fn sdr_preview(rgba: &[u8]) -> Vec<u8> {
     let channel = |bytes: [u8; 2]| {
         let linear = half::f16::from_le_bytes(bytes).to_f32();
         if linear.is_finite() { linear.max(0.0) } else { 0.0 }

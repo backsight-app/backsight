@@ -37,7 +37,7 @@ pub struct LibraryItem {
     /// The catalog's label, e.g. "H.264".
     pub video_codec: Option<String>,
     pub audio_tracks: Option<u32>,
-    /// An image the WebView can show: a cached JPEG for videos, the file itself for screenshots.
+    /// An image the WebView can show: the file itself for screenshots it can show, else a cached JPEG.
     pub thumbnail: Option<PathBuf>,
     /// A video with its captions file next to it (`clip.srt` for `clip.mp4`, ADR 0016).
     pub captions: bool,
@@ -55,9 +55,27 @@ pub struct Library {
 struct Cached {
     bytes: u64,
     modified_ms: u64,
-    /// `None` when FFmpeg couldn't read the file; not retried until the file changes.
+    /// `None` when FFmpeg couldn't read the file; not retried until the file changes, except
+    /// while it is new (see [`SETTLING_MS`]).
     info: Option<media::MediaInfo>,
     thumbnail_failed: bool,
+}
+
+/// A file saved this recently that couldn't be read or thumbnailed is tried again at every scan:
+/// right after a save, antivirus or the save itself may still hold it.
+const SETTLING_MS: u64 = 2 * 60 * 1000;
+
+impl Cached {
+    /// Whether this cache entry stands for `f` at `now_ms`, or the file must be read again.
+    fn holds_for(&self, f: &Found, now_ms: u64) -> bool {
+        let failed = self.thumbnail_failed || (self.info.is_none() && readable(f));
+        self.bytes == f.bytes && self.modified_ms == f.modified_ms && !(failed && now_ms < f.modified_ms + SETTLING_MS)
+    }
+}
+
+/// Whether FFmpeg should be able to read `f` (an HDR screenshot is not meant to be).
+fn readable(f: &Found) -> bool {
+    f.kind == MediaKind::Video || webview_shows(&f.ext)
 }
 
 /// One media file found on disk.
@@ -157,22 +175,38 @@ fn cache_key(path: &Path, bytes: u64, modified_ms: u64) -> String {
 /// Probes a file and makes its thumbnail, unless the cache already has them.
 fn refresh(f: &Found, old: Option<Cached>, thumb: &Path) -> Cached {
     let mut c = old.unwrap_or_else(|| {
-        let readable = f.kind == MediaKind::Video || webview_shows(&f.ext);
-        let info = readable
+        let info = readable(f)
             .then(|| media::probe(&f.path))
             .and_then(|r| r.inspect_err(|e| tracing::debug!("library: can't read {}: {e}", f.path.display())).ok());
         Cached { bytes: f.bytes, modified_ms: f.modified_ms, info, thumbnail_failed: false }
     });
-    if f.kind == MediaKind::Video
-        && c.info.is_some()
+    let made = match f.kind {
+        MediaKind::Video if c.info.is_some() => Some(media::thumbnail as fn(&Path, &Path) -> Result<(), String>),
+        MediaKind::Screenshot if !webview_shows(&f.ext) => Some(hdr_thumbnail as _),
+        _ => None,
+    };
+    if let Some(make) = made
         && !c.thumbnail_failed
         && !thumb.exists()
-        && let Err(e) = media::thumbnail(&f.path, thumb)
+        && let Err(e) = make(&f.path, thumb)
     {
         tracing::warn!("library: no thumbnail for {}: {e}", f.path.display());
         c.thumbnail_failed = true;
     }
     c
+}
+
+/// A JPEG of an HDR (JPEG XR) screenshot, which the WebView can't show, tone-mapped the way
+/// the screenshot picker and clipboard show it.
+fn hdr_thumbnail(src: &Path, dst: &Path) -> Result<(), String> {
+    // As big as video thumbnails.
+    let (half, w, h) = backsight_encode::screenshot::decode_jxr(src, (480, 480)).map_err(|e| e.to_string())?;
+    let jpeg = Catalog::get().screenshot_formats.iter().find(|f| f.id == "jpeg").ok_or("no JPEG format")?;
+    let bytes = backsight_encode::screenshot::encode(&crate::screenshot::sdr_preview(&half), w, h, jpeg, 80)?;
+    let tmp = dst.with_extension("tmp");
+    fs::write(&tmp, bytes)
+        .and_then(|()| fs::rename(&tmp, dst))
+        .map_err(|e| format!("can't write {}: {e}", dst.display()))
 }
 
 fn item(f: Found, c: &Cached, thumb: PathBuf) -> LibraryItem {
@@ -183,8 +217,8 @@ fn item(f: Found, c: &Cached, thumb: PathBuf) -> LibraryItem {
         known.map_or_else(|| name.to_uppercase(), |v| v.label.clone())
     });
     let thumbnail = match f.kind {
-        MediaKind::Video => thumb.exists().then_some(thumb),
-        MediaKind::Screenshot => webview_shows(&f.ext).then(|| f.path.clone()),
+        MediaKind::Screenshot if webview_shows(&f.ext) => Some(f.path.clone()),
+        _ => thumb.exists().then_some(thumb),
     };
     LibraryItem {
         name: f.path.file_name().unwrap_or_default().to_string_lossy().into_owned(),
@@ -222,10 +256,11 @@ pub fn scan(video_dir: Option<&Path>, screenshot_dir: Option<&Path>, cache_dir: 
     // A missing or broken cache is rebuilt.
     let old_text = fs::read_to_string(&index).unwrap_or_default();
     let mut old: BTreeMap<PathBuf, Cached> = serde_json::from_str(&old_text).unwrap_or_default();
+    let now_ms = unix_ms(SystemTime::now());
     let jobs: Vec<(Found, Option<Cached>, PathBuf)> = found
         .into_iter()
         .map(|f| {
-            let cached = old.remove(&f.path).filter(|c| c.bytes == f.bytes && c.modified_ms == f.modified_ms);
+            let cached = old.remove(&f.path).filter(|c| c.holds_for(&f, now_ms));
             let thumb = media_dir.join(format!("{}.jpg", cache_key(&f.path, f.bytes, f.modified_ms)));
             (f, cached, thumb)
         })
@@ -249,7 +284,7 @@ pub fn scan(video_dir: Option<&Path>, screenshot_dir: Option<&Path>, cache_dir: 
     let mut keep = HashSet::new();
     let mut items = Vec::with_capacity(jobs.len());
     for ((f, _, thumb), c) in jobs.into_iter().zip(done) {
-        if f.kind == MediaKind::Video {
+        if f.kind == MediaKind::Video || !webview_shows(&f.ext) {
             keep.insert(cache_key(&f.path, f.bytes, f.modified_ms));
         }
         cache.insert(f.path.clone(), c.clone());
@@ -358,6 +393,46 @@ mod tests {
         assert_ne!(cache_key(p, 1, 2), cache_key(p, 1, 3));
         assert_ne!(cache_key(p, 1, 2), cache_key(Path::new(r"C:\Videos\b.mp4"), 1, 2));
         assert_eq!(cache_key(p, 1, 2).len(), 16);
+    }
+
+    #[test]
+    fn a_new_file_that_failed_is_read_again() {
+        let f = |ext: &str, kind| Found {
+            path: PathBuf::from(format!(r"C:\Videos.{ext}")),
+            kind,
+            ext: ext.into(),
+            bytes: 10,
+            modified_ms: 1_000_000,
+            created_ms: 1_000_000,
+        };
+        let (video, hdr_shot) = (f("mp4", MediaKind::Video), f("jxr", MediaKind::Screenshot));
+        let read =
+            Cached { bytes: 10, modified_ms: 1_000_000, info: Some(Default::default()), thumbnail_failed: false };
+        let unreadable = Cached { info: None, ..read.clone() };
+        let no_thumb = Cached { thumbnail_failed: true, ..read.clone() };
+        let (new, old) = (1_000_000 + 5_000, 1_000_000 + SETTLING_MS);
+        assert!(read.holds_for(&video, new), "a good entry is kept");
+        assert!(!unreadable.holds_for(&video, new) && !no_thumb.holds_for(&video, new), "retried while new");
+        assert!(unreadable.holds_for(&video, old) && no_thumb.holds_for(&video, old), "then given up on");
+        assert!(unreadable.holds_for(&hdr_shot, new), "not meant to be read");
+        assert!(!Cached { bytes: 11, ..read.clone() }.holds_for(&video, old), "the file changed");
+    }
+
+    #[test]
+    fn an_hdr_screenshot_gets_a_jpeg_thumbnail() {
+        let root = tempfile::tempdir().unwrap();
+        let (shots, cache) = (root.path().join("shots"), root.path().join("cache"));
+        fs::create_dir(&shots).unwrap();
+        // 4.0 is brighter than SDR white: the roll-off must keep it from turning grey or failing.
+        let bright: Vec<u8> = [0x4400u16, 0x3c00, 0, 0x3c00].into_iter().flat_map(u16::to_le_bytes).collect();
+        let jxr = backsight_encode::screenshot::encode_jxr(&bright.repeat(64 * 32), 64, 32).unwrap();
+        fs::write(shots.join("Game 2026-11-18 12.00.00.jxr"), jxr).unwrap();
+        let lib = scan(None, Some(&shots), &cache);
+        let thumb = lib.items[0].thumbnail.clone().expect("a thumbnail");
+        assert_eq!(thumb.extension().unwrap(), "jpg");
+        assert!(fs::read(&thumb).unwrap().starts_with(&[0xff, 0xd8, 0xff]), "a JPEG");
+        scan(None, Some(&shots), &cache);
+        assert!(thumb.exists(), "kept by the next scan");
     }
 
     #[test]

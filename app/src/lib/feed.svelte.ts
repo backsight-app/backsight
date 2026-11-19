@@ -35,8 +35,19 @@ export function startFeed() {
   started = true;
   // First run: nothing counts as new yet.
   if (!feed.seen) markSeen();
+  let retries = 0;
+  const scan = () =>
+    invoke<Library>("list_library").then((l) => {
+      feed.lib = l;
+      // A clip read too early has no thumbnail yet: the Library tries again while it's new.
+      const newest = l.items[0];
+      if (newest?.kind === "video" && !newest.thumbnail && Date.now() - newest.created_ms < 120_000 && retries++ < 2) {
+        setTimeout(scan, 3000);
+      }
+    }, () => {});
   const load = () => {
-    invoke<Library>("list_library").then((l) => (feed.lib = l), () => {});
+    retries = 0;
+    void scan();
     invoke<[number, number] | null>("clips_space").then((s) => (feed.space = s), () => {});
   };
   load();

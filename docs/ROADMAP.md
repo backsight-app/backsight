@@ -1,6 +1,6 @@
 # Roadmap
 
-Each milestone ends with something you can use, and a definition of done that is measured, not assumed.
+Each milestone ends with something usable and a definition of done that is measured, not assumed.
 
 ✅ done · 🟡 partly done · ⏸️ on hold
 
@@ -8,11 +8,13 @@ Each milestone ends with something you can use, and a definition of done that is
 | --- | --- |
 | M0 Foundation | ✅ |
 | M1 Instant Replay end to end | ✅ |
-| M2 Recording and screenshots | ✅ |
-| M3 Every GPU, every case | 🟡 NVIDIA verified; one hands-on check open; AMD and Intel on hold |
-| M4 Ship it | 🟡 installer, crash reports and CI checks done; signing and auto-update on hold |
+| M2 Recording and screenshots | ✅ (two hand checks open) |
+| M3 Every GPU, every case | 🟡 NVIDIA and Intel Quick Sync verified; AMD untested |
+| M4 Ship it | 🟡 public releases, signed auto-update and FFmpeg source done; installer code signing open |
 
-On hold: microphone switching mid-recording, the NVIDIA overlay clash check, AMD and Intel testing, signed builds with public auto-update. Later ideas: quick trim, per-game settings, translations.
+On hold: Authenticode signing of the installer, AMD encoder testing (no hardware), microphone switching mid-recording (hand check), the NVIDIA overlay clash check with the overlay on, the exclusive-fullscreen recording-cost gate. Later: see [Later](#later-).
+
+Releases: v0.1.3 to v0.1.8 are published on [GitHub Releases](https://github.com/backsight-app/backsight/releases), built and signed by CI as `0.1.<run>`. 0.1.9 is in progress. Changes per version: [CHANGELOG.md](../CHANGELOG.md).
 
 ## M0 · Foundation ✅
 
@@ -23,62 +25,76 @@ On hold: microphone switching mid-recording, the NVIDIA overlay clash check, AMD
 - Instant Replay ring buffer (`backsight-engine::replay`)
 - Tauri shell (tray, disposable window) and the full settings UI with tooltips and hotkey editor
 
-## M1 · Instant Replay works end to end ✅
+## M1 · Instant Replay end to end ✅
 
-- `scripts/fetch-ffmpeg.ps1`: downloads the pinned FFmpeg 8.1 GPL shared build and verifies its SHA-256
+- `scripts/fetch-ffmpeg.ps1`: downloads the pinned FFmpeg 8.1.3 slim GPL build and verifies its SHA-256
 - Encoder probe (`backsight-encode::probe`): tries each encoder on a black frame and caches the result per graphics driver
 - WGC monitor capture, GPU NV12 conversion, NVENC (H.264, HEVC) with zero-copy D3D11 frames
 - Desktop audio loopback to AAC, with silence fill and QPC sync
-- Raw Input hotkeys: save replay, toggle replay
-- Save clip: buffer snapshot, then mux to crash-safe MP4 or MKV; tray notification
-- Live status on the Home page; Library page with thumbnails, hover previews and filters ([library.md](architecture/library.md))
+- Raw Input hotkeys: save clip, toggle Instant Replay
+- Save clip: buffer snapshot, then mux to crash-safe MP4 or MKV
+- Live status on Home; Library with thumbnails, hover previews and filters ([library.md](architecture/library.md))
 - Diagnostics counters (dropped frames, encoder queue depth, audio drift, silence fills) and `tracing` logs in `%APPDATA%\Backsight\logs`
 - Tests ([testing.md](architecture/testing.md)): pacer and hotkey scenarios, option mapping, `ffprobe` file validation, A/V sync, crash-kill recovery, zero allocations per frame
 - `scripts/hardware-check.ps1`: the same scenarios on a real GPU, plus PresentMon frame cost, as a Markdown report
 
-**Done when:** on a test PC at 1080p60, pressing Alt+F10 in a game saves a playable 2-minute clip with sound in under 1 s, at under 5% FPS cost over WGC capture alone, with engine RAM under 150 MB plus the buffer. Met; measurements are in [testing.md](architecture/testing.md).
+**Done when:** on a test PC at 1080p60, the save-clip key in a game saves a playable 2-minute clip with sound in under 1 s, at under 5% FPS cost over WGC capture alone, with engine RAM under 150 MB plus the buffer. Met; measurements in [testing.md](architecture/testing.md).
 
 ## M2 · Recording and screenshots ✅
 
-- Start and stop recording (Alt+F9), pause and resume (Alt+Shift+F9), split files every N minutes, markers (Alt+F7) as chapters, MKV to MP4 conversion (the MKV is kept)
-- Recordings cut off by a crash or power loss are saved at the next start; the unfinished original is kept ([ADR 0008](adr/0008-interrupted-recording-files.md))
-- Microphone (chosen device or Windows default), mute, push-to-talk; game-only audio (process loopback); separate tracks
-- Screenshots: whole screen (Alt+F1), active window (Alt+Shift+F1), region overlay (Ctrl+Alt+F1); PNG, JPEG, WebP; copy to clipboard
-- Folder pickers and "Start with Windows" (off by default)
-- Backsight's own pop-ups, a movable recording dot, red tray icon and sounds, shown over games and Do Not Disturb ([ADR 0010](adr/0010-own-pop-ups-and-sounds.md))
-- Diagnostics page: replay buffer length, size and bitrate, recording bitrate and writer backlog, frame and audio counters, each explained in plain language
+- Start and stop recording (Alt+R), pause and resume (Alt+Shift+R), split files every N minutes, markers (Alt+B) as chapters, MKV to MP4 conversion (the MKV is kept)
+- Recordings cut off by a crash or power loss are recovered at the next start; the unfinished original is kept ([ADR 0008](adr/0008-interrupted-recording-files.md))
+- Microphone (chosen device or Windows default), mute (Alt+T), push-to-talk; game-only audio (process loopback); separate tracks
+- Screenshots: whole screen (Alt+S), active window (Alt+Shift+S), region (Ctrl+Alt+S); PNG, JPEG, WebP; copy to clipboard
+- Folder pickers and Start with Windows (off by default)
+- Backsight's own pop-ups, movable recording dot, red tray icon and sounds, shown over games and with Do Not Disturb on ([ADR 0010](adr/0010-own-pop-ups-and-sounds.md))
+- Diagnostics page: replay buffer length, size and bitrate, recording bitrate and writer backlog, frame and audio counters, each explained
 - `criterion` benchmarks for the pacer, replay buffer, recording feed and hotkeys
 - Hardware checks for colour (range and matrix errors) and encoder quality (PSNR/SSIM floors)
-- NVENC preset P1 is the default: far less encoder work than P4 or P5 at the same game speed and near-identical picture quality. On a still screen NVENC rests instead of re-encoding identical frames (see platform-notes)
+- NVENC preset P1 by default: far less encoder work than P4 or P5 at the same game speed and near-identical quality. On a still screen NVENC rests instead of re-encoding identical frames (platform-notes)
 
-Measured: a 30-minute recording has full length and no video gaps; flash-and-beep sync shows no drift; replay plus recording costs about 1.6% FPS over capture-only in a GPU-bound game.
+Measured: a 30-minute recording has full length and no video gaps; the flash-and-beep test shows no drift; replay plus recording costs about 1.6% FPS over capture alone in a GPU-bound game.
 
 Open or dropped checks:
-- ⏸️ Switching or unplugging a microphone during a recording (untested with a physical microphone switch)
-- Dropped: the area picker at Windows scaling above 100% (not worth reconfiguring a test machine)
-- The exclusive-fullscreen recording-cost gate is still open ([testing.md](architecture/testing.md))
+- ⏸️ Switching or unplugging a microphone during a recording: not yet checked by hand with a physical device change
+- ⏸️ Exclusive-fullscreen recording-cost gate ([testing.md](architecture/testing.md))
+- Dropped: the region picker at Windows scaling above 100% (not worth reconfiguring a test machine)
 
 ## M3 · Every GPU, every case 🟡
 
 - ✅ First-run setup recommends an encoder and explains unavailable choices
-- ✅ Home warns when encoding falls behind; "Use a lighter setting" switches to hardware encoding
+- ✅ Home warns when encoding falls behind; **Use a lighter setting** switches to hardware encoding
 - ✅ Game-window capture and monitor selection ([ADR 0012](adr/0012-window-and-monitor-capture.md))
-- ✅ File names can use the foreground program's name, with optional per-game folders
-- ✅ Setup warns about NVIDIA overlay hotkey clashes (a check with the overlay on is ⏸️ on hold)
-- 🟡 Instant Replay should resume by itself after the monitor is unplugged and replugged: still to verify by hand
-- ✅ HDR (opt-in): 10-bit HEVC (P010, BT.2020 PQ) on NVIDIA for a whole monitor or a game window, JPEG XR screenshots, tone-mapped Library thumbnails. An SDR monitor gets standard video with a note on Home. Verified with a calibrated test-pattern window (see "Calibrated HDR check" in [testing.md](architecture/testing.md))
-- ⏸️ AMD (AMF) and Intel (Quick Sync) encoding: the engine has the code path, but it has never run on that hardware. Until it has, Backsight is verified on NVIDIA only, and first-run setup says so plainly when it finds an AMD or Intel card
+- ✅ Game-window mode: a web browser never takes over the capture; a notice for games in exclusive full screen; an HDR window capture that keeps failing falls back to standard video for that game (0.1.8; covered by unit tests, not yet seen in a live game)
+- ✅ File names from the foreground program, with optional per-game folders
+- ✅ Setup warns about NVIDIA overlay hotkey clashes and offers fallback keys. ⏸️ A check with the overlay switched on is still open
+- ✅ Instant Replay resumes after its monitor is unplugged and replugged (checked by hand). A move to another monitor keeps the replay so far, and restarts are capped (0.1.8)
+- ✅ HDR (opt-in): 10-bit HEVC (P010, BT.2020 PQ) on NVIDIA for a whole monitor or a game window, JPEG XR screenshots, tone-mapped Library thumbnails. An SDR monitor gets standard video with a note on Home. Verified with a calibrated test-pattern window ("Calibrated check" in [testing.md](architecture/testing.md))
+- ✅ Intel Quick Sync (H.264, HEVC): zero-copy from D3D11 textures; replay, recording, pause and split, and quality floors verified on Intel Iris Xe (hybrid laptop). Not yet run on an Intel-only PC; HDR stays NVIDIA-only
+- ⏸️ AMD (AMF): the code path exists but has never run on AMD hardware. First-run setup says so when it finds an AMD card
 
 ## M4 · Ship it 🟡
 
-- ✅ NSIS installer bundling a slim FFmpeg build (about 44 MB of DLLs); per-user install; the uninstaller keeps clips; builds carry no personal names or paths
+- ✅ NSIS installer with a slim FFmpeg build (about 44 MB of DLLs); per-user install; the uninstaller keeps clips and settings; builds carry no personal names or paths ([ADR 0011](adr/0011-nsis-installer.md))
 - ✅ Local crash reports stay on the PC unless shared manually
 - ✅ Automated performance regression check on GitHub ([testing.md](architecture/testing.md))
-- 🟡 FFmpeg source: published with every build; a public release needs it where anyone can reach it (GPL, [ADR 0005](adr/0005-license-gpl.md))
-- ⏸️ Signed builds and public auto-update (`tauri-plugin-updater`). An Update button for local builds exists ([ADR 0009](adr/0009-local-test-build-updates.md))
+- ✅ Public repository [backsight-app/backsight](https://github.com/backsight-app/backsight) since 2026-11-18; every green push to `main` is released by CI as `0.1.<run>` (v0.1.3 to v0.1.8 so far)
+- ✅ FFmpeg corresponding source published as the release [`ffmpeg-8.1.3-slim-r1`](https://github.com/backsight-app/backsight/releases/tag/ffmpeg-8.1.3-slim-r1) (GPL, [ADR 0005](adr/0005-license-gpl.md))
+- ✅ Automatic updates from GitHub Releases (`tauri-plugin-updater`), signed with minisign: checks at start, hourly and when the window opens; installs by itself when idle shortly after start, otherwise **Restart to update** on Home ([ADR 0014](adr/0014-updates-from-github-releases.md)). Quiet install without an installer window from 0.1.9 on
+- ✅ The installer offers to close a running Backsight (0.1.7)
+- ⏸️ Authenticode signing of the installer (SmartScreen warns on first run). A free open-source signing service is being looked into
+
+## Shipped since M4
+
+- ✅ Vertical clips: Clip shape Wide, Vertical or Both; a 9:16 centre crop made in the background after the save ([ADR 0015](adr/0015-vertical-clips.md), 0.1.5)
+- ✅ On-device captions with whisper.cpp: opt-in 61 MB model download, a `.srt` per clip ([ADR 0016](adr/0016-on-device-captions.md), 0.1.5); captions burned into vertical clips (0.1.8)
+- ✅ New default hotkeys (Alt+C, Alt+R, Alt+S family) with NVIDIA-clash fallbacks, and a No key option (0.1.6)
+- ✅ Redesign: neutral dark theme, violet accent, bundled Inter and Sora fonts, rebuilt Home (0.1.7)
 
 ## Later ⏸️
 
 - Quick trim and share in the Library
 - Per-game profiles
 - Translations (`glossary.<lang>.json`)
+- Captions for recordings and for clips saved before captions were turned on
+- Vertical clips cut from recordings; framing that follows the action instead of the centre

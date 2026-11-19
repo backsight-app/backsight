@@ -5,12 +5,20 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Read before you post.** A problem report or log lists the programs that were running and your settings. Read it first, and paste only what you are happy for everyone to see. Security problems: please don't post them here; see [SECURITY.md](https://github.com/backsight-app/backsight/blob/main/SECURITY.md).
+        **Read before you post.** A problem report or log lists the programs that were running and your settings. Read it first, and paste only what you are happy for everyone to see. Report security issues privately; see [SECURITY.md](https://github.com/backsight-app/backsight/blob/main/SECURITY.md).
   - type: textarea
     id: what
     attributes:
       label: What happened?
       description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Backsight version
+      description: Shown under About on the General page.
+      placeholder: "0.1.8"
     validations:
       required: true
   - type: input

@@ -11,7 +11,9 @@
 | Settings | [architecture/settings-and-content.md](architecture/settings-and-content.md) | Settings schema, the content files and the glossary |
 | Testing | [architecture/testing.md](architecture/testing.md) | The three test tiers and what each one proves |
 | Platform notes | [reference/platform-notes.md](reference/platform-notes.md) | WGC, D3D11, NVENC, WASAPI and Raw Input gotchas |
-| Decisions | [adr/README.md](adr/README.md) | Why we chose what we chose |
-| Plan | [ROADMAP.md](ROADMAP.md) | Milestones, scope and definitions of done |
+| Decisions | [adr/README.md](adr/README.md) | Architecture decisions and their trade-offs |
+| Plan | [ROADMAP.md](ROADMAP.md) | Milestones, status and definitions of done |
 | Setup | [DEVELOPMENT.md](DEVELOPMENT.md) | Toolchain, commands, repo conventions |
-| Design | [design/brand-and-voice.md](design/brand-and-voice.md) | Logo, colors, typography and how we write explanations |
+| Install | [install.md](install.md) | Installing, updating, SmartScreen and antivirus warnings |
+| Privacy | [privacy.md](privacy.md) | Network connections and local data |
+| Design | [design/brand-and-voice.md](design/brand-and-voice.md) | Logo, colours, typography, writing style |

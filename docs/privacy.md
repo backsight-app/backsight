@@ -1,25 +1,23 @@
 # Privacy
 
-Short version: everything Backsight does stays on your PC.
+Backsight works entirely on the PC. It has no account, analytics, telemetry, crash upload or advertising.
 
-## What goes online
+## Network connections
 
-Backsight makes no network connections, with three exceptions:
+Backsight connects to the internet in three cases only:
 
-1. **Updates.** An installed Backsight asks GitHub whether a newer version exists: when it starts, every hour while it runs, when you open its window, and when you press **Check** under Updates on the General page. The question sends nothing about you or your PC; it only downloads a small file that names the newest version. When there is one, Backsight downloads it and checks its signature. GitHub sees your internet address, as any website would.
-2. **The captions download.** Captions are off until you turn them on. When you press **Download captions**, Backsight downloads its speech models (about 61 MB) from Backsight's own releases on GitHub, once, and checks that they arrived unchanged. GitHub sees your internet address, as any website would. Nothing else is ever sent: the captions are made on your PC, and your voice and clips never leave it.
-3. **The installer's WebView2 setup.** Backsight's window needs Microsoft's WebView2 runtime. Windows 11 already has it. If your PC doesn't, the installer may download it from Microsoft. WebView2 is part of Microsoft Edge, so Microsoft may collect diagnostic data from it according to your Windows privacy settings; Backsight adds nothing to that.
+1. **Updates.** An installed copy asks GitHub whether a newer version exists: at start, every hour while running, when its window opens, and when **Check** under Updates on the General page is pressed. The request sends nothing about the user or the PC; it downloads a small file naming the newest version. When one exists, Backsight downloads it and verifies its signature before installing. GitHub sees the PC's IP address, as with any website.
+2. **Captions models.** Captions are off by default. **Download captions** on the Audio page downloads the speech models (about 61 MB) once from a release of Backsight's GitHub repository and verifies their size and SHA-256. GitHub sees the PC's IP address. Captions are then made on the PC; audio and clips never leave it.
+3. **WebView2 setup.** Backsight's window needs Microsoft's WebView2 runtime, which Windows 11 includes. On a PC without it, the installer downloads it from Microsoft. WebView2 is part of Microsoft Edge, so Microsoft may collect diagnostic data from it according to the Windows privacy settings; Backsight adds nothing to that.
 
-There is no account, no analytics, no crash reporting and no advertising.
+## Local data
 
-## What stays on your PC
-
-Your settings, clips, captions, screenshots, the Library's thumbnails, the captions models and Backsight's log all live in folders on your PC (settings, models and log in `%APPDATA%\Backsight`, clips in `Videos\Backsight`, screenshots in `Pictures\Backsight`). Backsight never uploads them.
+Settings, clips, recordings, captions, screenshots, Library thumbnails, the captions models and logs are stored on the PC: settings, models, cache and logs in `%APPDATA%\Backsight`, clips in `Videos\Backsight`, screenshots in `Pictures\Backsight` (or the folders chosen in the settings). Backsight never uploads them.
 
 ## Problem reports
 
-**Save a problem report** writes a file to your desktop. Nothing is sent anywhere. Your Windows user name is removed from it, but it includes your settings and the names of the programs that were in front while Backsight ran (for example a game's name). **Read it before you share it**, and don't paste it into a public issue unless you are happy for everyone to see it.
+**Save a problem report** writes a file to the desktop; nothing is sent. The Windows user name is removed, but the report includes the settings and the names of programs that were in front while Backsight ran, such as games. Review it before sharing, and attach it to a public issue only if its contents may be public.
 
-## Questions
+## Contact
 
-Open an issue at https://github.com/backsight-app/backsight/issues. For security problems, see [SECURITY.md](../SECURITY.md).
+Questions: <https://github.com/backsight-app/backsight/issues>. Security issues: [SECURITY.md](../SECURITY.md).

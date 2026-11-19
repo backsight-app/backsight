@@ -1,52 +1,52 @@
 # Installing Backsight
 
-Backsight keeps the last 2 minutes of your game ready to save, and can also record and take screenshots.
+## Install
 
-## How to install
+Download `Backsight_<version>_x64-setup.exe` from the [Releases page](https://github.com/backsight-app/backsight/releases/latest) and run it. Backsight installs per user into `%LOCALAPPDATA%\Backsight` with a Start menu shortcut; no admin rights are needed. If Backsight is already running, the installer offers to close it (installed copies from 0.1.7 on).
 
-Download the installer ("Backsight_..._x64-setup.exe") from the Releases page, then double-click it. It puts Backsight in your Start menu and sets up everything it needs. You don't need admin rights.
+Backsight is free software (GPL-3.0-or-later) with no warranty, and is not affiliated with any game or company. Its source code is in the same repository as the releases.
 
-Backsight is free software (GPL-3.0-or-later) and comes with no warranty. It is not affiliated with any game or company. Its source code is on the same page as the installer.
+## Windows and antivirus warnings
 
-## If Windows warns you
+The installer is not Authenticode-signed. Update downloads are signed separately and checked by Backsight before they install.
 
-1. Your browser may say the file "isn't commonly downloaded". Choose Keep. In Edge: click the three dots next to the download, then Keep, then Show more, then Keep anyway.
-2. "Windows protected your PC": click "More info", then "Run anyway". It appears because Backsight isn't signed with a paid certificate, not because something is wrong.
-3. "Smart App Control blocked this app" (Windows 11 only): Windows won't run unsigned apps on that PC. There's no simple way around that one.
-4. Some antivirus programs complain, because Backsight records the screen and listens for its keyboard shortcuts. If yours blocks it, allow Backsight in the antivirus.
+- **Browser download warning** ("isn't commonly downloaded"): choose Keep. In Edge: **…** next to the download, **Keep**, **Show more**, **Keep anyway**.
+- **"Windows protected your PC"** (SmartScreen): **More info**, then **Run anyway**.
+- **"Smart App Control blocked this app"** (Windows 11): Smart App Control does not run unsigned apps. There is no per-app exception.
+- **Antivirus:** some products flag screen recording and global hotkeys. Allow Backsight in the antivirus if it is blocked.
 
-If your PC doesn't have Microsoft's WebView2 (Windows 11 does), the installer may download it, which needs an internet connection the first time.
+The installer downloads Microsoft's WebView2 runtime when it is missing (Windows 11 includes it), which needs an internet connection.
 
 ## First start
 
-Backsight checks your graphics card for a few seconds. You can start right away. It records your main screen.
+Backsight tests the graphics card's encoders for a few seconds and recommends a setting. Instant Replay starts at once, capturing the main monitor at 1080p60. Closing the window leaves Backsight running in the notification area; quit from its icon's menu.
 
-When you close the window, Backsight keeps running. Its icon is near the clock (click the ^ arrow if you don't see it). Right-click the icon to quit.
+| Key | Action |
+| --- | --- |
+| Alt+C | Save the last 2 minutes as a clip |
+| Alt+R | Start or stop recording |
+| Alt+S | Screenshot |
 
-- Alt+C: save a clip of the last 2 minutes
-- Alt+R: start or stop a recording
-- Alt+S: screenshot
+Home lists all keys; change them on the Hotkeys page. Existing settings keep their keys after an update. When the NVIDIA app's overlay uses the same keys, Home offers **Give Backsight other keys**; Alt+R, which is also NVIDIA's performance overlay key, then moves to Alt+V.
 
-Backsight's Home page shows your keys. You can change them on the Hotkeys page, or pick No key to turn one off. If you used Backsight before these keys came in, you keep your old keys; if the NVIDIA app uses the same ones, Home offers to give Backsight other keys. Alt+R is also the NVIDIA app's performance overlay key, so with NVIDIA's overlay on, Home offers Alt+V for recording instead.
+Clips and recordings go to `Videos\Backsight`, screenshots to `Pictures\Backsight`.
 
-When a clip is saved you hear a short sound and see "Clip saved" in a corner of the screen. Watch it in Backsight's Library.
+## Updates
 
-## Good to know
+Installed copies check GitHub for a new version at start, every hour and when the window opens. An update found shortly after start, while no game is in front and nothing is recording, installs by itself. Otherwise Home shows **Update ready** with **Restart to update**; **Check** under Updates on the General page checks on demand. Every update is verified against Backsight's signing key before it runs. Settings, clips and screenshots are kept. See the [privacy statement](privacy.md) for what these checks send.
 
-- It has been tested on NVIDIA graphics with Windows 11. AMD and Intel graphics, and Windows 10, are only lightly tried. If you have one of those, your feedback is extra useful.
-- Clips go to Videos\Backsight and screenshots to Pictures\Backsight. Uninstalling keeps them.
-- To update, open the General page and press Check under Updates, then Install; your settings and clips stay. Backsight goes online only when you press those buttons.
-- You are responsible for what you record. Check that you have the right to record other people's voices and copyrighted video before you share a clip.
+## Uninstall
 
-## If something goes wrong: send a problem report
+Uninstall from Windows Settings > Apps. Clips, screenshots, settings and logs are kept.
 
-Make the report in one of these ways. The second also works when Backsight is stuck:
+## Known limits
 
-- On Backsight's Home page, click "Save a problem report".
-- Start menu: open "Backsight problem report".
+- Verified on NVIDIA GPUs and Intel Quick Sync with Windows 11. AMD encoders and Windows 10 are not yet verified on hardware. Reports from those PCs are welcome.
+- Games in exclusive full screen can't be captured in game-window mode; Home asks for borderless or windowed mode.
+- Users are responsible for what they record and share, including other people's voices and copyrighted material.
 
-A report file appears on your desktop. Your Windows user name is removed from it, but it still lists your settings and the names of the programs that were in front, such as games. Read it before you share it, and don't paste it into a public post unless you are happy for everyone to see it.
+## Reporting a problem
 
-Then open an issue at https://github.com/backsight-app/backsight/issues and tell us what you did, what you expected, and what happened instead. Attach the report only if you are happy with what it says. Security problems: see SECURITY.md in the repository, not a public issue.
+Create a problem report with Home's **Save a problem report**, or from the Start menu entry **Backsight problem report** (works when Backsight is unresponsive). The report is written to the desktop; nothing is sent. The Windows user name is removed, but the report lists settings and the names of programs that were in front, such as games. Review it before sharing.
 
-More about privacy: docs/privacy.md in the repository.
+Open an issue at <https://github.com/backsight-app/backsight/issues> with what you did, what you expected and what happened, and attach the report if you are comfortable with its contents. Report security issues privately as described in [SECURITY.md](../SECURITY.md).

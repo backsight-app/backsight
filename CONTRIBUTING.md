@@ -1,6 +1,6 @@
 # Contributing to Backsight
 
-Thanks for helping. Setup and commands are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+Setup and commands are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Before you open a pull request
 
@@ -22,4 +22,4 @@ If you add a dependency, run `scripts/third-party-notices.ps1` and commit the up
 
 ## Reporting bugs
 
-Use the bug report template. Include your Windows version, GPU and driver version, the encoder and container you used, and `%APPDATA%\Backsight\logs\backsight.log` if there is one.
+Use the bug report template. Include the Backsight version, Windows version, GPU and driver version, the encoder and container, and `%APPDATA%\Backsight\logs\backsight.log` if there is one.

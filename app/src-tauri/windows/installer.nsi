@@ -237,6 +237,18 @@ FunctionEnd
   !include "{{this}}"
 {{/each}}
 
+; A quiet update (/UPDATE) that can't go ahead starts the installed copy again, so Backsight
+; isn't left closed with nothing said. Its log says why the update didn't install.
+!macro BacksightRestartAfterFailedUpdate
+  Push $R9
+  ${GetOptions} $CMDLINE "/UPDATE" $R9
+  ${IfNot} ${Errors}
+  ${AndIf} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe"
+    nsis_tauri_utils::RunAsUser "$INSTDIR\${MAINBINARYNAME}.exe" ""
+  ${EndIf}
+  Pop $R9
+!macroend
+
 ; Check the current user's tray process, including a portable copy.
 !macro BacksightRequireQuit
   !define QUIT_MESSAGE "Backsight is still open. Right-click its icon near the clock (click ^ if you don't see it), choose Quit Backsight, then try again."
@@ -279,6 +291,8 @@ FunctionEnd
         System::Call 'kernel32::GetStdHandle(i -11)p.r0'
         FileWrite $0 "${QUIT_MESSAGE}$\r$\n"
       ${EndIf}
+      ; A quiet update shows nothing: start the copy that's there again rather than leave none.
+      !insertmacro BacksightRestartAfterFailedUpdate
     ${Else}
       MessageBox MB_OK|MB_ICONEXCLAMATION "${QUIT_MESSAGE}"
     ${EndIf}
@@ -594,6 +608,12 @@ Section Install
     SetAutoClose true
   ${EndIf}
 SectionEnd
+
+Function .onInstFailed
+  ${If} ${Silent}
+    !insertmacro BacksightRestartAfterFailedUpdate
+  ${EndIf}
+FunctionEnd
 
 Function .onInstSuccess
   ; Check for `/R` flag only in silent and passive installers because

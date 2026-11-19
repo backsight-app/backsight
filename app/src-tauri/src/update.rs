@@ -164,6 +164,20 @@ fn plain(e: Error) -> String {
     .to_owned()
 }
 
+/// This version starts for the first time (the version that last started is kept in
+/// `last-version.txt`). A first install also counts; no record at all (a folder that can't be
+/// written) never does, so the window doesn't open at every sign-in.
+pub(crate) fn first_start_of(version: &str) -> bool {
+    let Ok(dir) = backsight_config::app_dir() else { return false };
+    first_start_in(&dir.join("last-version.txt"), version)
+}
+
+/// [`first_start_of`] with the record kept in `file`.
+fn first_start_in(file: &std::path::Path, version: &str) -> bool {
+    let last = std::fs::read_to_string(file).unwrap_or_default();
+    last.trim() != version && std::fs::write(file, version).is_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,5 +188,15 @@ mod tests {
         assert!(plain(Error::SignatureUtf8("x".into())).contains("safety check"));
         assert!(plain(Error::MissingSignedVersion).contains("nothing was installed"));
         assert!(plain(Error::EmptyEndpoints).starts_with("Backsight couldn't update"));
+    }
+
+    #[test]
+    fn a_version_counts_as_new_once_and_never_without_a_record() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("last-version.txt");
+        assert!(first_start_in(&file, "0.1.9"), "first install");
+        assert!(!first_start_in(&file, "0.1.9"), "the next sign-in");
+        assert!(first_start_in(&file, "0.2.0"), "after an update");
+        assert!(!first_start_in(&dir.path().join("gone").join("last-version.txt"), "0.2.0"), "can't be written");
     }
 }

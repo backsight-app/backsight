@@ -28,7 +28,7 @@ if ($Slim) {
     $Asset = "ffmpeg-8.1.3-backsight-slim-win64-gpl-shared.zip"
     $Url = "https://github.com/$Repo/releases/download/$Tag/$Asset"
     $Sha256 = "7d4797c783fef2f5d073c8d7679c43cfcd3640da30420bdc52e39032df7578da"
-    # Fallback until the slim build has proven itself (and for VMAF scores): the full GPL build,
+    # Fallback for VMAF scores: the full GPL build,
     # about 245 MB of DLLs. Never build the installer from it.
     # $Version = "8.1"; $Repo = $null
     # $Asset = "ffmpeg-$Version-full_build-shared.zip"

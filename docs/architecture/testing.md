@@ -8,7 +8,7 @@ Capture software fails in ways that only show up on real hardware or after long 
 | --- | --- | --- | --- |
 | **1. CI** | GitHub Actions `windows-latest` (**no GPU**) | Every push and PR | Pure logic, content integrity, software encoders, muxing, file validation |
 | **2. Hardware check** | A real PC with a GPU (`scripts/hardware-check.ps1`) | Before merging capture or encode changes, and before releases | NVENC, AMF and QSV, WGC capture, frame cost, A/V sync on real devices |
-| **3. Release checklist** | A person, about 15 minutes | Before every release | Real games, anti-cheat titles, hybrid laptops, the installer |
+| **3. Release checklist** | A person | Before every release | Real games, anti-cheat titles, hybrid laptops, the installer and updater, vertical clips and captions |
 
 CI can't see a GPU, so every pipeline stage has a **CPU stand-in**: synthetic frames instead of WGC, `libx264` instead of NVENC, generated tones instead of WASAPI. The hardware check runs the same scenarios with the real components.
 
@@ -34,6 +34,11 @@ CI can't see a GPU, so every pipeline stage has a **CPU stand-in**: synthetic fr
 | Encoder quality | Generated 1080p60 reference through x264 and NVENC H.264/HEVC; PSNR-Y and SSIM above floors, calibrated between good and bad controls that rerun every time (`quality.rs`). **Thresholds only, never byte- or bitrate-exact goldens**: hardware output changes with every driver | 2 |
 | HDR | 10-bit PQ pattern: BT.2020/PQ metadata and decoded patch values (see below) | 2 |
 | Frame cost | PresentMon A/B in a GPU-bound scene: WGC alone vs replay on | 2 |
+| Vertical clips | Centred 9:16 crop, never enlarged (`vertical.rs` unit tests); a wide clip becomes a 9:16 clip with its audio, and a broken clip leaves nothing (`backsight-encode/tests/vertical.rs`, x264); job bookkeeping: Vertical vs Both, failed jobs keep the wide clip, cut-off jobs found again after a crash or a folder change, no duplicate after a crash, quitting defers a job (`backsight-engine/src/vertical.rs`) | 1 |
+| Captions | Cue timing, line wrapping, noise and repeat filtering, SRT format (`cues.rs`); model install checks size and SHA-256 and a stopped download leaves nothing (`model.rs`); one job at a time, stuck processes killed (`queue.rs`); files never replaced (`lib.rs`). A real transcription needs the models and is ignored by default; the model-release download test is ignored (network) | 1, manual |
+| Burned-in captions | SRT parsing, white text on a black outline blended into NV12 and P010, newest of overlapping captions (`burn.rs`) | 1 |
+| Game-window rules | Full-screen windows only take over, HDR falls back to standard video, a failing HDR window capture is given up, capture follows a returning monitor (`capture::target`); kept clips trimmed from a keyframe (`session.rs`) | 1 |
+| Updates | Update errors are plain, and a bad signature never reads as a network problem (`update.rs`). Download, signature check and install are checked by hand | 1, manual |
 | Benchmarks | `criterion` on pure hot paths (below) | local, CI compare |
 | UI | `npm run build`; screenshots from `npm run screenshots`, reviewed by eye when views change | 1, manual |
 
@@ -188,3 +193,9 @@ Screenshot slice: `cargo test -p backsight-engine --test screenshot -- --ignored
 - [ ] Closing the window leaves no `msedgewebview2.exe` running from Backsight
 - [ ] Unplug the headset mid-recording; the recording continues
 - [ ] Fresh install and uninstall; clips and settings survive uninstall
+- [ ] Installer over a running Backsight: the close prompt closes it and the install continues
+- [ ] Update from the previous release: found automatically (or with **Check**), signature accepted, installed without an installer window, window opens on the first start of the new version; settings and clips kept
+- [ ] Clip shape Vertical and Both: the vertical clip appears, the pop-up says when it is ready, the Library shows the Vertical badge
+- [ ] Captions: download the models, save a clip with speech; a `.srt` beside a wide clip, words burned into a vertical clip
+- [ ] Game-window mode: a browser opened by the game doesn't take over; exclusive full screen shows the notice
+- [ ] Unplug and replug the captured monitor; Instant Replay resumes

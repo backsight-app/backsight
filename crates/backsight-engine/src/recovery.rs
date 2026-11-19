@@ -114,6 +114,16 @@ pub fn find_interrupted(folder: &Path) -> Vec<Interrupted> {
     found
 }
 
+/// The damaged originals kept after recovering (ADR 0008) in `folder` and its game folders, with
+/// their sizes: only names Backsight gave, so another app's files are never offered for removal.
+pub fn kept_originals(folder: &Path) -> Vec<(PathBuf, u64)> {
+    files(folder)
+        .into_iter()
+        .filter(|e| owned_with(&e.path(), RECOVERED_PART).is_some())
+        .map(|e| (e.path(), e.metadata().map_or(0, |m| m.len())))
+        .collect()
+}
+
 /// The files in `folder` and the folders directly inside it (one per game).
 pub(crate) fn files(folder: &Path) -> Vec<fs::DirEntry> {
     let Ok(entries) = fs::read_dir(folder) else { return Vec::new() };
@@ -329,8 +339,13 @@ fn set_aside(path: &Path, folder: &Path, stem: &str, ext: &str) {
 /// `(stem, ext)` of a name only Backsight writes for a recording in progress:
 /// `<name> YYYY-MM-DD HH.MM.SS[ (n)].<a catalog extension>.recording.part`.
 fn owned_name(path: &Path) -> Option<(String, String)> {
+    owned_with(path, RECORDING_PART)
+}
+
+/// [`owned_name`] for a file Backsight named `<stem>.<ext><suffix>`.
+fn owned_with(path: &Path, suffix: &str) -> Option<(String, String)> {
     let name = path.file_name()?.to_str()?;
-    let (stem, ext) = name.strip_suffix(RECORDING_PART)?.rsplit_once('.')?;
+    let (stem, ext) = name.strip_suffix(suffix)?.rsplit_once('.')?;
     let known = Catalog::get().containers.iter().any(|c| c.ext.eq_ignore_ascii_case(ext));
     (known && stamp_at(stem).is_some()).then(|| (stem.to_owned(), ext.to_owned()))
 }
@@ -422,6 +437,24 @@ mod tests {
         );
         assert_eq!(ours("Backsight 2026-11-10 14.03.07.txt.recording.part"), None, "not a video format");
         assert_eq!(ours("Backsight 2026-11-10 14.03.07.mp4.recovered.part"), None, "already recovered");
+    }
+
+    #[test]
+    fn only_backsight_originals_are_offered_for_removal() {
+        let d = tempfile::tempdir().unwrap();
+        let game = d.path().join("Apex");
+        fs::create_dir(&game).unwrap();
+        let ours = d.path().join("Backsight 2026-11-10 14.03.07.mp4.recovered.part");
+        let in_game = game.join("Apex 2026-11-10 13.00.00 (2).mkv.recovered.part");
+        for p in [&ours, &in_game] {
+            fs::write(p, b"xyz").unwrap();
+        }
+        for name in ["holiday.mp4.recovered.part", "Backsight 2026-11-10 14.03.07.mp4.recording.part", "notes.txt"] {
+            fs::write(d.path().join(name), b"x").unwrap();
+        }
+        let mut found = kept_originals(d.path());
+        found.sort();
+        assert_eq!(found, [(in_game, 3), (ours, 3)]);
     }
 
     #[test]

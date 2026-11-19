@@ -21,9 +21,8 @@ pub struct ModelFile {
 /// The release the files are attached to.
 pub const RELEASE: &str = "https://github.com/backsight-app/backsight/releases/download/captions-model-1";
 
-// shortcut: placeholder hash until the model release is published. These are the hashes of the
-// files as published by whisper.cpp (huggingface.co/ggerganov/whisper.cpp, ggml-org/whisper-vad);
-// upload exactly those files, or update the hashes and sizes here.
+// The files as published by whisper.cpp (huggingface.co/ggerganov/whisper.cpp, ggml-org/whisper-vad),
+// attached unchanged to the release; a new upload needs new hashes and sizes here.
 /// Whisper base, multilingual, 5-bit (MIT).
 pub const WHISPER: ModelFile = ModelFile {
     name: "ggml-base-q5_1.bin",
@@ -232,7 +231,7 @@ mod tests {
 
     /// Downloads the real files from the release into a temporary folder.
     #[test]
-    #[ignore = "network: run by hand once the model release is published"]
+    #[ignore = "network: downloads about 61 MB; run by hand"]
     fn the_release_serves_the_pinned_files() {
         let dir = tempfile::tempdir().unwrap();
         download(dir.path(), |_, _| {}, &AtomicBool::new(false)).unwrap();

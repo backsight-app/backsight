@@ -65,11 +65,10 @@
           ? "Your NVIDIA card will do the recording, so games stay fast."
           : `Your ${vendorLabel[encoder.vendor]} graphics will do the recording, so games stay fast.`,
   );
-  // Only NVIDIA is tested so far (AMD and Intel testing is on hold); a laptop's Intel chip next to
-  // an NVIDIA card doesn't record, so it gets no note.
+  // NVIDIA and Intel Quick Sync are tested; AMD isn't yet (on hold), so an AMD-only PC gets a note.
   const untested = $derived(
     check && !check.cards.some((c) => c.vendor === "nvidia")
-      ? [...new Set(check.cards.filter((c) => c.vendor === "amd" || c.vendor === "intel").map((c) => vendorLabel[c.vendor]))]
+      ? [...new Set(check.cards.filter((c) => c.vendor === "amd").map((c) => vendorLabel[c.vendor]))]
       : [],
   );
   const main = ["save-replay", "toggle-recording", "screenshot"];
@@ -125,7 +124,7 @@
         {/if}
         {#if untested.length}
           <p class="note">
-            Backsight is only tested on NVIDIA cards so far. It may work on your {untested.join(" and ")} graphics, but
+            Backsight is tested on NVIDIA and Intel graphics so far. It may work on your {untested.join(" and ")} graphics, but
             that hasn't been checked yet. If something doesn't work, click Save a problem report on Home.
           </p>
         {/if}

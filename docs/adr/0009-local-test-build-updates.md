@@ -16,7 +16,7 @@ Running `build-desktop.ps1` after a change keeps the newest build one click away
 ## Consequences
 
 - Nothing goes online, there are no keys or secrets, and dev builds are unaffected (no `build.txt`).
-- This only works on the PC that builds it. Public releases need signed downloads (Tauri updater plus a public release location), which needs a new ADR.
+- This only works on the PC that builds it. Public releases need signed downloads (Tauri updater plus a public release location), which needs a new ADR. *2026-11-17: done in [ADR 0014](0014-updates-from-github-releases.md).*
 - Each file is copied beside the old one and then swapped in, so a failed copy never leaves a broken `backsight.exe`. A failure is logged to `%TEMP%\backsight-update.log`, shown on Home, and the waiting build stays for another try. If Backsight doesn't close within 5 minutes, nothing is installed and no second copy is started.
 - Update is disabled while recording.
 - Run from a linked `git worktree`, the script builds that checkout but uses the main checkout's FFmpeg and `dist-desktop`, so the desktop copy still gets the build. Two builds at once would mix files (noted as a `shortcut:`).

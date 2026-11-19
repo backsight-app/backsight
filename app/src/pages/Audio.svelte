@@ -37,7 +37,7 @@
   // Captions (ADR 0016): the model download, then the on/off setting.
   type Captions = { installed: boolean; downloading: boolean; cpu_supported: boolean; download_bytes: number };
   type Progress = { done: number; total: number; finished: boolean; error: string | null };
-  let cap: Captions | null = $state(null);
+  let cap = $state<Captions | null>(null);
   let percent = $state(0);
   let capError = $state("");
   let stopping = false; // a stop the user asked for isn't shown as a problem

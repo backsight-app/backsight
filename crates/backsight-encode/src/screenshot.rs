@@ -5,7 +5,7 @@ use crate::{
     ffmpeg::{find_encoder, open_with_options},
 };
 pub(crate) use jxr::Apartment;
-pub use jxr::encode as encode_jxr;
+pub use jxr::{decode as decode_jxr, encode as encode_jxr};
 use rsmpeg::{
     avcodec::AVCodecContext,
     avutil::{AVFrame, ra},

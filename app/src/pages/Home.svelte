@@ -175,18 +175,26 @@
 
   // "Clip saved": a quiet card for a few seconds when a new video lands while Home is open.
   let lastSeen: string | null | undefined;
-  let savedCard = $state<LibraryItem | null>(null);
+  let saved = $state<LibraryItem | null>(null);
   let hideSaved: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
     const newest = feed.lib?.items[0];
     if (!feed.lib) return;
     // A vertical copy follows its clip: one card per save.
     if (lastSeen !== undefined && newest && newest.path !== lastSeen && newest.kind === "video" && !isVertical(newest)) {
-      savedCard = newest;
+      saved = newest;
       clearTimeout(hideSaved);
-      hideSaved = setTimeout(() => (savedCard = null), 8000);
+      hideSaved = setTimeout(() => (saved = null), 8000);
     }
     lastSeen = newest?.path ?? null;
+  });
+  // The card follows the clip as the Library learns more: its thumbnail arrives, or the clip
+  // becomes its vertical copy (the wide file is then gone, and its thumbnail with it).
+  const savedCard = $derived.by(() => {
+    if (!saved) return null;
+    const items = feed.lib?.items ?? [];
+    const vertical = saved.path.replace(/\.[^.\\/]+$/, "") + " (vertical).";
+    return items.find((i) => i.path === saved!.path) ?? items.find((i) => i.path.startsWith(vertical)) ?? { ...saved, thumbnail: null };
   });
 
   const micOn = $derived(s.audio.microphone);
@@ -433,7 +441,7 @@
 
 {#if savedCard}
   <div class="saved-wrap" role="status"><a class="saved" href="#library">
-    <span class="saved-thumb">{#if savedCard.thumbnail}<img src={thumbSrc(savedCard.thumbnail)} alt="" />{/if}</span>
+    <span class="saved-thumb">{#if savedCard.thumbnail}<img src={thumbSrc(savedCard.thumbnail)} alt="" />{:else}<Icon name="video" size={18} />{/if}</span>
     <span class="saved-text">
       <strong>Saved</strong>
       <span class="faint small">
@@ -987,6 +995,8 @@
     width: 64px;
     height: 40px;
     flex: none;
+    display: grid;
+    place-items: center;
     overflow: hidden;
     border-radius: 7px;
     background: linear-gradient(135deg, #2a2440, #16303a);

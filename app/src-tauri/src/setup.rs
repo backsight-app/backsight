@@ -4,7 +4,7 @@
 use backsight_config::{Settings, Video};
 use backsight_encode::probe::ProbeResult;
 use backsight_engine::{
-    capture::wgc,
+    capture::{target, wgc},
     nvidia,
     overload::{self, OverloadWatch, Sample},
     setup,
@@ -12,6 +12,7 @@ use backsight_engine::{
 use serde::Serialize;
 use std::sync::{Mutex, PoisonError};
 use tauri::{AppHandle, Manager, async_runtime::spawn_blocking};
+use windows::Win32::Graphics::Gdi::HMONITOR;
 
 /// One encoder check at a time: they share the cache file.
 static CHECKING: Mutex<()> = Mutex::new(());
@@ -134,9 +135,13 @@ pub async fn lighter_video(app: AppHandle, video: Video) -> Result<Option<Lighte
             .filter(|r| r.problem.is_none() && hardware(&r.encoder_id))
             .map(|r| r.encoder_id)
             .collect();
-        // shortcut: sizes the primary monitor, which is what sessions capture today; use the
-        // session's own source once window and monitor choice land.
-        let source = wgc::monitor_size(wgc::primary_monitor()).unwrap_or((1920, 1080));
+        // The session sizes its video from the chosen monitor in both modes (the main one when
+        // that's unplugged), so the lighter step starts from the same size.
+        let monitors = wgc::monitors();
+        let ids: Vec<_> = monitors.iter().map(|m| (m.id.as_str(), m.primary)).collect();
+        let monitor = target::pick_monitor(&video.capture_monitor, &ids)
+            .map_or_else(wgc::primary_monitor, |(i, _)| HMONITOR(monitors[i].handle as _));
+        let source = wgc::monitor_size(monitor).unwrap_or((1920, 1080));
         let lighter = overload::lighter(&video, &working, source);
         if lighter.is_some() {
             let mut state = OVERLOAD.lock().unwrap_or_else(PoisonError::into_inner);

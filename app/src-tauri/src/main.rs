@@ -1852,10 +1852,42 @@ fn library_dirs(settings: &Settings) -> [Option<PathBuf>; 2] {
 }
 
 /// Home's Record and Screenshot tiles: the same as pressing that key, queued with the hotkeys.
+/// Shows the window hidden for a Home screenshot again when dropped, even if the shot panicked.
+struct ShowAgain(Option<tauri::WebviewWindow>);
+
+impl Drop for ShowAgain {
+    fn drop(&mut self) {
+        if let Some(w) = self.0.take() {
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+    }
+}
+
+/// Screenshot hides Backsight's window for the shot, so it's of what's behind it.
 #[tauri::command]
-fn press_action(actions: tauri::State<Sender<Action>>, action: Action) -> Result<(), String> {
+fn press_action(app: AppHandle, actions: tauri::State<Sender<Action>>, action: Action) -> Result<(), String> {
     match action {
-        Action::ToggleRecording | Action::Screenshot => actions
+        Action::Screenshot => {
+            let engine = app.state::<Engine>();
+            if engine.quitting.load(Relaxed) || engine.screenshot_busy.swap(true, Relaxed) {
+                return Err("Backsight is still busy with the last screenshot. Try again in a moment.".into());
+            }
+            let window = ShowAgain(app.get_webview_window("main").filter(|w| w.hide().is_ok()));
+            let app = app.clone();
+            spawn_blocking(move || {
+                let _done = ScreenshotDone(app.clone());
+                let window = window; // shown again however this ends
+                std::thread::sleep(std::time::Duration::from_millis(300)); // Windows fading the window out
+                let settings = Settings::load();
+                // The mouse is still where the tile was: that monitor.
+                let result = settings.as_ref().map_err(settings_error).and_then(screenshot::take_under_mouse);
+                drop(window);
+                report_screenshot(&app, &settings, result);
+            });
+            Ok(())
+        }
+        Action::ToggleRecording => actions
             .try_send(action)
             .map_err(|_| "Backsight is still busy with the last key press. Try again in a moment.".into()),
         _ => Err("Only Record and Screenshot can be pressed from Home.".into()),
@@ -1977,6 +2009,28 @@ async fn library_action(action: String, path: Option<PathBuf>) -> Result<Option<
             }
         })?;
         Ok(None)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// How many damaged originals kept after a crash recovery (ADR 0008) are in the clips folder, and
+/// their size; with `remove`, moves them to the Recycle Bin first (the Library asks the user).
+#[tauri::command]
+async fn recovered_originals(remove: bool) -> Result<(usize, u64), String> {
+    let [videos, _] = library_dirs(&load_settings()?);
+    spawn_blocking(move || {
+        let find = || videos.as_deref().map(backsight_engine::recovery::kept_originals).unwrap_or_default();
+        if remove {
+            let paths: Vec<_> = find().into_iter().map(|(p, _)| p).collect();
+            backsight_engine::system::recycle(&paths).map_err(|e| {
+                tracing::warn!("removing kept originals failed: {e}");
+                "Windows couldn't move them all to the Recycle Bin. Close any player using them and try again."
+                    .to_string()
+            })?;
+        }
+        let left = find();
+        Ok((left.len(), left.iter().map(|(_, b)| b).sum()))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -2248,10 +2302,17 @@ fn about_open(app: AppHandle, what: String) -> Result<(), String> {
     }
 }
 
+/// No error back: the pages that call this don't show one, so a failure is logged.
 fn open_folder(dir: Option<PathBuf>) {
-    if let Some(dir) = dir {
-        let _ = std::fs::create_dir_all(&dir);
-        let _ = std::process::Command::new(windows_dir().join("explorer.exe")).arg(dir).spawn();
+    let Some(dir) = dir else {
+        tracing::warn!("open folder: the folder's location is unknown");
+        return;
+    };
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        tracing::warn!("open folder: can't create {}: {e}", dir.display());
+    }
+    if let Err(e) = std::process::Command::new(windows_dir().join("explorer.exe")).arg(&dir).spawn() {
+        tracing::warn!("open folder: Explorer didn't start for {}: {e}", dir.display());
     }
 }
 
@@ -2337,7 +2398,10 @@ fn shut_down(engine: &Engine) {
         std::mem::take(&mut finishing.threads)
     };
     for t in threads {
-        let _ = t.join();
+        if let Err(panic) = t.join() {
+            let why = panic.downcast_ref::<&str>().copied().or(panic.downcast_ref::<String>().map(String::as_str));
+            tracing::error!("a finishing file's thread panicked at quit: {}", why.unwrap_or("no message"));
+        }
     }
 }
 
@@ -2373,6 +2437,7 @@ fn main() {
             list_library,
             library_preview,
             library_action,
+            recovered_originals,
             region_image,
             region_show,
             region_pick,
@@ -2465,8 +2530,10 @@ fn main() {
             }
             tray.build(app)?;
             captions::start(app.handle());
-            // Start with Windows passes --minimized: only the tray icon then.
-            if !std::env::args().any(|a| a == "--minimized") {
+            // Start with Windows passes --minimized: only the tray icon then. An update starts the
+            // new copy with the old one's arguments; its window opens anyway, so the update shows.
+            let updated = update::first_start_of(&app.package_info().version.to_string());
+            if !std::env::args().any(|a| a == "--minimized") || updated {
                 show_main_window(app.handle());
             }
             Ok(())

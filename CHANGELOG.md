@@ -6,36 +6,75 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ### Added
 
-- Vertical clips for YouTube Shorts, TikTok and Reels: the new Clip shape setting on the Instant Replay page makes each saved clip Wide (as before, the default), Vertical (only a tall 9:16 clip) or Both. The tall clip is cut from the middle of the picture in the background after the save, so saving stays instant; a pop-up says when it is ready. If Backsight closes before it is done, the next start finishes it. If it can't be made, the clip is kept wide and nothing is lost. Recordings always stay wide.
-- With captions on, a vertical clip has the words in its picture: white text with a black outline near the bottom, clear of the phone apps' buttons.
+- Library: "Remove damaged originals" moves the originals kept after crash recovery (`.recovered.part`) to the Recycle Bin, after a confirmation.
+- Thumbnails for HDR (JPEG XR) screenshots, tone-mapped like the clipboard copy.
+
+### Changed
+
+- Intel Quick Sync encodes straight from GPU textures, with no copy through system memory, and keeps up at 60 FPS. Verified on Intel Iris Xe (H.264 and HEVC): replay, recording, pause and split, quality floors.
+- Updates install in quiet mode, without an installer window. Takes effect for updates from 0.1.9 on, because the running copy chooses the mode.
+- The first start of a new version opens the window, also when Backsight starts with Windows, so an update is visible.
+- Captions are prompted with "Backsight" and the game's name, so both are spelled correctly.
+
+### Fixed
+
+- New clips sometimes kept a blank thumbnail; a file that can't be read yet is retried during its first two minutes, and Home's saved-clip card follows the clip (including its vertical copy).
+- Home's Screenshot tile captured Backsight's own window; it now captures the monitor behind it.
+- "Use a lighter setting" sized the main monitor instead of the monitor being captured.
+- Open folder failures are logged instead of being ignored.
+- Windows' quick settings and other shell panels (ShellHost) were treated as a game.
+
+## 0.1.8 - 2026-11-18
+
+### Added
+
+- Captions on vertical clips: with captions on, the words are burned into the vertical clip's picture (white text with a black outline, above the phone apps' buttons). With Clip shape set to Both, the wide clip keeps its `.srt`.
+- A move to another monitor keeps the replay recorded so far; the next saved clip also writes it as a separate file. Kept footage never exceeds the replay length or the replay's RAM ceiling.
+- Game-window mode shows a notice when the game runs in exclusive full screen, which window capture can't record, and asks for borderless or windowed mode.
+
+### Changed
+
+- Problem-report, crash and Diagnostics text points to GitHub issues.
+- Pause follows record to its fallback key (Alt+Shift+V when recording moves to Alt+V).
+
+### Fixed
+
+- Game-window mode never hands the capture to a web browser, including one the game opens for a store page or log-in.
+- An HDR game-window capture that fails three times in a row falls back to standard video for that game, with a notice on Home, instead of retrying forever.
+- A still window that is resized once records its new picture.
+- Monitor changes start at most three rounds of restarts; then Instant Replay stays off with a notice.
+- A failed MKV-to-MP4 conversion on a full drive says the drive may be full. The MKV is kept unchanged.
+- Vertical clips: jobs are found again after the video folder changes or the drive is unplugged, matched regardless of path case, and resumed jobs get captions. A job that crashed Backsight is not retried; its clip stays wide. A job record is never overwritten when damaged. No error pop-up while quitting; the job resumes at the next start.
+- Burned-in captions: smoother text edges, the newest of overlapping captions is shown, and the `.srt` is kept if drawing fails.
 
 ## 0.1.7 - 2026-11-18
 
 ### Added
 
-- A new look for the whole app: calm dark greys, one violet accent and new fonts. Home shows the game being watched, today's videos, the replay ready to save with one Save clip button and a timeline, Record and Screenshot tiles, what happens after each clip, the microphone, and your latest captures. The side menu shows how many files are new in Library and how much space is left for clips.
-- Backsight keeps itself up to date: an installed copy checks for a newer version when it starts, every hour and when you open its window. Home then says "Update ready" with a Restart to update button. An update found as Backsight starts, before any game, installs by itself in a few seconds. See docs/privacy.md.
-- The installer offers to close a running Backsight ("Close it and continue?") instead of stopping, once the installed copy is 0.1.7 or newer.
+- Redesign: dark neutral greys, one violet accent, bundled Inter and Sora fonts. Home shows the detected game, the replay with a Save clip button and timeline, Record and Screenshot tiles, the microphone and recent captures. The side menu shows new Library items and free space on the clips drive.
+- Automatic updates: installed copies check at start, every hour and when the window opens. Home shows **Update ready** with **Restart to update**. An update found shortly after start, before a game or recording, installs by itself ([ADR 0014](docs/adr/0014-updates-from-github-releases.md), [privacy](docs/privacy.md)).
+- The installer offers to close a running Backsight instead of stopping, when the installed copy is 0.1.7 or newer.
 
 ## 0.1.4 to 0.1.6 - 2026-11-18
 
-### Changed
-
-- New default hotkeys, easy to reach and remember: Alt+C saves a clip (Alt+Shift+C turns Instant Replay on or off), Alt+R starts or stops recording (Alt+Shift+R pauses), Alt+S takes a screenshot (Alt+Shift+S the window, Ctrl+Alt+S an area), Alt+T mutes the microphone, Alt+B adds a marker and Alt+Shift+O opens Backsight. The first defaults were NVIDIA's own keys, and with NVIDIA's overlay on, pressing them did nothing in Backsight. If you already use Backsight you keep your keys, including the Alt+X and Alt+V keys of the previous build; when they clash with NVIDIA's, Home's "Give Backsight other keys" moves them to the new ones.
-- Alt+R is also NVIDIA's (and AMD's) key for its performance overlay, so with NVIDIA's overlay on, one press would start a recording and show NVIDIA's stats. Home points this out, and "Give Backsight other keys" moves recording to Alt+V. Alt+C is also Discord's clip key; if you use Discord Clips, change one of them on the Hotkeys page.
-
 ### Added
 
-- A No key button beside every hotkey, to turn a key off (for example when another app keeps it). Home says plainly when an action has no key.
-- Captions: Backsight can write out what you say in each saved clip, as a .srt file next to it that video players and YouTube show as subtitles. It works on your PC and sends nothing anywhere, after a one-time download of about 61 MB from the Audio page. Off until you turn it on.
+- Vertical clips (0.1.5): the Clip shape setting on the Instant Replay page saves each clip Wide (default), Vertical (9:16 only) or Both. The vertical clip is cropped from the centre in the background after the save; if it can't be made, the clip is kept wide. Recordings stay wide ([ADR 0015](docs/adr/0015-vertical-clips.md)).
+- Captions (0.1.5): optional on-device speech-to-text writes a `.srt` beside each saved clip. Off by default; needs a one-time 61 MB model download from the Audio page ([ADR 0016](docs/adr/0016-on-device-captions.md)).
+- A No key option for every hotkey. Home says when an action has no key.
+
+### Changed
+
+- New default hotkeys (0.1.6): Alt+C save clip, Alt+Shift+C replay on/off, Alt+R record, Alt+Shift+R pause, Alt+S screenshot, Alt+Shift+S window, Ctrl+Alt+S region, Alt+T microphone mute, Alt+B marker, Alt+Shift+O open Backsight. The first defaults were NVIDIA's keys, which the NVIDIA overlay takes first. Existing settings keep their keys; when they clash with NVIDIA's, Home's **Give Backsight other keys** moves them.
+- Alt+R is also the NVIDIA and AMD performance-overlay key; with NVIDIA's overlay on, Home points this out and **Give Backsight other keys** moves recording to Alt+V. Alt+C is also Discord's clip key.
 
 ## 0.1.3 - 2026-11-18
 
 Versions are numbered 0.1.<build>; each one on the Releases page lists its own changes.
 
-Backsight's first public release. It keeps the last 2 minutes of your game ready to save as a clip, records whole sessions, and takes screenshots. Every setting comes with a plain-language explanation. It starts light (1080p, 60 frames a second), lives near the clock when its window is closed, and rescues a recording cut off by a crash or power cut. It works through Windows' own screen capture, with no hooks and nothing placed inside games. Updates come from the Update button on the General page. Backsight makes no network connections otherwise (see docs/privacy.md).
+First public release: Instant Replay, recording and screenshots, with an explanation for every setting. Defaults to 1080p60, runs in the tray when the window is closed, and recovers recordings cut off by a crash or power loss. Capture uses Windows.Graphics.Capture, with no hooks or injection. Updates are installed on request from the General page; Backsight makes no other network connections.
 
-Everything below was added, changed or fixed while getting there.
+The entries below cover development up to this release. Hotkeys named here are the defaults of the time (changed in 0.1.6).
 
 ### Added
 
@@ -49,7 +88,7 @@ Everything below was added, changed or fixed while getting there.
 - Clips can use the foreground game's name, with optional per-game folders. Video can capture a chosen monitor or only the game window.
 - Local crash reports and a dismissible Home notice. Reports are shared only by hand.
 - An automated performance regression check runs on GitHub.
-- Whole-screen screenshot hotkey (Alt+F1): save PNG/JPEG/WebP and also copy the image for Ctrl+V by default; clipboard failure preserves the saved file. HDR screenshots remain pending.
+- Whole-screen screenshot hotkey (Alt+F1): save PNG/JPEG/WebP and also copy the image for Ctrl+V by default; clipboard failure preserves the saved file.
 - Recording (Alt+F9): starts on the replay buffer's latest keyframe with no second encoder, works with Instant Replay on or off, shows a red "Recording" timer on Home, and quitting finishes the file. A full or slow disk stops the recording and keeps what was written.
 - Pause and resume a recording (Alt+Shift+F9) without starting a new file; sound and picture skip the same span. "Split every N minutes" starts each new part on a keyframe.
 - Active-window screenshot (Alt+Shift+F1).
@@ -67,7 +106,7 @@ Everything below was added, changed or fixed while getting there.
 - "Reset to defaults" on each settings page.
 - Diagnostics shows the recording's written bitrate and writer backlog.
 - Installer (about 12 MB) with a slim FFmpeg build; upgrades keep your files, uninstall keeps your clips.
-- Home's Update button for local test builds.
+- Update button on Home for local test builds ([ADR 0009](docs/adr/0009-local-test-build-updates.md)).
 - Foundation: Cargo workspace (`backsight-config`, `backsight-encode`, `backsight-engine`) and Tauri 2 shell with a tray icon and a disposable window
 - Settings schema with atomic saves, schema versioning and hotkey validation
 - Encoder catalog: NVENC, AMF and Quick Sync (H.264, HEVC, AV1), x264, x265, SVT-AV1 and AOM; AAC, Opus, FLAC, ALAC and PCM; 8 containers; 4 screenshot formats
@@ -77,14 +116,13 @@ Everything below was added, changed or fixed while getting there.
 - Brand: logo, app icons, README banner, social preview
 - Architecture docs, seven ADRs, roadmap, CI
 - Hard rules for contributors, a three-tier testing strategy, platform API notes, and an explicit out-of-scope list
-- Instant Replay, end to end: press Alt+F10 to save the last stretch of your screen and desktop sound as a clip, without recording the whole time
+- Instant Replay, end to end: Alt+F10 (the default at the time) saves the last stretch of screen and desktop sound as a clip
 - FFmpeg 8.1 toolchain: `scripts/fetch-ffmpeg.ps1` downloads the pinned build and checks its SHA-256; a test confirms every encoder and container in the catalog exists in it
-- Encoder probe: Backsight tries each encoder once with a black frame, remembers the result per graphics driver, and a failure comes with a plain-language "requires" message (for example, which card or driver you need). Not connected to the app yet, so the UI still lists every encoder
+- Encoder probe: Backsight tries each encoder once with a black frame, remembers the result per graphics driver, and a failure comes with a plain-language "requires" message (for example, which card or driver is needed)
 - Screen capture with Windows.Graphics.Capture and no injection or hooks, converted to video on the GPU and handed to NVENC without copying through system memory (zero copy)
 - Desktop audio loopback with silence filling for gaps, kept on the same clock as the video so sound and picture stay in sync
 - Hotkeys through Raw Input, so Alt+F10 (save clip) and the replay on/off toggle work while a game has focus
 - Saving a clip copies the already-encoded buffer to disk without re-encoding, so it is quick (about 15 ms in our test) and costs no GPU; files are written crash-safe and never overwrite an existing clip
-- Notification when a clip is saved
 - Live status on the Home page: whether Instant Replay is running or why it stopped, how much is buffered, and dropped or late frames
 - Library page: saved clips and screenshots newest first, with thumbnails, a muted hover preview for videos, tabs (All, Screenshots, Videos) and filters (date, length, size, resolution, format)
 - Logs in `%APPDATA%\Backsight\logs` and diagnostics counters (late frames, encoder queue, audio gaps and silence fills) to help find problems

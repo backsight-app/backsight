@@ -38,7 +38,7 @@ Encoders are configured entirely from the catalog. Each catalog option has an `f
 | --- | --- | --- |
 | NVENC (`h264_nvenc`, `hevc_nvenc`, `av1_nvenc`) | `AV_PIX_FMT_D3D11` frames from an `AVHWFramesContext` built on **our** `ID3D11Device` | Zero-copy. Rate-control value `cq` maps to `rc=vbr` + `cq=N` + `b=0` |
 | AMF (`*_amf`) | `AV_PIX_FMT_D3D11` | Zero-copy path in code, not checked on AMD hardware yet. `cq` maps to `rc=qvbr` |
-| Quick Sync (`*_qsv`) | Planned: `av_hwframe_map` D3D11 → QSV (derived device). Today frames are copied to system memory like the CPU encoders | Not checked on Intel hardware yet |
+| Quick Sync (`*_qsv`) | `AV_PIX_FMT_QSV` frames from a QSV device **derived** from our `ID3D11Device` (on the Intel adapter); a fixed pool of 16 decoder-bound NV12 textures, each found once with `av_hwframe_map` | Zero-copy. Checked on Iris Xe (hybrid laptop). HDR is refused (standard video) |
 | CPU (`libx264`, `libx265`, `libsvtav1`, `libaom-av1`) | Copy NV12 to a staging texture, map, feed `yuv420p` | One GPU→CPU copy per frame |
 
 Mapping rules that are not 1:1 live in one function per family in `backsight-encode` (`ffmpeg_options(family, resolved) -> AVDictionary`) with unit tests, for example `keyint_sec = 0` means 2 seconds, and seconds become frames (`g = fps × keyint_sec`).
@@ -75,4 +75,4 @@ File names: `Backsight <YYYY-MM-DD HH.MM.SS>.<ext>`, with ` (2)`, ` (3)` added i
 | Exclusive-fullscreen legacy games (D3D9) show black in window capture | Video already captures the whole monitor. The window screenshot falls back to the monitor when it can't capture a window |
 | Encoder overload (CPU encoders, high res) | The Diagnostics page shows the encoder queue, which keeps growing when the encoder can't keep up. Home shows a plain-English warning with a one-click "Use a lighter setting" fix |
 | Driver resets (`DXGI_ERROR_DEVICE_REMOVED`) | Any capture or encoder failure stops the session, keeps the replay buffer and shows a plain-language reason on Home. Rebuilding the device automatically is not done yet |
-| HDR color errors | Golden-image tests on a known HDR test pattern (M3) |
+| HDR color errors | Calibrated HDR test-pattern check on real monitors ([testing.md](testing.md), "HDR") |

@@ -16,13 +16,22 @@ use std::{
 mod replay_probe;
 use replay_probe::ffprobe;
 
+/// Default settings; `BACKSIGHT_TEST_ENCODER` (such as `qsv-hevc`) runs the tests on another encoder.
+fn test_settings() -> Settings {
+    let mut settings = Settings::default();
+    if let Ok(encoder) = std::env::var("BACKSIGHT_TEST_ENCODER") {
+        settings.video.encoder = encoder;
+    }
+    settings
+}
+
 #[test]
 #[ignore = "needs an NVIDIA GPU, an unlocked desktop and an audio output"]
 fn saves_a_clip_with_sound_from_a_running_session() {
     let qualify = std::env::var("BACKSIGHT_QUALIFY_M1").as_deref() == Ok("1");
     let (length, seconds) = if qualify { (120, 125) } else { (3, 5) };
     let dir = std::env::temp_dir().join(format!("backsight-session-{}", std::process::id()));
-    let mut settings = Settings::default();
+    let mut settings = test_settings();
     settings.general.video_folder = dir.to_string_lossy().into_owned();
     settings.replay.length_seconds = length;
     if qualify {
@@ -114,7 +123,7 @@ fn saves_a_clip_with_sound_from_a_running_session() {
 #[ignore = "needs an NVIDIA GPU, an unlocked desktop and an audio output"]
 fn records_while_replay_is_toggled_and_starts_on_a_keyframe() {
     let dir = std::env::temp_dir().join(format!("backsight-recording-{}", std::process::id()));
-    let mut settings = Settings::default();
+    let mut settings = test_settings();
     settings.general.video_folder = dir.to_string_lossy().into_owned();
     let mut session = ReplaySession::start(&settings).unwrap();
     std::thread::sleep(Duration::from_secs(3));
@@ -161,7 +170,7 @@ fn records_while_replay_is_toggled_and_starts_on_a_keyframe() {
 #[ignore = "needs an NVIDIA GPU, an unlocked desktop and an audio output"]
 fn records_three_tracks_even_when_the_microphone_is_missing() {
     let dir = std::env::temp_dir().join(format!("backsight-audio-tracks-{}", std::process::id()));
-    let mut settings = Settings::default();
+    let mut settings = test_settings();
     settings.general.video_folder = dir.to_string_lossy().into_owned();
     settings.audio.microphone = true;
     settings.audio.microphone_device = "backsight-test-missing-endpoint".into();
@@ -187,7 +196,7 @@ fn records_three_tracks_even_when_the_microphone_is_missing() {
 #[ignore = "needs an NVIDIA GPU, an unlocked desktop and an audio output; takes about 75 s"]
 fn pauses_and_splits_a_recording_on_keyframes() {
     let dir = std::env::temp_dir().join(format!("backsight-pause-split-{}", std::process::id()));
-    let mut settings = Settings::default();
+    let mut settings = test_settings();
     settings.general.video_folder = dir.to_string_lossy().into_owned();
     settings.video.split_minutes = 1;
     let mut session = ReplaySession::start(&settings).unwrap();
@@ -272,7 +281,7 @@ fn a_long_recording_keeps_audio_and_video_together() {
     }
     let dir = Remove(std::env::temp_dir().join(format!("backsight-long-{}", std::process::id())));
     let dir = &dir.0;
-    let mut settings = Settings::default();
+    let mut settings = test_settings();
     settings.general.video_folder = dir.to_string_lossy().into_owned();
     settings.video.split_minutes = 0;
     if let Ok(want) = std::env::var("BACKSIGHT_LONG_MONITOR") {

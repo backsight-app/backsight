@@ -28,4 +28,4 @@ Window mode captures the window of the program the game watcher settled on (the 
 
 - A small window in window mode is scaled up to the output size (never above what the resolution setting allows). Black bars show when the shapes differ.
 - The display interface path changes if a monitor moves to another port; then the notice asks to pick it again.
-- While no game has focus yet, window mode records nothing; Home says so.
+- While no game has focus yet, window mode records a black picture; Home says so.

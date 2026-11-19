@@ -107,6 +107,10 @@ Sources: `libavformat/movenc.c` (`mov_init`, `mov_write_header`, `mov_write_trai
 
 - AMF accepts `AV_PIX_FMT_D3D11` frames directly, like NVENC *(verify per codec)*.
 - Quick Sync needs a QSV device **derived** from our D3D11 device (`av_hwdevice_ctx_create_derived`), with frames mapped by `av_hwframe_map`. A separate QSV device breaks zero-copy.
+- Checked on Iris Xe (driver 32.0.101.6790), FFmpeg 8.1: derive with `create_derived(AV_HWDEVICE_TYPE_QSV)` from our D3D11VA device context, then a QSV frames context (`format = QSV`, `sw_format = NV12`, `initial_pool_size = 16`). `AVQSVFramesContext` is `{surfaces, nb_surfaces, frame_type, info}` (rusty_ffmpeg doesn't bind `hwcontext_qsv.h`).
+  - `frame_type = MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET` (0x10): one decoder-bound texture array; `CopySubresourceRegion` into it works and `h264_qsv`/`hevc_qsv` take it. `PROCESSOR_TARGET` (0x20, also the default for 0) asks for a render-target NV12 array and D3D11 refuses it (`Could not create the texture (80070057)`).
+  - A QSV frame's `data[3]` is its `mfxFrameSurface1*`. `av_hwframe_map` into a frame with `format = AV_PIX_FMT_D3D11` (no frames context) gives `data[0]` = texture, `data[1]` = array index; it allocates, so Backsight maps each pool surface once and keeps the result.
+  - The system-memory path (staging copy, synchronous `Map`, then qsvenc's own upload) kept up in one run and fell to about 38 of 60 FPS at 1080p in another on this laptop (load-dependent).
 - On hybrid laptops the Intel iGPU is a different adapter from the NVIDIA dGPU. Quick Sync needs the D3D11 device on the **Intel** adapter.
 
 ## NVIDIA overlay (NVIDIA App, GeForce Experience) — `backsight-engine/src/nvidia.rs`

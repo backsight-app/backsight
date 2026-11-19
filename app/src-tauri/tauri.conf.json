@@ -81,7 +81,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkxODUzODBCRUE3RjczNkIKUldScmMzL3FDemlGa1JMbS9ya0VlTVFVVnl2dnkxTUowRG9tTldvTXphbDRwVmJpSDlnSFhyK1QK",
       "endpoints": ["https://github.com/backsight-app/backsight/releases/latest/download/latest.json"],
-      "windows": { "installMode": "passive" }
+      "windows": { "installMode": "quiet" }
     }
   }
 }

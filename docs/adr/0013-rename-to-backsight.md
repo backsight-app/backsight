@@ -16,7 +16,7 @@ Existing users keep everything, and nothing of theirs is deleted:
 - `autostart::adopt_old_name` moves a `Clipwise` Run entry to the new exe.
 - The installer's `NSIS_HOOK_PREINSTALL` silently runs the old Clipwise uninstaller (program files and shortcuts only; it never deletes settings or clips) and asks the user to quit Clipwise first if it is running.
 
-The FFmpeg release keeps its old name and location until it is republished under the new name (`scripts/fetch-ffmpeg.ps1`, `FFMPEG-SOURCE.txt`, `.github/workflows/ffmpeg.yml`).
+The FFmpeg release keeps its old name and location until it is republished under the new name (`scripts/fetch-ffmpeg.ps1`, `FFMPEG-SOURCE.txt`, `.github/workflows/ffmpeg.yml`). *2026-11-17: republished as `ffmpeg-8.1.3-slim-r1` in `backsight-app/backsight`, which the fetch script and `FFMPEG-SOURCE.txt` name.*
 
 ## Alternatives considered
 

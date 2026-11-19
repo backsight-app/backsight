@@ -43,6 +43,9 @@ jobs:
         working-directory: app
       - run: node --experimental-strip-types src/lib/hdr.check.ts
         working-directory: app
+      # Type errors in the Svelte pages.
+      - run: npx svelte-check --threshold error
+        working-directory: app
       - run: ./scripts/hardware-metrics.check.ps1
         shell: pwsh
       - run: ./scripts/replay-gpu-cost.check.ps1

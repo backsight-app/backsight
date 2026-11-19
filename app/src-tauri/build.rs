@@ -45,6 +45,7 @@ fn main() {
         "list_library",
         "library_preview",
         "library_action",
+        "recovered_originals",
         "region_image",
         "region_show",
         "region_pick",

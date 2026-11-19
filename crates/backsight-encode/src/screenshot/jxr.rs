@@ -1,8 +1,8 @@
-//! Windows Imaging Component JPEG XR encoding for linear scRGB RGBA half-floats.
-use std::ptr::null;
+//! Windows Imaging Component JPEG XR encoding and decoding of linear scRGB RGBA half-floats.
+use std::{path::Path, ptr::null};
 use windows::{
     Win32::{
-        Foundation::{E_FAIL, E_INVALIDARG, HGLOBAL, RPC_E_CHANGED_MODE, VARIANT_BOOL},
+        Foundation::{E_FAIL, E_INVALIDARG, GENERIC_READ, HGLOBAL, RPC_E_CHANGED_MODE, VARIANT_BOOL},
         Graphics::Imaging::*,
         System::{
             Com::{
@@ -13,7 +13,7 @@ use windows::{
             Variant::{VARIANT, VT_BOOL},
         },
     },
-    core::{Error, PWSTR, Result},
+    core::{Error, HSTRING, Interface, PWSTR, Result},
 };
 
 pub(crate) struct Apartment(bool);
@@ -91,6 +91,47 @@ pub fn encode(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8>> {
     }
 }
 
+/// Reads a JPEG XR file as top-down scRGB RGBA half-floats, scaled down to fit `max` (aspect
+/// kept, never enlarged). Returns the pixels, width and height.
+pub fn decode(path: &Path, max: (u32, u32)) -> Result<(Vec<u8>, u32, u32)> {
+    let _apartment = Apartment::enter()?;
+    // SAFETY: WIC interfaces are local to this COM apartment; the path string lives through the
+    // call and `pixels` holds exactly `stride * h` bytes for CopyPixels.
+    unsafe {
+        let factory: IWICImagingFactory = CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
+        let name = HSTRING::from(path.as_os_str());
+        let decoder = factory.CreateDecoderFromFilename(&name, None, GENERIC_READ, WICDecodeMetadataCacheOnDemand)?;
+        let frame = decoder.GetFrame(0)?;
+        let (mut fw, mut fh) = (0, 0);
+        frame.GetSize(&mut fw, &mut fh)?;
+        // The float conversion and scaler may hold the whole image: 16 bytes a pixel.
+        if u64::from(fw) * u64::from(fh) > 64_000_000 {
+            return Err(Error::new(E_FAIL, "JPEG XR image is too large for a thumbnail."));
+        }
+        // WIC's scaler takes full floats but not half-floats: float, scaled, then half again.
+        let convert = |source: &IWICBitmapSource, to: &windows::core::GUID| -> Result<IWICBitmapSource> {
+            let c = factory.CreateFormatConverter()?;
+            c.Initialize(source, to, WICBitmapDitherTypeNone, None, 0.0, WICBitmapPaletteTypeCustom)?;
+            c.cast()
+        };
+        let float = convert(&frame.cast()?, &GUID_WICPixelFormat128bppRGBAFloat)?;
+        let (mut w, mut h) = (0, 0);
+        float.GetSize(&mut w, &mut h)?;
+        if w == 0 || h == 0 {
+            return Err(Error::new(E_FAIL, "JPEG XR image is empty."));
+        }
+        let scale = (f64::from(max.0) / f64::from(w)).min(f64::from(max.1) / f64::from(h)).min(1.0);
+        let (sw, sh) = (((f64::from(w) * scale) as u32).max(1), ((f64::from(h) * scale) as u32).max(1));
+        let scaler = factory.CreateBitmapScaler()?;
+        scaler.Initialize(&float, sw, sh, WICBitmapInterpolationModeFant)?;
+        let half = convert(&scaler.cast()?, &GUID_WICPixelFormat64bppRGBAHalf)?;
+        let stride = sw * 8;
+        let mut pixels = vec![0; stride as usize * sh as usize];
+        half.CopyPixels(null(), stride, &mut pixels)?;
+        Ok((pixels, sw, sh))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,5 +160,20 @@ mod tests {
             frame.CopyPixels(null(), 16, &mut decoded).unwrap();
             assert_eq!(decoded.as_slice(), pixels);
         }
+    }
+
+    #[test]
+    fn decodes_a_file_scaled_to_fit() {
+        let red: Vec<u8> = [0x4000u16, 0, 0, 0x3c00].into_iter().flat_map(u16::to_le_bytes).collect();
+        let bytes = encode(&red.repeat(40 * 20), 40, 20).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("shot.jxr");
+        std::fs::write(&path, bytes).unwrap();
+        let (pixels, w, h) = decode(&path, (10, 10)).unwrap();
+        assert_eq!((w, h, pixels.len()), (10, 5, 10 * 5 * 8));
+        // 2.0 as a half-float: brighter than SDR white survives.
+        let r = u16::from_le_bytes([pixels[0], pixels[1]]);
+        assert!(r.abs_diff(0x4000) < 0x10, "extended range kept: {r:#x}");
+        assert!(decode(&dir.path().join("gone.jxr"), (10, 10)).is_err());
     }
 }

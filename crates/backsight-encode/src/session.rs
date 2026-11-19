@@ -123,12 +123,32 @@ struct D3d11vaFramesContext {
 
 const D3D11_BIND_RENDER_TARGET: u32 = 0x20;
 
+/// `AVQSVFramesContext` from FFmpeg 8.1's `libavutil/hwcontext_qsv.h` (not bound by rusty_ffmpeg).
+#[repr(C)]
+struct QsvFramesContext {
+    surfaces: *mut c_void,
+    nb_surfaces: i32,
+    frame_type: i32,
+    info: *mut c_void,
+}
+
+/// `MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET`: one decoder-bound texture array, which we copy into.
+/// `PROCESSOR_TARGET` asks for a render-target NV12 array, which D3D11 refuses (E_INVALIDARG on Iris Xe).
+const MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET: i32 = 0x10;
+
+/// Quick Sync's input pool: async_depth (4) frames in flight, B-frame reordering, and the one being
+/// filled. A fixed pool, so [`VideoSession::next_gpu_frame`] can look its textures up once each.
+const QSV_POOL: i32 = 16;
+
 pub struct VideoSession {
     ctx: AVCodecContext,
     frame: AVFrame,
     packet: AVPacket,
-    /// Set when the session takes D3D11 frames instead of system memory.
+    /// Set when the session takes D3D11 (or Quick Sync) frames instead of system memory.
     gpu_frames: Option<AVHWFramesContext>,
+    /// Quick Sync: each pool surface's (`mfxFrameSurface1*`, texture, array index), found once by
+    /// `av_hwframe_map`, so later frames need no mapping.
+    qsv_textures: Vec<(usize, usize, u32)>,
     /// The next frame sent is encoded as a keyframe ([`Self::request_keyframe`]).
     force_key: bool,
     /// An NVENC session ([`Self::can_rest`]).
@@ -194,11 +214,10 @@ impl VideoSession {
         Self::open_with(encoder, values, size, fps, global_header, device, Mode::Hdr)
     }
 
-    /// NVENC and AMF take D3D11 frames directly.
-    // shortcut: Quick Sync needs a QSV device derived from ours (av_hwdevice_ctx_create_derived) and goes
-    // through system memory until then; add it when Quick Sync is profiled on an Intel machine.
+    /// NVENC and AMF take D3D11 frames directly; Quick Sync takes QSV frames whose textures are
+    /// on our device (a QSV device derived from it), so it is zero copy too.
     pub fn takes_d3d11(encoder: &VideoEncoder) -> bool {
-        matches!(encoder.family.as_str(), "nvenc" | "amf")
+        matches!(encoder.family.as_str(), "nvenc" | "amf" | "qsv")
     }
 
     fn open_with(
@@ -214,7 +233,9 @@ impl VideoSession {
         let (w, h) = (to_i32(width)?, to_i32(height)?);
         // First, so FFmpeg owns the device reference whatever fails next.
         let texture_format = if hdr { ffi::AV_PIX_FMT_P010LE } else { ffi::AV_PIX_FMT_NV12 };
-        let gpu_frames = device.as_ref().map(|d| d3d11_frames(d, w, h, texture_format)).transpose()?;
+        let qsv = encoder.family == "qsv";
+        let gpu_frames = device.as_ref().map(|d| d3d11_frames(d, w, h, texture_format, qsv)).transpose()?;
+        let hw_format = if qsv { ffi::AV_PIX_FMT_QSV } else { ffi::AV_PIX_FMT_D3D11 };
         let keepalive = device.map(|d| d.keepalive);
         let codec = find_encoder(&encoder.ffmpeg)?;
         // A context that failed to open is dropped and rebuilt for the retry below.
@@ -236,7 +257,7 @@ impl VideoSession {
             ctx.set_framerate(ra(to_i32(fps)?, 1));
             match &gpu_frames {
                 Some(frames) => {
-                    ctx.set_pix_fmt(ffi::AV_PIX_FMT_D3D11);
+                    ctx.set_pix_fmt(hw_format);
                     ctx.set_hw_frames_ctx(frames.clone());
                 }
                 None => ctx.set_pix_fmt(sw_fmt),
@@ -284,6 +305,7 @@ impl VideoSession {
             frame,
             packet: AVPacket::new(),
             gpu_frames,
+            qsv_textures: Vec::with_capacity(if qsv { QSV_POOL as usize } else { 0 }),
             force_key: false,
             rests,
             last_dts: i64::MIN,
@@ -300,9 +322,30 @@ impl VideoSession {
         // SAFETY: drops our reference to the previous frame (the encoder keeps its own).
         unsafe { ffi::av_frame_unref(self.frame.as_mut_ptr()) };
         frames.get_buffer(&mut self.frame).map_err(|e| format!("no free GPU frame: {e}"))?;
-        // D3D11 frames: data[0] is the ID3D11Texture2D, data[1] the array index (hwcontext_d3d11va.h).
-        let (texture, index) = (self.frame.data[0].cast(), self.frame.data[1] as usize as u32);
-        Ok(GpuFrame { texture, index, _session: std::marker::PhantomData })
+        if self.frame.format != ffi::AV_PIX_FMT_QSV {
+            // D3D11 frames: data[0] is the ID3D11Texture2D, data[1] the array index (hwcontext_d3d11va.h).
+            let (texture, index) = (self.frame.data[0].cast(), self.frame.data[1] as usize as u32);
+            return Ok(GpuFrame { texture, index, _session: std::marker::PhantomData });
+        }
+        // QSV frames: data[3] is the pool surface; mapping it to D3D11 gives its texture and index.
+        let surface = self.frame.data[3] as usize;
+        let (texture, index) = match self.qsv_textures.iter().find(|t| t.0 == surface) {
+            Some(&(_, texture, index)) => (texture, index),
+            None => {
+                let mut mapped = AVFrame::new();
+                mapped.set_format(ffi::AV_PIX_FMT_D3D11);
+                // SAFETY: both frames are live; the mapped frame holds a reference to the pool, and
+                // the texture outlives it (the pool owns it until the session ends).
+                let ret = unsafe { ffi::av_hwframe_map(mapped.as_mut_ptr(), self.frame.as_ptr(), 0) };
+                if ret < 0 {
+                    return Err(format!("can't reach Quick Sync's GPU frame ({ret})"));
+                }
+                let found = (mapped.data[0] as usize, mapped.data[1] as usize as u32);
+                self.qsv_textures.push((surface, found.0, found.1));
+                found
+            }
+        };
+        Ok(GpuFrame { texture: texture as *mut c_void, index, _session: std::marker::PhantomData })
     }
 
     /// `NV12` or `yuv420p`: which planes [`Self::planes_mut`] returns.
@@ -545,8 +588,15 @@ fn open(ctx: &mut AVCodecContext, mut opts: FfmpegOptions, global_header: bool) 
     open_with_options(ctx, &opts)
 }
 
-/// A pool of NV12 (or P010 for HDR) D3D11 textures on `device` for the encoder.
-fn d3d11_frames(device: &D3d11Device, w: i32, h: i32, format: ffi::AVPixelFormat) -> Result<AVHWFramesContext> {
+/// A pool of NV12 (or P010 for HDR) D3D11 textures on `device` for the encoder, or with `qsv` a
+/// pool of QSV frames on a Quick Sync device derived from `device` (textures on our device too).
+fn d3d11_frames(
+    device: &D3d11Device,
+    w: i32,
+    h: i32,
+    format: ffi::AVPixelFormat,
+    qsv: bool,
+) -> Result<AVHWFramesContext> {
     let mut device_ctx = AVHWDeviceContext::alloc(ffi::AV_HWDEVICE_TYPE_D3D11VA);
     // SAFETY: the buffer of a D3D11VA device context is an AVHWDeviceContext whose `hwctx` is an
     // AVD3D11VADeviceContext (layout above). Setting `device` hands FFmpeg our reference.
@@ -558,6 +608,23 @@ fn d3d11_frames(device: &D3d11Device, w: i32, h: i32, format: ffi::AVPixelFormat
         (*hw).lock_ctx = device.lock_ctx;
     }
     device_ctx.init().map_err(|e| format!("FFmpeg can't use the D3D11 device: {e}"))?;
+    if qsv {
+        // The device must be on the Intel adapter (Gpu::open picks the encoder's vendor).
+        let qsv_device = device_ctx
+            .create_derived(ffi::AV_HWDEVICE_TYPE_QSV)
+            .map_err(|e| format!("Quick Sync can't use the D3D11 device: {e}"))?;
+        let mut frames = qsv_device.hwframe_ctx_alloc();
+        let fc = frames.data();
+        fc.format = ffi::AV_PIX_FMT_QSV;
+        fc.sw_format = format;
+        fc.width = w;
+        fc.height = h;
+        fc.initial_pool_size = QSV_POOL;
+        // SAFETY: a QSV frames context's `hwctx` is an AVQSVFramesContext (layout above).
+        unsafe { (*(fc.hwctx as *mut QsvFramesContext)).frame_type = MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET };
+        frames.init().map_err(|e| format!("can't create Quick Sync frames for the encoder: {e}"))?;
+        return Ok(frames);
+    }
     let mut frames = device_ctx.hwframe_ctx_alloc();
     let fc = frames.data();
     fc.format = ffi::AV_PIX_FMT_D3D11;

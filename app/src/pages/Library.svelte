@@ -14,6 +14,7 @@
     type Library, type LibraryItem, type Preset, type Tab,
   } from "../lib/library";
   import { app } from "../lib/settings.svelte";
+  import { ask } from "@tauri-apps/plugin-dialog";
 
   const tabs: { id: Tab; label: string; one: string; many: string }[] = [
     { id: "all", label: "All", one: "item", many: "items" },
@@ -28,6 +29,20 @@
   let tab = $state<Tab>("all");
   let filters = $state(noFilters());
 
+  // Damaged originals kept after a crash recovery (ADR 0008): count and bytes.
+  let originals = $state<[number, number]>([0, 0]);
+  async function removeOriginals() {
+    const [n, bytes] = originals;
+    const what = n === 1 ? "the damaged original" : `the ${n} damaged originals`;
+    const yes = await ask(
+      `Move ${what} (${formatBytes(bytes)}) to the Recycle Bin? Backsight kept ${n === 1 ? "it" : "them"} after saving what could be played of a recording cut off by a crash. The saved recordings stay.`,
+      { title: "Remove damaged originals", kind: "warning", okLabel: "Move to Recycle Bin", cancelLabel: "Keep" },
+    );
+    if (!yes) return;
+    originals = await invoke<[number, number]>("recovered_originals", { remove: true });
+    feedback = `Moved ${what} to the Recycle Bin.`;
+  }
+
   let seq = 0;
   async function load() {
     const mine = ++seq;
@@ -35,6 +50,7 @@
       const l = isTauri() || !import.meta.env.DEV ? await invoke<Library>("list_library") : await import("../lib/library-mock").then((m) => m.mockLibrary());
       if (mine !== seq) return; // a newer refresh is already on its way
       lib = { ...l, items: [...l.items].sort((a, b) => b.created_ms - a.created_ms) };
+      if (isTauri()) invoke<[number, number]>("recovered_originals", { remove: false }).then((o) => (originals = o), () => {});
       loadedAt = Date.now();
       error = "";
       dismiss(); // rows may have moved or gone
@@ -187,9 +203,10 @@
       ...(lib?.video_dir ? [{ label: "Open clips folder", run: () => run(() => nativeAction("clips")) }] : []),
       ...(lib?.screenshot_dir ? [{ label: "Open screenshots folder", run: () => run(() => nativeAction("screenshots")) }] : []),
       ...(active.length ? [{ label: "Clear filters", run: () => (filters = noFilters()) }] : []),
+      ...(originals[0] ? [{ label: `Remove damaged originals (${formatBytes(originals[1])})`, run: () => void removeOriginals().catch((e) => (feedback = String(e))) }] : []),
     ];
     const video = item.kind === "video";
-    const readable = video || item.thumbnail !== null;
+    const readable = video || item.thumbnail === item.path; // an HDR shot's thumbnail is a JPEG copy
     return [
       ...(!viewer && readable ? [{ label: video ? "Play" : "View", run: () => run(() => view(item, opener)) }] : []),
       { label: video ? "Open in default player" : "Open in default viewer", run: () => run(() => nativeAction("open", item.path)) },
@@ -223,7 +240,7 @@
   // Clicking a row (or Enter on it) plays or shows it, like the menu's first item.
   function openItem(item: LibraryItem, opener: HTMLElement) {
     dismiss();
-    const readable = item.kind === "video" || item.thumbnail !== null;
+    const readable = item.kind === "video" || item.thumbnail === item.path;
     run(() => (readable ? view(item, opener) : nativeAction("open", item.path)));
   }
   function rowClick(e: MouseEvent) {

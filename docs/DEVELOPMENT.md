@@ -11,11 +11,11 @@
 | libclang | 18+ | Needed by `bindgen` for the FFmpeg and whisper.cpp bindings. See below |
 | CMake | 3.14+ | Builds whisper.cpp (captions). Visual Studio's "C++ CMake tools for Windows" has one; see below |
 | FFmpeg dev files | 8.1.3 GPL shared, slim | Fetched by `scripts/fetch-ffmpeg.ps1` |
-| GitHub CLI (`gh`) | any | Signed in (`gh auth login`); fetches the FFmpeg build from the release assets |
+| GitHub CLI (`gh`) | any | Optional. Only needed when the FFmpeg release can't be downloaded anonymously (a private fork) |
 
 ### FFmpeg and libclang
 
-Run `./scripts/fetch-ffmpeg.ps1` once after cloning (it uses `gh` to download the release asset). It installs Backsight's slim FFmpeg, about 44 MB of DLLs with only what Backsight uses, built and checked by `.github/workflows/ffmpeg.yml` and published with its sources as a release asset. CI, the tests, the desktop build and the installer all use this one build. It has no libvmaf, so the quality check (`quality.rs`) reports PSNR and SSIM without VMAF; for VMAF, install the full build from the commented fallback in the script into a separate checkout, and never build the installer there. The script stamps what it installs (`third_party/ffmpeg/.sha256`) and refuses a folder holding another build: move that folder aside (for a link, `cmd /c rmdir` it) and run the script again. To add an encoder, format or filter, add it to that workflow's lists and publish a new build. It puts headers, import libraries and DLLs in `third_party/ffmpeg/` (gitignored). `.cargo/config.toml` already points `rsmpeg` there with `FFMPEG_INCLUDE_DIR`, `FFMPEG_LIBS_DIR` and `FFMPEG_LINK_MODE=dynamic`, `bundle.resources` in `tauri.conf.json` copies every `third_party/ffmpeg/bin/*.dll` next to `backsight.exe` (so `tauri dev`, `tauri build` and the installer find them), and the `backsight-encode` build script declares a copy as a search path, so Cargo puts them on `PATH` for `cargo test`, `bench` and `run`. A test program started directly (as `scripts/recording-cost.ps1` does) needs `third_party/ffmpeg/bin` on `PATH`.
+Run `./scripts/fetch-ffmpeg.ps1` once after cloning. It downloads the release asset over HTTPS and falls back to a signed-in `gh` when that fails. It installs Backsight's slim FFmpeg, about 44 MB of DLLs with only what Backsight uses, built and checked by `.github/workflows/ffmpeg.yml` and published with its sources as a release asset. CI, the tests, the desktop build and the installer all use this one build. It has no libvmaf, so the quality check (`quality.rs`) reports PSNR and SSIM without VMAF; for VMAF, install the full build from the commented fallback in the script into a separate checkout, and never build the installer there. The script stamps what it installs (`third_party/ffmpeg/.sha256`) and refuses a folder holding another build: move that folder aside (for a link, `cmd /c rmdir` it) and run the script again. To add an encoder, format or filter, add it to that workflow's lists and publish a new build. It puts headers, import libraries and DLLs in `third_party/ffmpeg/` (gitignored). `.cargo/config.toml` already points `rsmpeg` there with `FFMPEG_INCLUDE_DIR`, `FFMPEG_LIBS_DIR` and `FFMPEG_LINK_MODE=dynamic`, `bundle.resources` in `tauri.conf.json` copies every `third_party/ffmpeg/bin/*.dll` next to `backsight.exe` (so `tauri dev`, `tauri build` and the installer find them), and the `backsight-encode` build script declares a copy as a search path, so Cargo puts them on `PATH` for `cargo test`, `bench` and `run`. A test program started directly (as `scripts/recording-cost.ps1` does) needs `third_party/ffmpeg/bin` on `PATH`.
 
 `bindgen` needs `libclang.dll`. Either install LLVM (`winget install LLVM.LLVM`, needs admin, found automatically) or, without admin:
 
@@ -52,7 +52,7 @@ registry entries and shortcuts. See [ADR 0011](adr/0011-nsis-installer.md). Inst
 
 ### Building from source on a clean PC
 
-Run `./scripts/build.ps1`. It checks the prerequisites above (Rust MSVC toolchain, C++ build tools, Node 22+, libclang), tells you in plain words what is missing, then runs `fetch-ffmpeg.ps1`, `npm ci` and `npm run tauri build`. It still needs `gh` signed in for the FFmpeg download.
+Run `./scripts/build.ps1`. It checks the prerequisites above (Rust MSVC toolchain, C++ build tools, Node 22+, libclang), reports what is missing, then runs `fetch-ffmpeg.ps1`, `npm ci` and `npm run tauri build`.
 
 ### Desktop launcher
 

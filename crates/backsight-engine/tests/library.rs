@@ -132,7 +132,7 @@ Hi.
     assert_eq!((shot.kind, shot.width, shot.height), (MediaKind::Screenshot, Some(64), Some(32)));
     assert_eq!((shot.duration_ms, shot.video_codec.as_deref(), shot.audio_tracks), (None, None, None));
     assert_eq!(shot.thumbnail.as_deref(), Some(png.as_path()), "the WebView shows screenshots directly");
-    assert_eq!(lib.items[3].thumbnail, None, "a WebView can't show JPEG XR");
+    assert_eq!(lib.items[3].thumbnail, None, "a broken JPEG XR gets no thumbnail");
 
     // A rescan reuses the cache: a planted duration comes back, and no thumbnail is remade.
     let index = cache.join("library.json");
