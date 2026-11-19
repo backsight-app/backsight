@@ -2,6 +2,17 @@
 
 Each release lists **Major** and **Minor** changes. Versions are `0.1.<build>`; the newest section is also the release's notes on the [Releases page](https://github.com/backsight-app/backsight/releases).
 
+## 0.1.14 - 2026-11-19
+
+### Major
+
+- No app changes.
+
+### Minor
+
+- README banner: current tagline and default clip key (Alt+C).
+- Shorter release page header.
+
 ## 0.1.13 - 2026-11-19
 
 ### Major

@@ -82,7 +82,7 @@ jobs:
           commitish: ${{ github.event.workflow_run.head_sha }}
           releaseName: Backsight ${{ steps.version.outputs.version }}
           releaseBody: |
-            Download **Backsight_${{ steps.version.outputs.version }}_x64-setup.exe** below and run it. Already installed? On the General page, press **Check** under Updates.
+            **Installer:** `Backsight_${{ steps.version.outputs.version }}_x64-setup.exe` below. Installed copies update automatically.
 
             ${{ steps.version.outputs.notes }}
           # A draft until every file is up: latest.json must never point at a half-uploaded release.

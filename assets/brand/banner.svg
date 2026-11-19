@@ -54,7 +54,7 @@
   <!-- Wordmark and tagline -->
   <text x="286" y="232" font-family="Segoe UI Variable Display, Segoe UI, sans-serif" font-size="104" font-weight="700" letter-spacing="-2" fill="#F1F4FB">Back<tspan fill="url(#text-grad)">sight</tspan></text>
   <text x="100" y="332" font-family="Segoe UI Variable Text, Segoe UI, sans-serif" font-size="31" fill="#C3CBE0">Instant replay, recording and screenshots for Windows.</text>
-  <text x="100" y="374" font-family="Segoe UI Variable Text, Segoe UI, sans-serif" font-size="31" fill="#8E99B6">Lightweight, powerful, and it explains every setting.</text>
+  <text x="100" y="374" font-family="Segoe UI Variable Text, Segoe UI, sans-serif" font-size="31" fill="#8E99B6">Lightweight, GPU-encoded, no game injection.</text>
 
   <!-- Feature chips -->
   <g font-family="Segoe UI Variable Text, Segoe UI, sans-serif" font-size="19" font-weight="600" fill="#DDE3F2">
@@ -67,7 +67,7 @@
     <rect x="468" y="412" width="210" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.05" stroke="#FFFFFF" stroke-opacity="0.16"/>
     <text x="573" y="438" text-anchor="middle">AV1 · HEVC · H.264</text>
     <rect x="690" y="412" width="190" height="40" rx="20" fill="#7C5CFF" fill-opacity="0.18" stroke="#A78BFA" stroke-opacity="0.5"/>
-    <text x="785" y="438" text-anchor="middle" fill="#E4DCFF">Plain-English help</text>
+    <text x="785" y="438" text-anchor="middle" fill="#E4DCFF">HDR · Captions</text>
   </g>
 
   <!-- Stacked clip frames -->
@@ -110,6 +110,6 @@
     <circle cx="480" cy="5" r="11" fill="#FFFFFF"/>
     <circle cx="480" cy="5" r="5" fill="#FF4D6D"/>
     <text x="250" y="44" font-family="Segoe UI Variable Text, Segoe UI, sans-serif" font-size="18" font-weight="600" fill="#9FE9F7">Last 2:00 saved</text>
-    <text x="480" y="44" text-anchor="end" font-family="Segoe UI Variable Text, Segoe UI, sans-serif" font-size="18" fill="#8E99B6">Alt + F10</text>
+    <text x="480" y="44" text-anchor="end" font-family="Segoe UI Variable Text, Segoe UI, sans-serif" font-size="18" fill="#8E99B6">Alt + C</text>
   </g>
 </svg>
