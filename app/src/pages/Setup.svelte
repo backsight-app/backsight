@@ -5,11 +5,11 @@
   import { onMount } from "svelte";
   import mark from "../../../assets/brand/backsight-mark.svg";
   import Kbd from "../lib/components/Kbd.svelte";
-  import NvidiaClashes from "../lib/components/NvidiaClashes.svelte";
+  import OverlayClashes from "../lib/components/OverlayClashes.svelte";
   import Term from "../lib/components/Term.svelte";
   import { fixCompatibility, formatDuration, vendorLabel, videoEncoder } from "../lib/content";
   import { ACTIONS } from "../lib/hotkeys";
-  import type { Clash } from "../lib/nvidia";
+  import type { Clash } from "../lib/overlays";
   import { app } from "../lib/settings.svelte";
 
   type Check = {
@@ -136,7 +136,7 @@
       {#if !check && !failed}
         <p class="muted">Checking your hotkeys…</p>
       {:else if check?.clashes.length}
-        <NvidiaClashes clashes={check.clashes} />
+        <OverlayClashes clashes={check.clashes} />
       {:else}
         {#if app.settings.replay.enabled}
           <p>

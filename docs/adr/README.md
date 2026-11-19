@@ -20,3 +20,4 @@ Each ADR records one decision: the context, what we chose, what we gave up. New 
 | [0014](0014-updates-from-github-releases.md) | Installed copies update from GitHub Releases | Accepted (amended 2026-11-18: automatic checks) |
 | [0015](0015-vertical-clips.md) | Make vertical clips from the saved clip, in the background | Accepted |
 | [0016](0016-on-device-captions.md) | Caption the microphone on the PC with whisper.cpp, after the save | Accepted |
+| [0017](0017-other-apps-hotkeys-read-only.md) | Find other apps' hotkeys by reading, never by hooking | Accepted |

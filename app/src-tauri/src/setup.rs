@@ -5,7 +5,7 @@ use backsight_config::{Settings, Video};
 use backsight_encode::probe::ProbeResult;
 use backsight_engine::{
     capture::{target, wgc},
-    nvidia,
+    overlays,
     overload::{self, OverloadWatch, Sample},
     setup,
 };
@@ -64,8 +64,8 @@ pub struct SetupCheck {
     encoders: Vec<ProbeResult>,
     /// The encoder to switch to, when the chosen one doesn't work here.
     pick: Option<setup::Pick>,
-    /// Backsight hotkeys that NVIDIA's overlay also uses.
-    clashes: Vec<nvidia::Clash>,
+    /// Backsight hotkeys that another app on this PC also uses.
+    clashes: Vec<overlays::Clash>,
 }
 
 /// Everything the setup page shows, for the settings it has now.
@@ -78,18 +78,19 @@ pub async fn setup_check(app: AppHandle, settings: Settings) -> Result<SetupChec
             pick: setup::pick_encoder(&settings.video.encoder, &encoders, &cards),
             cards,
             encoders,
-            clashes: nvidia::clashes(&settings),
+            clashes: overlays::clashes(&settings),
         }
     })
     .await
     .map_err(|e| e.to_string())
 }
 
-/// NVIDIA's overlay shortcuts, for Home to compare with the hotkeys as they change. Reads the
-/// registry and the process list, so off the UI thread.
+/// Other apps' hotkeys, and Backsight keys another program already holds, for Home and Hotkeys
+/// to compare with the hotkeys as they change. Reads the registry, files and the process list,
+/// so off the UI thread.
 #[tauri::command]
-pub async fn nvidia_overlay_keys() -> Vec<nvidia::OverlayKey> {
-    spawn_blocking(nvidia::overlay_keys).await.unwrap_or_default()
+pub async fn overlay_scan(settings: Settings) -> Result<overlays::Scan, String> {
+    spawn_blocking(move || overlays::scan(&settings)).await.map_err(|e| e.to_string())
 }
 
 /// Watches the running session for an encoder that can't keep up; holds the warning while it lasts.

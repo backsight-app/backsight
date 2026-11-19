@@ -2453,7 +2453,7 @@ fn main() {
             setup::setup_check,
             setup::overload_status,
             setup::lighter_video,
-            setup::nvidia_overlay_keys,
+            setup::overlay_scan,
             crash_notice,
             crash_dismiss,
             crash_open_folder,

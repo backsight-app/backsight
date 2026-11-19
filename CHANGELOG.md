@@ -6,6 +6,16 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ### Added
 
+- Backsight spots other apps on the PC that use the same hotkeys (overlays, chat, recording and screenshot tools such as the NVIDIA app, AMD Software, Discord, Steam, OBS, ShareX, Xbox Game Bar and PowerToys), reads their saved keys where it can, and checks whether another program already holds one of Backsight's keys. Home and Setup show a card for each clash with "Give Backsight other keys"; Hotkeys lists the other apps and their keys. Read only: Backsight never changes another app's settings.
+
+### Changed
+
+- The fallback keys used when a default is taken are now Alt+X, Ctrl+Alt+X, Alt+N and Alt+Shift+N (Alt+V is NVIDIA's chat push-to-talk).
+
+## 0.1.11 - 2026-11-19
+
+### Added
+
 - Library: "Remove damaged originals" moves the originals kept after crash recovery (`.recovered.part`) to the Recycle Bin, after a confirmation.
 - Thumbnails for HDR (JPEG XR) screenshots, tone-mapped like the clipboard copy.
 

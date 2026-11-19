@@ -616,10 +616,10 @@
     "short": "Two actions share the same keys.",
     "eli5": "Only one of them could fire, so Backsight asks you to change one. Also watch out for combos your games or other apps already use."
   },
-  "nvidia-overlay": {
-    "term": "NVIDIA overlay",
-    "short": "NVIDIA's own recorder, opened with Alt+Z.",
-    "eli5": "The NVIDIA app can record and take screenshots too, with the same keys Backsight uses by default. Then one key press makes two clips. Give Backsight other keys, or turn NVIDIA's overlay off in the NVIDIA app."
+  "overlay": {
+    "term": "Other apps' keys",
+    "short": "Apps that listen for their own keys while you play.",
+    "eli5": "Discord, the NVIDIA app, Steam and others have hotkeys too, often for their own clips or an overlay (a panel over your game). When one uses a Backsight key, one press may do two things, or Backsight may not see the key at all. Give Backsight other keys, or change the key in that app."
   },
 
   "output-folder": {

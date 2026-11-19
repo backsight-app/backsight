@@ -1,0 +1,13 @@
+{
+  "save-replay": ["Alt+J", "Alt+Y", "Alt+H", "Alt+O"],
+  "toggle-replay": ["Alt+Shift+J", "Alt+Shift+Y", "Alt+Shift+H", "Alt+Shift+K"],
+  "toggle-recording": ["Alt+Y", "Alt+J", "Alt+H", "Alt+O"],
+  "pause-recording": ["Alt+Shift+Y", "Alt+Shift+J", "Alt+Shift+H", "Alt+Shift+K"],
+  "screenshot": ["Alt+H", "Alt+J", "Alt+Y", "Alt+O"],
+  "screenshot-window": ["Alt+Shift+H", "Alt+Shift+J", "Alt+Shift+K", "Alt+Shift+L"],
+  "screenshot-region": ["Alt+Shift+G", "Alt+Shift+K", "Alt+Shift+L", "Alt+Shift+P"],
+  "toggle-mic": ["Alt+Shift+T", "Alt+Shift+M", "Alt+O", "Alt+J"],
+  "push-to-talk": ["Alt+Shift+M", "Alt+Shift+T", "Alt+Shift+U", "Alt+Shift+I"],
+  "add-marker": ["Alt+Shift+B", "Alt+O", "Alt+Shift+U", "Alt+Shift+I"],
+  "open-app": ["Alt+O", "Alt+Shift+P", "Alt+Shift+I", "Alt+Shift+U"]
+}

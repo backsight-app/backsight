@@ -36,10 +36,10 @@ jobs:
         working-directory: app
       - run: npm run build
         working-directory: app
-      # Offline self-checks: Library filters/grouping, NVIDIA key clashes and the FPS-cost CSV parser.
+      # Offline self-checks: Library filters/grouping, other apps' key clashes and the FPS-cost CSV parser.
       - run: node --experimental-strip-types src/lib/library.check.ts
         working-directory: app
-      - run: node --experimental-strip-types src/lib/nvidia.check.ts
+      - run: node --experimental-strip-types src/lib/overlays.check.ts
         working-directory: app
       - run: node --experimental-strip-types src/lib/hdr.check.ts
         working-directory: app

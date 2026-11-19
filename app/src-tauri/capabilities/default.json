@@ -33,7 +33,7 @@
     "allow-setup-check",
     "allow-overload-status",
     "allow-lighter-video",
-    "allow-nvidia-overlay-keys",
+    "allow-overlay-scan",
     "allow-crash-notice",
     "allow-clips-space",
     "allow-press-action",

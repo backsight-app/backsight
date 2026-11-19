@@ -1,15 +1,16 @@
 <script lang="ts">
   import Icon from "../lib/components/Icon.svelte";
   import Kbd from "../lib/components/Kbd.svelte";
-  import NvidiaClashes from "../lib/components/NvidiaClashes.svelte";
+  import OverlayClashes from "../lib/components/OverlayClashes.svelte";
   import { thumbSrc } from "../lib/components/LibraryCard.svelte";
-  import { clashesFor, clashSignature, type OverlayKey } from "../lib/nvidia";
+  import { clashesFor, clashSignature, takenClashes, type Scan } from "../lib/overlays";
   import { catalog, formatDuration } from "../lib/content";
   import { feed } from "../lib/feed.svelte";
   import { formatClock, formatTime, isVertical, todayStats, type LibraryItem } from "../lib/library";
   import { isTauri } from "@tauri-apps/api/core";
+  import { loadScan } from "../lib/setup";
   import { invoke } from "../lib/uiwatch";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { app, type ReplayStatus } from "../lib/settings.svelte";
 
   const s = $derived(app.settings);
@@ -70,15 +71,24 @@
   onMount(() => {
     if (isTauri()) invoke<string | null>("crash_notice").then((c) => (crash = c), () => {});
   });
-  // NVIDIA's overlay shares some hotkeys. Its keys are read each time Home opens (off the UI
-  // thread in Rust); the clash follows the hotkeys as they change, Setup's swap included.
-  let overlay = $state<OverlayKey[]>([]);
-  onMount(() => {
-    if (isTauri()) invoke<OverlayKey[]>("nvidia_overlay_keys").then((k) => (overlay = k), () => {});
+  // Other apps share some hotkeys. Their keys are read each time Home opens (off the UI thread in
+  // Rust), once the saved hotkeys are in (the probe checks those); the clash follows the hotkeys as
+  // they change, Setup's swap included. After "Give Backsight other keys" the new keys are probed.
+  let scan = $state<Scan>({ apps: [], taken: [] });
+  const rescan = () => loadScan($state.snapshot(s)).then((r) => (scan = r));
+  let scanned = false;
+  $effect(() => {
+    if (!scanned && (app.loaded || !isTauri())) {
+      scanned = true;
+      untrack(rescan);
+    }
   });
-  const clashes = $derived(clashesFor(s.hotkeys as Record<string, string>, overlay));
+  const clashes = $derived([
+    ...clashesFor(s.hotkeys as Record<string, string>, scan.apps),
+    ...takenClashes(s.hotkeys as Record<string, string>, scan.taken),
+  ]);
   // Dismissing is remembered for this set of clashing keys; a different set shows the notice again.
-  const DISMISSED = "backsight.nvidiaClashDismissed";
+  const DISMISSED = "backsight.overlayClashDismissed";
   let dismissed = $state(readDismissed());
   function readDismissed() {
     try {
@@ -331,7 +341,7 @@
   {#if clashes.length && clashSignature(clashes) !== dismissed}
     <div class="notice" role="status">
       <Icon name="alert" size={16} />
-      <div class="clashes"><NvidiaClashes {clashes} /></div>
+      <div class="clashes"><OverlayClashes {clashes} onswap={rescan} /></div>
       <button type="button" class="btn" onclick={dismissClashes}>Dismiss</button>
     </div>
   {/if}

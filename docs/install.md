@@ -27,7 +27,7 @@ Backsight tests the graphics card's encoders for a few seconds and recommends a 
 | Alt+R | Start or stop recording |
 | Alt+S | Screenshot |
 
-Home lists all keys; change them on the Hotkeys page. Existing settings keep their keys after an update. When the NVIDIA app's overlay uses the same keys, Home offers **Give Backsight other keys**; Alt+R, which is also NVIDIA's performance overlay key, then moves to Alt+V.
+Home lists all keys; change them on the Hotkeys page. Existing settings keep their keys after an update. When another app on the PC (the NVIDIA app, AMD Software, Discord, SteelSeries GG and others) uses the same keys, Home offers **Give Backsight other keys**; Alt+R, which is also NVIDIA's and AMD's overlay key, then moves to Alt+N.
 
 Clips and recordings go to `Videos\Backsight`, screenshots to `Pictures\Backsight`.
 

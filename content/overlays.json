@@ -1,0 +1,694 @@
+[
+  {
+    "id": "nvidia",
+    "name": "NVIDIA App",
+    "processes": ["NVIDIA Overlay.exe", "NVIDIA Share.exe", "NVIDIA app.exe"],
+    "uninstall": ["NVIDIA app", "NVIDIA GeForce Experience"],
+    "paths": [
+      "%ProgramFiles%\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",
+      "%ProgramFiles%\\NVIDIA Corporation\\NVIDIA GeForce Experience\\NVIDIA Share.exe"
+    ],
+    "reader": "nvidia",
+    "passes": "hidden",
+    "scope": "always",
+    "keys": [
+      { "id": "GFEOverlayHKeyV2", "key": "Alt+Z", "does": "opens NVIDIA's overlay" },
+      { "id": "ManualHKey", "key": "Alt+F9", "does": "starts and stops NVIDIA's recording" },
+      { "id": "DVRHKey", "key": "Alt+F10", "does": "saves NVIDIA's Instant Replay" },
+      { "id": "IRToggleHKey", "key": "Alt+Shift+F10", "does": "turns NVIDIA's Instant Replay on and off" },
+      { "id": "ScreenshotHKey", "key": "Alt+F1", "does": "takes an NVIDIA screenshot" },
+      { "id": "AnselUIHKey", "key": "Alt+F2", "does": "opens NVIDIA's photo mode" },
+      { "id": "FSUIHKeyV1", "key": "Alt+F3", "does": "opens NVIDIA's game filters" },
+      { "id": "PMOCOverlayHKey", "key": "Alt+R", "does": "shows NVIDIA's performance overlay" },
+      { "id": "PMOCOverlayCycleHKey", "key": "Alt+Shift+R", "does": "changes what NVIDIA's performance overlay shows" },
+      { "id": "MicToggleHKey", "key": "Ctrl+Alt+M", "does": "turns NVIDIA's microphone on and off" },
+      { "id": "MicPTTHKey", "key": "Backquote", "does": "is NVIDIA's push-to-talk key" },
+      { "id": "ChatUIToggleHKey", "key": "Alt+G", "does": "opens NVIDIA's chat" },
+      { "id": "ChatPTTHKey", "key": "Alt+V", "does": "is NVIDIA's chat push-to-talk key" },
+      { "id": "FSPresetHKey", "key": "Alt+Shift+X", "does": "switches NVIDIA's game filter" },
+      { "id": "FSToggleHKey", "key": null, "does": "turns NVIDIA's game filters on and off" },
+      { "id": "PMOCLoggingToggleHKey", "key": null, "does": "starts and stops NVIDIA's performance log" },
+      { "id": "PMOCResetAverageMetricsHKey", "key": null, "does": "resets NVIDIA's performance averages" },
+      { "id": "PMOCFontSizeCycleHKey", "key": null, "does": "changes the size of NVIDIA's performance overlay" }
+    ]
+  },
+  {
+    "id": "amd",
+    "name": "AMD Software: Adrenalin Edition",
+    "processes": ["RadeonSoftware.exe", "AMDRSServ.exe"],
+    "uninstall": ["AMD Software"],
+    "paths": ["%ProgramFiles%\\AMD\\CNext\\CNext\\RadeonSoftware.exe"],
+    "reader": "amd",
+    "passes": "hidden",
+    "scope": "always",
+    "keys": [
+      { "id": "ToggleRsHotkey", "key": "Alt+R", "does": "opens AMD's overlay" },
+      { "id": "ToggleDvrToolbarHotkey", "key": "Alt+Z", "does": "opens AMD's recording toolbar" },
+      { "id": "ToggleRsPerfUiHotkey", "key": "Ctrl+Shift+O", "does": "shows AMD's performance overlay" },
+      { "id": "ToggleRsPerfRecordingHotkey", "key": "Ctrl+Shift+L", "does": "starts and stops AMD's performance log" },
+      { "id": "ToggleDvrRecordingHotkey", "key": "Ctrl+Shift+E", "does": "starts and stops AMD's recording" },
+      { "id": "ToggleStreamingHotkey", "key": "Ctrl+Shift+G", "does": "starts and stops AMD's streaming" },
+      { "id": "ToggleCameraHotkey", "key": "Ctrl+Shift+C", "does": "turns AMD's camera on and off" },
+      { "id": "ToggleMicrophoneHotkey", "key": "Ctrl+Shift+M", "does": "turns AMD's microphone on and off" },
+      { "id": "TakeScreenshotHotkey", "key": "Ctrl+Shift+I", "does": "takes an AMD screenshot" },
+      { "id": "SaveInstantReplayHotkey", "key": "Ctrl+Shift+S", "does": "saves AMD's Instant Replay" },
+      { "id": "SaveInstantGifHotkey", "key": "Ctrl+Shift+J", "does": "saves an AMD GIF" },
+      { "id": "SaveInGameReplayHotkey", "key": "Ctrl+Shift+U", "does": "saves AMD's in-game replay" },
+      { "id": "ToggleUpscaling", "key": "Alt+U", "does": "turns AMD's upscaling on and off" },
+      { "id": "Boost", "key": "Alt+K", "does": "turns AMD Boost on and off" },
+      { "id": "AntiLag", "key": "Alt+L", "does": "turns AMD Anti-Lag on and off" },
+      { "id": "RotationUpHotkey", "key": "Ctrl+Alt+Up", "does": "turns the screen upright (AMD)" },
+      { "id": "RotationDownHotkey", "key": "Ctrl+Alt+Down", "does": "turns the screen upside down (AMD)" },
+      { "id": "RotationLeftHotkey", "key": "Ctrl+Alt+Left", "does": "turns the screen to the left (AMD)" },
+      { "id": "RotationRightHotkey", "key": "Ctrl+Alt+Right", "does": "turns the screen to the right (AMD)" }
+    ]
+  },
+  {
+    "id": "intel-graphics",
+    "name": "Intel Graphics Software",
+    "processes": ["IntelGraphicsSoftware.exe"],
+    "uninstall": ["Intel® Graphics Software", "Intel(R) Graphics Software"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [{ "id": "MetricsOverlay", "key": "Alt+Shift+O", "does": "shows Intel's performance overlay" }]
+  },
+  {
+    "id": "intel-arc",
+    "name": "Intel Arc Control",
+    "processes": ["ArcControl.exe"],
+    "uninstall": ["Intel® Arc™ Control", "Intel(R) Arc(TM) Control"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [{ "id": "Overlay", "key": "Alt+I", "does": "opens Intel Arc Control's overlay" }]
+  },
+  {
+    "id": "gamebar",
+    "name": "Xbox Game Bar",
+    "processes": ["GameBar.exe"],
+    "packages": ["Microsoft.XboxGamingOverlay_"],
+    "reader": "gamebar",
+    "passes": "hidden",
+    "scope": "always",
+    "keys": [
+      { "id": "ToggleGameBar", "key": "Win+G", "does": "opens Xbox Game Bar" },
+      { "id": "ToggleRecording", "key": "Alt+Win+R", "does": "starts and stops Game Bar's recording" },
+      { "id": "SaveHistoricalVideo", "key": "Alt+Win+G", "does": "saves Game Bar's last 30 seconds" },
+      { "id": "TakeScreenshot", "key": "Alt+Win+PrintScreen", "does": "takes a Game Bar screenshot" },
+      { "id": "ToggleMicrophoneCapture", "key": "Alt+Win+M", "does": "turns Game Bar's microphone on and off" },
+      { "id": "ToggleCameraCapture", "key": null, "does": "turns Game Bar's camera on and off" },
+      { "id": "ToggleBroadcast", "key": null, "does": "starts and stops Game Bar's broadcast" },
+      { "id": "ToggleRecordingIndicator", "key": null, "does": "shows or hides Game Bar's recording timer" }
+    ]
+  },
+  {
+    "id": "snipping-tool",
+    "name": "Snipping Tool",
+    "packages": ["Microsoft.ScreenSketch_"],
+    "reader": "snipping",
+    "passes": "hidden",
+    "scope": "always",
+    "keys": [
+      { "id": "PrintScreenKeyForSnippingEnabled", "key": "PrintScreen", "does": "opens Snipping Tool" },
+      { "id": "Snip", "key": "Shift+Win+S", "does": "opens Snipping Tool to grab part of the screen" },
+      { "id": "Record", "key": "Shift+Win+R", "does": "starts a Snipping Tool screen recording" }
+    ]
+  },
+  {
+    "id": "windows",
+    "name": "Windows",
+    "paths": ["%SystemRoot%\\explorer.exe"],
+    "passes": "hidden",
+    "scope": "always",
+    "keys": [
+      { "id": "Screenshot", "key": "Win+PrintScreen", "does": "saves a Windows screenshot" },
+      { "id": "MuteCall", "key": "Alt+Win+K", "does": "mutes you in a call" },
+      { "id": "VoiceTyping", "key": "Win+H", "does": "starts Windows voice typing" },
+      { "id": "ToggleHdr", "key": "Alt+Win+B", "does": "turns HDR on and off" }
+    ]
+  },
+  {
+    "id": "powertoys",
+    "name": "PowerToys",
+    "processes": ["PowerToys.exe"],
+    "uninstall": ["PowerToys"],
+    "paths": ["%ProgramFiles%\\PowerToys\\PowerToys.exe", "%LOCALAPPDATA%\\PowerToys\\PowerToys.exe"],
+    "reader": "powertoys",
+    "passes": "hidden",
+    "scope": "always",
+    "keys": [
+      { "id": "PowerToys Run.open_powerlauncher", "key": "Alt+Space", "does": "opens PowerToys Run" },
+      { "id": "CmdPal.Hotkey", "key": "Alt+Win+Space", "does": "opens the PowerToys Command Palette" },
+      { "id": "ColorPicker.ActivationShortcut", "key": "Shift+Win+C", "does": "opens the PowerToys Color Picker" },
+      { "id": "TextExtractor.ActivationShortcut", "key": "Shift+Win+T", "does": "copies text from the screen (PowerToys)" },
+      { "id": "Measure Tool.ActivationShortcut", "key": "Ctrl+Shift+Win+M", "does": "opens the PowerToys Screen Ruler" },
+      { "id": "AlwaysOnTop.hotkey", "key": "Ctrl+Win+T", "does": "keeps a window on top (PowerToys)" },
+      { "id": "AdvancedPaste.advanced-paste-ui-hotkey", "key": "Shift+Win+V", "does": "opens PowerToys Advanced Paste" },
+      { "id": "AdvancedPaste.paste-as-plain-hotkey", "key": "Ctrl+Alt+Win+V", "does": "pastes plain text (PowerToys)" },
+      { "id": "Peek.ActivationShortcut", "key": "Ctrl+Space", "does": "opens PowerToys Peek" },
+      { "id": "CropAndLock.reparent-hotkey", "key": "Ctrl+Shift+Win+R", "does": "crops a window (PowerToys)" },
+      { "id": "CropAndLock.thumbnail-hotkey", "key": "Ctrl+Shift+Win+T", "does": "makes a window thumbnail (PowerToys)" },
+      { "id": "Shortcut Guide.open_shortcutguide", "key": "Shift+Win+Slash", "does": "shows the PowerToys Shortcut Guide" },
+      { "id": "Workspaces.hotkey", "key": "Ctrl+Win+Backquote", "does": "opens PowerToys Workspaces" },
+      { "id": "FancyZones.fancyzones_editor_hotkey", "key": "Shift+Win+Backquote", "does": "opens the PowerToys FancyZones editor" },
+      { "id": "MouseHighlighter.activation_shortcut", "key": "Shift+Win+H", "does": "highlights mouse clicks (PowerToys)" },
+      { "id": "ZoomIt.ToggleKey", "key": "Ctrl+1", "does": "zooms in on the screen (ZoomIt)" },
+      { "id": "ZoomIt.DrawToggleKey", "key": "Ctrl+2", "does": "draws on the screen (ZoomIt)" },
+      { "id": "ZoomIt.BreakTimerKey", "key": "Ctrl+3", "does": "starts a ZoomIt break timer" },
+      { "id": "ZoomIt.LiveZoomToggleKey", "key": "Ctrl+4", "does": "starts ZoomIt's live zoom" },
+      { "id": "ZoomIt.RecordToggleKey", "key": "Ctrl+5", "does": "starts a ZoomIt screen recording" },
+      { "id": "ZoomIt.SnipToggleKey", "key": "Ctrl+6", "does": "grabs part of the screen (ZoomIt)" }
+    ]
+  },
+  {
+    "id": "steam",
+    "name": "Steam",
+    "processes": ["steam.exe", "gameoverlayui.exe"],
+    "uninstall": ["Steam"],
+    "paths": ["%ProgramFiles(x86)%\\Steam\\steam.exe"],
+    "passes": "both",
+    "scope": "in-game",
+    "keys": [
+      { "id": "overlay_key", "key": "Shift+Tab", "does": "opens the Steam overlay" },
+      { "id": "screenshot_key", "key": "F12", "does": "takes a Steam screenshot" },
+      { "id": "gamerecording_background_mk", "key": "Ctrl+F12", "does": "adds a Steam timeline marker" },
+      { "id": "gamerecording_background_tg", "key": null, "does": "starts and stops Steam's recording" },
+      { "id": "gamerecording_hotkey_ic", "key": null, "does": "saves a Steam clip" },
+      { "id": "overlay_fps_counter_key", "key": null, "does": "shows Steam's FPS counter" }
+    ]
+  },
+  {
+    "id": "epic",
+    "name": "Epic Games Launcher",
+    "processes": ["EpicGamesLauncher.exe"],
+    "uninstall": ["Epic Games Launcher"],
+    "passes": "unknown",
+    "scope": "in-game",
+    "keys": [{ "id": "Overlay", "key": "Shift+F3", "does": "opens Epic's overlay" }]
+  },
+  {
+    "id": "ea",
+    "name": "EA app",
+    "processes": ["EADesktop.exe"],
+    "uninstall": ["EA app"],
+    "passes": "unknown",
+    "scope": "in-game",
+    "keys": [{ "id": "Overlay", "key": "Shift+F1", "does": "opens the EA app's overlay" }]
+  },
+  {
+    "id": "ubisoft",
+    "name": "Ubisoft Connect",
+    "processes": ["UbisoftConnect.exe", "upc.exe"],
+    "uninstall": ["Ubisoft Connect", "Uplay"],
+    "passes": "unknown",
+    "scope": "in-game",
+    "keys": [
+      { "id": "Overlay", "key": "Shift+F2", "does": "opens Ubisoft Connect's overlay" },
+      { "id": "Screenshot", "key": "F12", "does": "takes a Ubisoft Connect screenshot" }
+    ]
+  },
+  {
+    "id": "gog",
+    "name": "GOG Galaxy",
+    "processes": ["GalaxyClient.exe"],
+    "uninstall": ["GOG GALAXY"],
+    "passes": "unknown",
+    "scope": "in-game",
+    "keys": [
+      { "id": "Overlay", "key": "Shift+Tab", "does": "opens GOG Galaxy's overlay" },
+      { "id": "Screenshot", "key": "F12", "does": "takes a GOG Galaxy screenshot" }
+    ]
+  },
+  {
+    "id": "rockstar",
+    "name": "Rockstar Games Launcher",
+    "processes": ["RockstarService.exe", "SocialClubHelper.exe"],
+    "uninstall": ["Rockstar Games Launcher"],
+    "passes": "unknown",
+    "scope": "in-game",
+    "keys": [{ "id": "Overlay", "key": "Home", "does": "opens the Rockstar overlay" }]
+  },
+  {
+    "id": "battlenet",
+    "name": "Battle.net",
+    "processes": ["Battle.net.exe"],
+    "uninstall": ["Battle.net"],
+    "passes": "unknown",
+    "scope": "in-game",
+    "keys": [{ "id": "Screenshot", "key": "PrintScreen", "does": "takes a screenshot in Blizzard games" }]
+  },
+  {
+    "id": "discord",
+    "name": "Discord",
+    "processes": ["Discord.exe"],
+    "paths": ["%LOCALAPPDATA%\\Discord\\Update.exe"],
+    "passes": "both",
+    "scope": "always",
+    "keys": [
+      { "id": "SAVE_CLIP", "key": "Alt+C", "does": "saves a Discord clip if Discord Clips is on" },
+      { "id": "SAVE_SCREENSHOT", "key": "F12", "does": "takes a Discord screenshot" },
+      { "id": "TOGGLE_OVERLAY_INPUT_LOCK", "key": "Shift+Backquote", "does": "unlocks Discord's overlay" },
+      { "id": "SOUNDBOARD_HOLD", "key": "Ctrl+Backquote", "does": "opens Discord's soundboard" },
+      { "id": "PUSH_TO_TALK", "key": null, "does": "is Discord's push-to-talk key" },
+      { "id": "TOGGLE_MUTE", "key": null, "does": "mutes you in Discord" },
+      { "id": "TOGGLE_DEAFEN", "key": null, "does": "deafens you in Discord" }
+    ]
+  },
+  {
+    "id": "discord-ptb",
+    "name": "Discord PTB",
+    "processes": ["DiscordPTB.exe"],
+    "paths": ["%LOCALAPPDATA%\\DiscordPTB\\Update.exe"],
+    "passes": "both",
+    "scope": "always",
+    "keys": [
+      { "id": "SAVE_CLIP", "key": "Alt+C", "does": "saves a Discord clip if Discord Clips is on" },
+      { "id": "SAVE_SCREENSHOT", "key": "F12", "does": "takes a Discord screenshot" },
+      { "id": "TOGGLE_OVERLAY_INPUT_LOCK", "key": "Shift+Backquote", "does": "unlocks Discord's overlay" },
+      { "id": "SOUNDBOARD_HOLD", "key": "Ctrl+Backquote", "does": "opens Discord's soundboard" }
+    ]
+  },
+  {
+    "id": "discord-canary",
+    "name": "Discord Canary",
+    "processes": ["DiscordCanary.exe"],
+    "paths": ["%LOCALAPPDATA%\\DiscordCanary\\Update.exe"],
+    "passes": "both",
+    "scope": "always",
+    "keys": [
+      { "id": "SAVE_CLIP", "key": "Alt+C", "does": "saves a Discord clip if Discord Clips is on" },
+      { "id": "SAVE_SCREENSHOT", "key": "F12", "does": "takes a Discord screenshot" },
+      { "id": "TOGGLE_OVERLAY_INPUT_LOCK", "key": "Shift+Backquote", "does": "unlocks Discord's overlay" },
+      { "id": "SOUNDBOARD_HOLD", "key": "Ctrl+Backquote", "does": "opens Discord's soundboard" }
+    ]
+  },
+  {
+    "id": "medal",
+    "name": "Medal",
+    "processes": ["Medal.exe"],
+    "paths": ["%LOCALAPPDATA%\\Medal\\Update.exe"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [{ "id": "Clip", "key": "F8", "does": "saves a Medal clip" }]
+  },
+  {
+    "id": "overwolf",
+    "name": "Overwolf",
+    "processes": ["Overwolf.exe", "OverwolfLauncher.exe"],
+    "uninstall": ["Overwolf"],
+    "paths": ["%ProgramFiles(x86)%\\Overwolf\\OverwolfLauncher.exe"],
+    "passes": "hidden",
+    "scope": "in-game",
+    "keys": [{ "id": "Dock", "key": "Ctrl+Tab", "does": "opens Overwolf's in-game menu" }]
+  },
+  {
+    "id": "steelseries",
+    "name": "SteelSeries GG",
+    "processes": ["SteelSeriesGG.exe"],
+    "uninstall": ["SteelSeries GG"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [
+      { "id": "SaveClip", "key": "Alt+S", "does": "saves a SteelSeries Moments clip" },
+      { "id": "MicMute", "key": "Alt+M", "does": "turns SteelSeries Moments' microphone on and off" },
+      { "id": "DesktopCapture", "key": "Alt+P", "does": "starts SteelSeries Moments' desktop recording" }
+    ]
+  },
+  {
+    "id": "razer-cortex",
+    "name": "Razer Cortex",
+    "processes": ["RazerCortex.exe"],
+    "uninstall": ["Razer Cortex"],
+    "passes": "unknown",
+    "scope": "in-game",
+    "keys": [{ "id": "FpsDisplay", "key": "Ctrl+Shift+F", "does": "shows Razer Cortex's FPS counter" }]
+  },
+  {
+    "id": "mumble",
+    "name": "Mumble",
+    "processes": ["mumble.exe"],
+    "uninstall": ["Mumble"],
+    "passes": "both",
+    "scope": "always",
+    "keys": [{ "id": "PushToTalk", "key": null, "does": "is Mumble's push-to-talk key" }]
+  },
+  {
+    "id": "teamspeak",
+    "name": "TeamSpeak",
+    "processes": ["ts3client_win64.exe", "TeamSpeak.exe"],
+    "uninstall": ["TeamSpeak"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [{ "id": "PushToTalk", "key": null, "does": "is TeamSpeak's push-to-talk key" }]
+  },
+  {
+    "id": "zoom",
+    "name": "Zoom",
+    "processes": ["Zoom.exe"],
+    "uninstall": ["Zoom"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [
+      { "id": "Mute", "key": null, "does": "mutes you in Zoom" },
+      { "id": "Record", "key": null, "does": "starts and stops Zoom's recording" },
+      { "id": "Share", "key": null, "does": "shares your screen in Zoom" }
+    ]
+  },
+  {
+    "id": "obs",
+    "name": "OBS Studio",
+    "processes": ["obs64.exe"],
+    "uninstall": ["OBS Studio"],
+    "paths": ["%ProgramFiles%\\obs-studio\\bin\\64bit\\obs64.exe"],
+    "reader": "obs",
+    "passes": "both",
+    "scope": "always",
+    "keys": [
+      { "id": "OBSBasic.StartRecording", "key": null, "does": "starts OBS's recording" },
+      { "id": "OBSBasic.StopRecording", "key": null, "does": "stops OBS's recording" },
+      { "id": "OBSBasic.PauseRecording", "key": null, "does": "pauses OBS's recording" },
+      { "id": "OBSBasic.UnpauseRecording", "key": null, "does": "resumes OBS's recording" },
+      { "id": "OBSBasic.StartReplayBuffer", "key": null, "does": "starts OBS's replay buffer" },
+      { "id": "OBSBasic.StopReplayBuffer", "key": null, "does": "stops OBS's replay buffer" },
+      { "id": "ReplayBuffer.Save", "key": null, "does": "saves OBS's replay" },
+      { "id": "OBSBasic.StartStreaming", "key": null, "does": "starts OBS's stream" },
+      { "id": "OBSBasic.StopStreaming", "key": null, "does": "stops OBS's stream" },
+      { "id": "OBSBasic.Screenshot", "key": null, "does": "takes an OBS screenshot" },
+      { "id": "OBSBasic.AddChapterMarker", "key": null, "does": "adds an OBS chapter marker" },
+      { "id": "libobs.mute", "key": null, "does": "mutes a sound in OBS" },
+      { "id": "libobs.unmute", "key": null, "does": "unmutes a sound in OBS" },
+      { "id": "libobs.push-to-talk", "key": null, "does": "is OBS's push-to-talk key" },
+      { "id": "libobs.push-to-mute", "key": null, "does": "is OBS's push-to-mute key" }
+    ]
+  },
+  {
+    "id": "streamlabs",
+    "name": "Streamlabs Desktop",
+    "processes": ["Streamlabs Desktop.exe"],
+    "uninstall": ["Streamlabs Desktop", "Streamlabs OBS"],
+    "passes": "both",
+    "scope": "always",
+    "keys": [
+      { "id": "TOGGLE_START_RECORDING", "key": null, "does": "starts Streamlabs' recording" },
+      { "id": "TOGGLE_STOP_RECORDING", "key": null, "does": "stops Streamlabs' recording" },
+      { "id": "SAVE_REPLAY", "key": null, "does": "saves Streamlabs' replay" },
+      { "id": "TOGGLE_START_STREAMING", "key": null, "does": "starts Streamlabs' stream" }
+    ]
+  },
+  {
+    "id": "bandicam",
+    "name": "Bandicam",
+    "processes": ["bdcam.exe"],
+    "uninstall": ["Bandicam"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [
+      { "id": "Record", "key": "F12", "does": "starts and stops Bandicam's recording" },
+      { "id": "Pause", "key": "Shift+F12", "does": "pauses Bandicam's recording" },
+      { "id": "Screenshot", "key": "F11", "does": "takes a Bandicam screenshot" },
+      { "id": "MuteSpeakers", "key": "Ctrl+Alt+S", "does": "mutes the sound in Bandicam's recording" },
+      { "id": "MuteMic", "key": "Ctrl+Alt+M", "does": "mutes the microphone in Bandicam's recording" },
+      { "id": "Rectangle", "key": "Ctrl+Alt+H", "does": "opens Bandicam's area recording" },
+      { "id": "Drawing", "key": "Ctrl+Alt+D", "does": "draws on Bandicam's recording" }
+    ]
+  },
+  {
+    "id": "fraps",
+    "name": "Fraps",
+    "processes": ["fraps.exe"],
+    "uninstall": ["Fraps"],
+    "passes": "unknown",
+    "scope": "in-game",
+    "keys": [
+      { "id": "Video", "key": "F9", "does": "starts and stops Fraps' recording" },
+      { "id": "Screenshot", "key": "F10", "does": "takes a Fraps screenshot" },
+      { "id": "Benchmark", "key": "F11", "does": "starts a Fraps benchmark" },
+      { "id": "Overlay", "key": "F12", "does": "moves Fraps' FPS counter" }
+    ]
+  },
+  {
+    "id": "action",
+    "name": "Action!",
+    "processes": ["Action.exe"],
+    "uninstall": ["Action!", "Mirillis Action!"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [
+      { "id": "Record", "key": "F9", "does": "starts and stops Action!'s recording" },
+      { "id": "Screenshot", "key": "F12", "does": "takes an Action! screenshot" }
+    ]
+  },
+  {
+    "id": "sharex",
+    "name": "ShareX",
+    "processes": ["ShareX.exe"],
+    "uninstall": ["ShareX"],
+    "packages": ["19568ShareX.ShareX_"],
+    "paths": ["%ProgramFiles%\\ShareX\\ShareX.exe"],
+    "reader": "sharex",
+    "passes": "hidden",
+    "scope": "always",
+    "keys": [
+      { "id": "RectangleRegion", "key": "Ctrl+PrintScreen", "does": "grabs part of the screen with ShareX" },
+      { "id": "PrintScreen", "key": "PrintScreen", "does": "takes a ShareX screenshot" },
+      { "id": "ActiveWindow", "key": "Alt+PrintScreen", "does": "takes a ShareX window screenshot" },
+      { "id": "ScreenRecorder", "key": "Shift+PrintScreen", "does": "starts and stops ShareX's recording" },
+      { "id": "ScreenRecorderGIF", "key": "Ctrl+Shift+PrintScreen", "does": "records a ShareX GIF" }
+    ]
+  },
+  {
+    "id": "greenshot",
+    "name": "Greenshot",
+    "processes": ["Greenshot.exe"],
+    "uninstall": ["Greenshot"],
+    "paths": ["%ProgramFiles%\\Greenshot\\Greenshot.exe"],
+    "reader": "greenshot",
+    "passes": "hidden",
+    "scope": "always",
+    "keys": [
+      { "id": "RegionHotkey", "key": "Ctrl+PrintScreen", "does": "grabs part of the screen with Greenshot" },
+      { "id": "WindowHotkey", "key": "Alt+PrintScreen", "does": "takes a Greenshot window screenshot" },
+      { "id": "FullscreenHotkey", "key": "PrintScreen", "does": "takes a Greenshot screenshot" },
+      { "id": "LastregionHotkey", "key": "Shift+PrintScreen", "does": "grabs the same area again with Greenshot" },
+      { "id": "IEHotkey", "key": "Ctrl+Shift+PrintScreen", "does": "takes a Greenshot web page screenshot" }
+    ]
+  },
+  {
+    "id": "picpick",
+    "name": "PicPick",
+    "processes": ["picpick.exe"],
+    "uninstall": ["PicPick"],
+    "passes": "hidden",
+    "scope": "always",
+    "keys": [
+      { "id": "FullScreen", "key": "PrintScreen", "does": "takes a PicPick screenshot" },
+      { "id": "ActiveWindow", "key": "Alt+PrintScreen", "does": "takes a PicPick window screenshot" },
+      { "id": "WindowControl", "key": "Ctrl+PrintScreen", "does": "grabs part of a window with PicPick" },
+      { "id": "ScrollingWindow", "key": "Ctrl+Alt+PrintScreen", "does": "takes a PicPick scrolling screenshot" },
+      { "id": "Region", "key": "Shift+PrintScreen", "does": "grabs part of the screen with PicPick" },
+      { "id": "FixedRegion", "key": "Ctrl+Shift+PrintScreen", "does": "grabs a fixed area with PicPick" },
+      { "id": "Freehand", "key": "Ctrl+Alt+Shift+PrintScreen", "does": "grabs a freehand area with PicPick" }
+    ]
+  },
+  {
+    "id": "snagit",
+    "name": "Snagit",
+    "processes": ["Snagit32.exe", "SnagitCapture.exe"],
+    "uninstall": ["Snagit"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [{ "id": "Capture", "key": "PrintScreen", "does": "starts a Snagit capture" }]
+  },
+  {
+    "id": "lightshot",
+    "name": "Lightshot",
+    "processes": ["Lightshot.exe"],
+    "uninstall": ["Lightshot"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [{ "id": "Capture", "key": "PrintScreen", "does": "takes a Lightshot screenshot" }]
+  },
+  {
+    "id": "snipaste",
+    "name": "Snipaste",
+    "processes": ["Snipaste.exe"],
+    "passes": "hidden",
+    "scope": "always",
+    "keys": [
+      { "id": "Snip", "key": "F1", "does": "takes a Snipaste screenshot" },
+      { "id": "Paste", "key": "F3", "does": "pins a Snipaste picture to the screen" }
+    ]
+  },
+  {
+    "id": "capframex",
+    "name": "CapFrameX",
+    "processes": ["CapFrameX.exe"],
+    "uninstall": ["CapFrameX"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [{ "id": "CaptureHotkey", "key": "F11", "does": "starts a CapFrameX capture" }]
+  },
+  {
+    "id": "reshade",
+    "name": "ReShade",
+    "passes": "unknown",
+    "scope": "in-game",
+    "keys": [
+      { "id": "KeyOverlay", "key": "Home", "does": "opens ReShade's menu" },
+      { "id": "KeyScreenshot", "key": "PrintScreen", "does": "takes a ReShade screenshot" },
+      { "id": "KeyEffects", "key": "ScrollLock", "does": "turns ReShade's effects on and off" }
+    ]
+  },
+  {
+    "id": "lossless-scaling",
+    "name": "Lossless Scaling",
+    "processes": ["LosslessScaling.exe"],
+    "paths": ["%ProgramFiles(x86)%\\Steam\\steamapps\\common\\Lossless Scaling\\LosslessScaling.exe"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [{ "id": "Scale", "key": "Ctrl+Alt+S", "does": "turns Lossless Scaling on and off" }]
+  },
+  {
+    "id": "magpie",
+    "name": "Magpie",
+    "processes": ["Magpie.exe"],
+    "uninstall": ["Magpie"],
+    "reader": "magpie",
+    "passes": "hidden",
+    "scope": "always",
+    "keys": [
+      { "id": "scale", "key": "Alt+Shift+A", "does": "turns Magpie's scaling on and off" },
+      { "id": "windowedModeScale", "key": "Alt+Shift+Q", "does": "turns Magpie's window scaling on and off" },
+      { "id": "toolbar", "key": "Alt+Shift+D", "does": "opens Magpie's toolbar" },
+      { "id": "takeScreenshot", "key": "Alt+Shift+S", "does": "takes a Magpie screenshot" }
+    ]
+  },
+  {
+    "id": "elgato-4k",
+    "name": "Elgato 4K Capture Utility",
+    "processes": ["4KCaptureUtility.exe"],
+    "uninstall": ["Elgato 4K Capture Utility"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [
+      { "id": "Screenshot", "key": "Ctrl+Shift+S", "does": "takes an Elgato screenshot" },
+      { "id": "Record", "key": "Ctrl+Shift+R", "does": "starts and stops Elgato's recording" },
+      { "id": "Flashback", "key": "Ctrl+Alt+Shift+F", "does": "saves Elgato's Flashback recording" },
+      { "id": "Commentary", "key": "Ctrl+Shift+M", "does": "turns Elgato's commentary on and off" }
+    ]
+  },
+  {
+    "id": "omen",
+    "name": "OMEN Gaming Hub",
+    "packages": ["AD2F1837.OMENCommandCenter"],
+    "passes": "unknown",
+    "scope": "in-game",
+    "keys": [{ "id": "Overlay", "key": "Shift+F2", "does": "opens OMEN's overlay" }]
+  },
+  {
+    "id": "geforce-now",
+    "name": "GeForce NOW",
+    "processes": ["GeForceNOW.exe"],
+    "uninstall": ["NVIDIA GeForce NOW"],
+    "passes": "unknown",
+    "scope": "in-game",
+    "keys": [
+      { "id": "Overlay", "key": "Ctrl+G", "does": "opens GeForce NOW's overlay" },
+      { "id": "Screenshot", "key": "Ctrl+1", "does": "takes a GeForce NOW screenshot" },
+      { "id": "Record", "key": "Ctrl+9", "does": "starts and stops GeForce NOW's recording" },
+      { "id": "SaveReplay", "key": "Ctrl+0", "does": "saves GeForce NOW's replay" },
+      { "id": "ToggleReplay", "key": "Ctrl+Shift+0", "does": "turns GeForce NOW's replay on and off" },
+      { "id": "Mic", "key": "Ctrl+M", "does": "turns GeForce NOW's microphone on and off" },
+      { "id": "Stats", "key": "Ctrl+N", "does": "shows GeForce NOW's stream stats" }
+    ]
+  },
+  {
+    "id": "moonlight",
+    "name": "Moonlight",
+    "processes": ["Moonlight.exe"],
+    "uninstall": ["Moonlight Game Streaming"],
+    "passes": "unknown",
+    "scope": "in-game",
+    "keys": [
+      { "id": "Quit", "key": "Ctrl+Alt+Shift+Q", "does": "ends the Moonlight stream" },
+      { "id": "Stats", "key": "Ctrl+Alt+Shift+S", "does": "shows Moonlight's stream stats" },
+      { "id": "Fullscreen", "key": "Ctrl+Alt+Shift+X", "does": "switches Moonlight's full screen" },
+      { "id": "Minimize", "key": "Ctrl+Alt+Shift+D", "does": "minimises the Moonlight stream" },
+      { "id": "MouseCapture", "key": "Ctrl+Alt+Shift+Z", "does": "frees the mouse from Moonlight" }
+    ]
+  },
+  {
+    "id": "flow-launcher",
+    "name": "Flow Launcher",
+    "processes": ["Flow.Launcher.exe"],
+    "paths": ["%LOCALAPPDATA%\\FlowLauncher\\Flow.Launcher.exe"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [{ "id": "Hotkey", "key": "Alt+Space", "does": "opens Flow Launcher" }]
+  },
+  {
+    "id": "raycast",
+    "name": "Raycast",
+    "processes": ["Raycast.exe"],
+    "uninstall": ["Raycast"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [{ "id": "Hotkey", "key": "Alt+Space", "does": "opens Raycast" }]
+  },
+  {
+    "id": "deepl",
+    "name": "DeepL",
+    "processes": ["DeepL.exe"],
+    "uninstall": ["DeepL"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [
+      { "id": "Translate", "key": "Ctrl+Win+C", "does": "translates the selected text with DeepL" },
+      { "id": "Write", "key": "Ctrl+F9", "does": "opens DeepL Write" }
+    ]
+  },
+  {
+    "id": "frameview",
+    "name": "FrameView",
+    "processes": ["FrameView.exe"],
+    "uninstall": ["FrameView"],
+    "passes": "unknown",
+    "scope": "in-game",
+    "keys": [
+      { "id": "Benchmark", "key": "ScrollLock", "does": "starts a FrameView benchmark" },
+      { "id": "BenchmarkF10", "key": "F10", "does": "starts a FrameView benchmark" }
+    ]
+  },
+  {
+    "id": "ocat",
+    "name": "OCAT",
+    "processes": ["OCAT.exe"],
+    "uninstall": ["OCAT"],
+    "passes": "unknown",
+    "scope": "in-game",
+    "keys": [
+      { "id": "Capture", "key": "F10", "does": "starts an OCAT capture" },
+      { "id": "Overlay", "key": "F9", "does": "shows OCAT's overlay" },
+      { "id": "FrameGraph", "key": "F7", "does": "shows OCAT's frame graph" }
+    ]
+  },
+  {
+    "id": "trackir",
+    "name": "TrackIR",
+    "processes": ["TrackIR5.exe"],
+    "uninstall": ["TrackIR"],
+    "passes": "unknown",
+    "scope": "always",
+    "keys": [
+      { "id": "Pause", "key": "F9", "does": "pauses TrackIR head tracking" },
+      { "id": "Center", "key": "F12", "does": "re-centres TrackIR" }
+    ]
+  },
+  {
+    "id": "autohotkey",
+    "name": "AutoHotkey",
+    "processes": ["AutoHotkey.exe", "AutoHotkey32.exe", "AutoHotkey64.exe", "AutoHotkeyU64.exe"],
+    "passes": "hidden",
+    "scope": "always",
+    "keys": [{ "id": "Script", "key": null, "does": "runs an AutoHotkey script" }]
+  }
+]

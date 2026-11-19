@@ -61,7 +61,7 @@ fn main() {
         "setup_check",
         "overload_status",
         "lighter_video",
-        "nvidia_overlay_keys",
+        "overlay_scan",
         "crash_notice",
         "clips_space",
         "press_action",

@@ -1,5 +1,13 @@
 import { isTauri } from "@tauri-apps/api/core";
+import type { Scan } from "./overlays";
 import { invoke } from "./uiwatch";
+
+/** Other apps' hotkeys on this PC, for the `settings` hotkeys. Outside the app (Vite dev) a sample; `?mock=none` for none. */
+export async function loadScan(settings: unknown): Promise<Scan> {
+  if (isTauri()) return invoke<Scan>("overlay_scan", { settings }).catch(() => ({ apps: [], taken: [] }));
+  if (import.meta.env.DEV) return (await import("./overlays-mock")).mockScan();
+  return { apps: [], taken: [] };
+}
 
 /** One encoder's result from the engine's encoder check (`backsight_encode::probe`). */
 export type ProbeResult = {

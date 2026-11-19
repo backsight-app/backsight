@@ -17,7 +17,7 @@ pub mod input;
 mod job;
 pub mod library;
 pub mod logging;
-pub mod nvidia;
+pub mod overlays;
 pub mod overload;
 pub mod pacer;
 pub mod recording;

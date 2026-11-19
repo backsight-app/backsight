@@ -1,6 +1,6 @@
 {
   "save-replay": "Alt+X",
-  "toggle-replay": "Alt+Shift+X",
-  "toggle-recording": "Alt+V",
-  "pause-recording": "Alt+Shift+V"
+  "toggle-replay": "Ctrl+Alt+X",
+  "toggle-recording": "Alt+N",
+  "pause-recording": "Alt+Shift+N"
 }
