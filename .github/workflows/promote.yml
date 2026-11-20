@@ -1,0 +1,44 @@
+name: Promote
+
+# New versions go to early testers first (release.yml publishes them as prereleases). Once a day, the
+# newest one that has been out 48 hours becomes "latest", so every installed copy gets it. A line
+# starting with HOLD in a release's notes keeps it from being promoted (see docs/releasing.md).
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - shell: pwsh
+        run: |
+          $Releases = gh release list --limit 50 --json tagName,isPrerelease,isDraft,isLatest,publishedAt | ConvertFrom-Json
+          $Ver = { [int]($args[0] -replace '^v0\.1\.', '') }
+          $Latest = $Releases | Where-Object isLatest | ForEach-Object { & $Ver $_.tagName }
+          $Cutoff = (Get-Date).ToUniversalTime().AddHours(-48)
+          $Ready = $Releases | Where-Object {
+            $_.isPrerelease -and -not $_.isDraft -and $_.tagName -match '^v0\.1\.\d+$' -and
+            ([datetime]$_.publishedAt).ToUniversalTime() -lt $Cutoff -and (& $Ver $_.tagName) -gt $Latest
+          } | Sort-Object { & $Ver $_.tagName } -Descending
+          foreach ($r in $Ready) {
+            $Body = (gh release view $r.tagName --json body --jq .body) -join "`n"
+            if ($Body -cmatch '(?m)^HOLD\b') { Write-Host "$($r.tagName) is on HOLD"; continue }
+            gh release edit $r.tagName --prerelease=false --latest
+            if ($LASTEXITCODE) { throw "could not promote $($r.tagName)" }
+            Write-Host "Promoted $($r.tagName) to latest"
+            break
+          }
+          if (-not $Ready) { Write-Host 'Nothing to promote.' }

@@ -8,7 +8,11 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
-use tauri_plugin_updater::{Error, UpdaterExt};
+use tauri_plugin_updater::{Error, UpdaterBuilder, UpdaterExt};
+
+/// Early testers' channel: a fixed `early` release whose `latest.json` names the newest
+/// prerelease, about two days before the default endpoint in `tauri.conf.json` does.
+const EARLY: &str = "https://github.com/backsight-app/backsight/releases/download/early/latest.json";
 
 /// What the Update button offers.
 #[derive(Serialize)]
@@ -36,7 +40,7 @@ pub fn ready() -> Option<String> {
 pub async fn check_update(app: AppHandle) -> Result<Option<Available>, String> {
     installed()?;
     let update =
-        app.updater_builder().timeout(Duration::from_secs(30)).build().map_err(plain)?.check().await.map_err(plain)?;
+        builder(&app)?.timeout(Duration::from_secs(30)).build().map_err(plain)?.check().await.map_err(plain)?;
     *crate::lock(&READY) = update.as_ref().map(|u| u.version.clone());
     Ok(update.map(|u| Available { version: u.version, notes: u.body }))
 }
@@ -99,8 +103,7 @@ async fn download_and_install(app: &AppHandle, auto: bool) -> Result<(), String>
     let closing = Arc::new(AtomicBool::new(false));
     let hook_app = app.clone();
     let hook_closing = closing.clone();
-    let update = app
-        .updater_builder()
+    let update = builder(app)?
         // The whole download: a 15 MB installer on a slow line.
         .timeout(Duration::from_secs(600))
         .on_before_exit(move || {
@@ -156,6 +159,16 @@ fn progressed(done: &mut u64, shown: &mut u64, chunk: usize, total: Option<u64>)
         *shown = *done;
     }
     due
+}
+
+/// An updater on the channel chosen in General -> Updates, read at every check so a change
+/// applies to the next one.
+fn builder(app: &AppHandle) -> Result<UpdaterBuilder, String> {
+    let updater = app.updater_builder();
+    if backsight_config::Settings::load().is_ok_and(|s| s.general.early_updates) {
+        return updater.endpoints(vec![EARLY.parse().expect("a valid URL")]).map_err(plain);
+    }
+    Ok(updater)
 }
 
 /// Only a copy the installer put there updates itself: the installer always installs to its own
@@ -223,6 +236,14 @@ mod tests {
         assert!(!first_try(&version), "never again");
         std::fs::remove_file(&marker).unwrap();
         assert!(installed().is_err(), "a test build isn't an installed copy");
+    }
+
+    #[test]
+    fn the_early_channel_is_a_valid_url() {
+        assert_eq!(
+            EARLY.parse::<tauri::Url>().unwrap().path(),
+            "/backsight-app/backsight/releases/download/early/latest.json"
+        );
     }
 
     #[test]

@@ -2,6 +2,8 @@ name: Release
 
 # Every change on main that passes CI becomes a signed release (ADR 0014): the installer, its
 # signature and latest.json, which the Update button reads. Public repository only.
+# It is installed on clean Windows machines first, then published as a prerelease that only early
+# testers get (the `early` release holds their latest.json); promote.yml makes it latest after 48 h.
 on:
   workflow_run:
     workflows: [CI]
@@ -22,6 +24,8 @@ jobs:
       github.event.workflow_run.event == 'push' &&
       !github.event.repository.private
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -29,7 +33,12 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      # whisper.cpp's CMake cache holds the compiler's full path, which a new runner image moves.
+      - run: echo "IMAGE=$env:ImageVersion" >> $env:GITHUB_ENV
+        shell: pwsh
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          key: ${{ env.IMAGE }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
@@ -51,12 +60,18 @@ jobs:
         env:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Only the newest main becomes a release: re-running an old CI run must not roll everyone back.
           git fetch --no-tags origin main
           if ((git rev-parse FETCH_HEAD) -ne $env:HEAD_SHA) { throw "$env:HEAD_SHA is not the newest main; not releasing it." }
           $Last = git tag -l 'v0.1.*' | ForEach-Object { [int]($_ -replace '^v0\.1\.', '') } | Measure-Object -Maximum
           $Version = "0.1.$([int]$Last.Maximum + 1)"
+          # A draft left by a failed install test has no tag yet: drop it, or this build would
+          # publish under its tag, commit and notes.
+          while ((gh release view "v$Version" --repo $env:REPO --json isDraft --jq .isDraft 2>$null) -eq 'true') {
+            gh release delete "v$Version" --repo $env:REPO --yes
+          }
           $Conf = 'app/src-tauri/tauri.conf.json'
           # The signed update files (.sig, latest.json) only here: local builds have no key.
           (Get-Content $Conf -Raw) -replace '"version": "[^"]*"', "`"version`": `"$Version`"" -replace '"bundle": \{', '"bundle": { "createUpdaterArtifacts": true,' | Set-Content $Conf -NoNewline
@@ -97,7 +112,51 @@ jobs:
           # A draft until every file is up: latest.json must never point at a half-uploaded release.
           releaseDraft: true
           prerelease: false
-      - run: gh release edit "v$env:VERSION" --draft=false --latest
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: installer
+          path: target/release/bundle/nsis/Backsight_${{ steps.version.outputs.version }}_x64-setup.exe
+          if-no-files-found: error
+
+  # No GPU on these machines: this checks install, start, update and uninstall, not capture.
+  install-test:
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: installer
+          path: new
+      - run: ./scripts/install-test.ps1 -Installer (Resolve-Path new/*.exe) -Version $env:VERSION
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.release.outputs.version }}
+
+  publish:
+    needs: [release, install-test]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - name: Check the update file
+        run: |
+          gh release download "v$VERSION" --pattern latest.json --dir check
+          jq -e --arg v "$VERSION" '.version == $v and all(.platforms[]; (.url | contains("/download/v" + $v + "/")) and (.signature | length > 0))' check/latest.json
+      # A prerelease is never "latest", so normal installs keep the current version for now.
+      - run: gh release edit "v$VERSION" --draft=false --prerelease --latest=false
+      - name: Point the early channel at it
+        run: |
+          gh release view early >/dev/null 2>&1 || gh release create early --prerelease --latest=false             --title 'Early updates' --notes 'Update file for "Get new versions early". Not an installer.'
+          gh release download "v$VERSION" --pattern latest.json --dir new
+          gh release upload early new/latest.json --clobber

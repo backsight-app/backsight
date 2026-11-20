@@ -700,7 +700,12 @@
   "updates": {
     "term": "Updates",
     "short": "Gets the newest Backsight from GitHub.",
-    "eli5": "Backsight only goes online when you press Check. If there's a newer version, Install downloads it, checks it's really from Backsight, then closes and reopens Backsight. A recording in progress is saved first."
+    "eli5": "Backsight checks for a newer version when it starts, every hour, and when you press Check. Install downloads it, checks it's really from Backsight, then closes and reopens Backsight. A recording in progress is saved first."
+  },
+  "early-updates": {
+    "term": "Get new versions early",
+    "short": "Test versions arrive about two days before everyone else.",
+    "eli5": "Each new Backsight goes to early testers first. If nothing goes wrong in about two days, everyone gets it. Turn this off any time; you then get the next version everyone gets."
   },
   "first-run-setup": {
     "term": "Setup",

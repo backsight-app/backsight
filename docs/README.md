@@ -34,6 +34,7 @@
 | --- | --- |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Toolchain, commands, conventions |
 | [ROADMAP.md](ROADMAP.md) | Milestones and status |
+| [releasing.md](releasing.md) | Publishing a release, early channel, stopping a bad one |
 | [CHANGELOG.md](../CHANGELOG.md) | Release notes |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | Pull request checklist |
 | [SECURITY.md](../SECURITY.md) | Vulnerability reporting |

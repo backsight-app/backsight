@@ -34,7 +34,12 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      # whisper.cpp's CMake cache holds the compiler's full path, which a new runner image moves.
+      - run: echo "IMAGE=$env:ImageVersion" >> $env:GITHUB_ENV
+        shell: pwsh
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          key: ${{ env.IMAGE }}
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: third_party/ffmpeg

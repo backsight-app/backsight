@@ -1,6 +1,6 @@
 # 0014: Installed copies update from GitHub Releases
 
-- Status: accepted; amended 2026-11-18 (automatic checks, see Consequences)
+- Status: accepted; amended 2026-11-18 (automatic checks, see Consequences), 2026-11-20 (early channel)
 - Date: 2026-11-17
 
 ## Context
@@ -22,3 +22,7 @@ Every push to `main` that passes CI in the public repository becomes a release (
 - Local builds have no key, so they don't make update files (`createUpdaterArtifacts` is switched on only in the release workflow). The desktop test build keeps ADR 0009's local Update.
 - Only working code may reach `main`: every push there ships to every installed copy.
 - If the installer can't start after Backsight has closed for it, Backsight restarts itself instead of staying half closed.
+
+## Amendment 2026-11-20: early channel
+
+Every push to `main` reaching all installed copies at once meant one bad build broke everyone. New versions are now published first as GitHub prereleases, which `releases/latest` skips, and listed on an `early` channel: a release with the fixed tag `early` whose asset `latest.json` names the newest prerelease. A daily Promote workflow marks a prerelease as latest for everyone once it is 48 hours old, unless a line of its notes starts with `HOLD`. General -> Updates -> **Get new versions early** (off by default) points the updater at `releases/download/early/latest.json` instead of the default endpoint; the setting is read at every check, so switching it applies to the next one. Releasing steps: [`docs/releasing.md`](../releasing.md).

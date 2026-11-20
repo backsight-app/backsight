@@ -11,7 +11,8 @@
     "popup_position": null,
     "dot_position": null,
     "name_after_game": true,
-    "folder_per_game": false
+    "folder_per_game": false,
+    "early_updates": false
   },
   "video": {
     "container": "mp4-fragmented",

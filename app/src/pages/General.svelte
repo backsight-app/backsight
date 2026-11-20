@@ -149,6 +149,9 @@
         {#if update?.notes}<pre class="update-note notes">{update.notes}</pre>{/if}
         {#if updateError}<p class="update-note" role="alert">{updateError}</p>{/if}
       </div>
+      <Row term="early-updates" note="They may have bugs.">
+        <Toggle label="Get new versions early" checked={g.early_updates} onchange={(v) => { g.early_updates = v; update = null; updateState = "idle"; }} />
+      </Row>
     </section>
   {/if}
 

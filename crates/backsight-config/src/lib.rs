@@ -78,6 +78,9 @@ pub struct General {
     /// Saved files go in a folder named after the game, inside the clips or screenshot folder.
     #[serde(default = "default_folder_per_game")]
     pub folder_per_game: bool,
+    /// Updates come from the `early` channel: new versions about two days before everyone else.
+    #[serde(default = "default_early_updates")]
+    pub early_updates: bool,
 }
 
 /// `general.<key>` from `content/default-settings.json`, for a field added after version 1.
@@ -100,6 +103,10 @@ fn default_name_after_game() -> bool {
 
 fn default_folder_per_game() -> bool {
     general_default("folder_per_game")
+}
+
+fn default_early_updates() -> bool {
+    general_default("early_updates")
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -452,9 +459,9 @@ mod tests {
         text = text.replacen("hdr = false\n", "", 1).replacen("captions = false\n", "", 1);
         text = text.replace("name_after_game = true\n", "").replace("folder_per_game = false\n", "");
         text = text.replace("capture_target = \"monitor\"\n", "").replace("capture_monitor = \"\"\n", "");
-        text = text.replace("clip_shape = \"wide\"\n", "");
+        text = text.replace("clip_shape = \"wide\"\n", "").replace("early_updates = false\n", "");
         assert!(!text.contains("sounds") && !text.contains("_game") && !text.contains("capture_target"), "{text}");
-        assert!(!text.contains("clip_shape"), "{text}");
+        assert!(!text.contains("clip_shape") && !text.contains("early_updates"), "{text}");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, text).unwrap();
         let loaded = Settings::load_from(&path).unwrap();
@@ -462,6 +469,7 @@ mod tests {
         assert!(loaded.general.sounds && loaded.general.recording_indicator, "defaults filled in");
         assert_eq!(loaded.general.popup_position, None, "no saved spot: the corner");
         assert!(loaded.general.name_after_game && !loaded.general.folder_per_game, "file naming defaults");
+        assert!(!loaded.general.early_updates, "early updates are opt-in");
         assert_eq!((loaded.video.capture_target.as_str(), loaded.video.capture_monitor.as_str()), ("monitor", ""));
         assert_eq!(loaded, Settings::default(), "every missing field takes its default");
         fs::remove_dir_all(path.parent().unwrap()).unwrap();
