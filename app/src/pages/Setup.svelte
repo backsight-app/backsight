@@ -87,12 +87,24 @@
     app.settings.setup.done = true;
     app.setupOpen = false;
   }
+
+  // Focus moves into the dialog and back to what opened it (General's Run setup) when it closes.
+  let panel: HTMLDivElement;
+  onMount(() => {
+    panel.focus();
+    return () => {
+      app.setupOpener?.focus();
+      app.setupOpener = null;
+    };
+  });
 </script>
+
+<svelte:window onkeydown={(e) => e.key === "Escape" && finish()} />
 
 {#snippet enc(id: string)}<Term id={videoEncoder(id)?.glossary ?? id}>{encoderLabel(id)}</Term>{/snippet}
 
 <div class="backdrop">
-  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="setup-title" tabindex="-1" bind:this={panel}>
     <header>
       <img src={mark} alt="" width="44" height="44" />
       <div>
@@ -179,6 +191,9 @@
     padding: 24px;
     background: rgb(5 8 15 / 0.75);
     overflow-y: auto;
+  }
+  .panel:focus {
+    outline: none; /* the dialog takes focus to start reading; it isn't a control */
   }
   .panel {
     display: grid;

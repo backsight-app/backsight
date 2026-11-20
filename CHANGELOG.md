@@ -2,6 +2,19 @@
 
 Each release lists **Major** and **Minor** changes. Versions are `0.1.<build>`; the newest section is also the release's notes on the [Releases page](https://github.com/backsight-app/backsight/releases).
 
+## 0.1.20 - 2026-11-20
+
+### Major
+
+- After a crash, Backsight offers a ready-made bug report you can choose to send.
+
+### Minor
+
+- Every control works with the keyboard, and screen readers explain each setting and announce saves.
+- Faint text and the main buttons are easier to read.
+- The side menu warns when the clips drive has less than 5 GB free.
+- Updated components, including the window framework (Tauri 2.12.7).
+
 ## 0.1.19 - 2026-11-20
 
 ### Major

@@ -42,16 +42,28 @@
   role="button"
   tabindex="0"
   data-term={id}
-  aria-describedby={open ? tipId : undefined}
+  aria-describedby={entry ? `${tipId}-text` : undefined}
   bind:this={anchor}
   onmouseenter={show}
   onmouseleave={hide}
   onfocus={show}
   onblur={hide}
-  onkeydown={(e) => e.key === "Escape" && hide()}
+  onkeydown={(e) => {
+    if (e.key === "Escape" && open) {
+      e.stopPropagation(); // closes only the explanation, not the dialog around it
+      hide();
+    }
+    else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      clearTimeout(timer);
+      open = !open;
+    }
+  }}
 >
   <span class="word">{#if children}{@render children()}{:else}{entry?.term ?? id}{/if}</span>
   <Icon name="help" size={14} />
+  <!-- Read out on focus by screen readers; the hover card shows the same words. -->
+  {#if entry}<span id={`${tipId}-text`} hidden>{entry.short} {entry.eli5}</span>{/if}
 </span>
 
 {#if open && entry}

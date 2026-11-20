@@ -48,7 +48,7 @@
   </section>
 
   <section class="card">
-    <header><h2>Hotkeys</h2><a class="link" href="#hotkeys">Change</a></header>
+    <header><h2>Hotkeys</h2><a class="link" href="#hotkeys" aria-label="Change hotkeys">Change</a></header>
     <div class="keys">
       <span>Whole screen</span><Kbd combo={app.settings.hotkeys["screenshot"]} />
       <span>Active window</span><Kbd combo={app.settings.hotkeys["screenshot-window"]} />

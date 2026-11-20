@@ -75,6 +75,11 @@ pub fn copy_dib(data: &[u8]) -> windows::core::Result<()> {
     copy_data(8, data)
 }
 
+pub fn copy_text(text: &str) -> windows::core::Result<()> {
+    let text: Vec<_> = text.encode_utf16().chain([0]).flat_map(u16::to_le_bytes).collect();
+    copy_data(13, &text)
+}
+
 pub fn copy_path(path: &Path) -> windows::core::Result<()> {
     let text: Vec<_> = path.as_os_str().encode_wide().chain([0]).flat_map(u16::to_le_bytes).collect();
     copy_data(13, &text)

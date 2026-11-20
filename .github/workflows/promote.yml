@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   promote:
-    if: ${{ !github.event.repository.private }}
+    if: github.repository == 'backsight-app/backsight'  # scheduled runs carry no repository details
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}

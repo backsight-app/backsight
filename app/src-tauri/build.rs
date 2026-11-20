@@ -66,6 +66,8 @@ fn main() {
         "clips_space",
         "press_action",
         "crash_dismiss",
+        "crash_report_text",
+        "crash_report_send",
         "crash_open_folder",
         "open_logs_folder",
         "about_open",

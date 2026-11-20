@@ -14,6 +14,8 @@ export const app = $state({
   loaded: false,
   /** Setup was opened again from General (a first run opens it through `settings.setup.done`). */
   setupOpen: false,
+  /** What opened setup again (General's Run setup), focused again when it closes. */
+  setupOpener: null as HTMLElement | null,
 });
 
 /** Puts one settings section (one page) back to its defaults; the others stay as they are. */

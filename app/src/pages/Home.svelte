@@ -10,7 +10,7 @@
   import { isTauri } from "@tauri-apps/api/core";
   import { installUpdate, loadScan } from "../lib/setup";
   import { invoke } from "../lib/uiwatch";
-  import { onMount, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { app, type ReplayStatus } from "../lib/settings.svelte";
 
   const s = $derived(app.settings);
@@ -111,8 +111,33 @@
     } catch {}
   }
   const dismissCrash = () => {
+    if (crash) invoke("crash_dismiss", { name: crash }).catch(() => {});
     crash = null;
-    invoke("crash_dismiss").catch(() => {});
+  };
+  // "Report it": first the scrubbed report the user would share, then "Open GitHub" copies it and
+  // opens the bug report form to paste it into. Nothing is sent by Backsight itself.
+  let shared = $state<string | null>(null);
+  let crashError = $state("");
+  let sent = $state(false);
+  let sentOk = $state<HTMLButtonElement>();
+  const showReport = () => {
+    crashError = "";
+    invoke<string | null>("crash_report_text", { name: crash }).then(
+      (t) => (t === null ? (crash = null) : (shared = t)),
+      (e) => (crashError = String(e)),
+    );
+  };
+  const sendReport = () => {
+    crashError = "";
+    invoke("crash_report_send", { name: crash }).then(
+      () => {
+        crash = shared = null;
+        sent = true;
+        // The card's button is gone: keyboard focus goes to the next card's OK.
+        tick().then(() => sentOk?.focus());
+      },
+      (e) => (crashError = String(e)),
+    );
   };
   // A problem report on the Desktop (one text file, personal details removed).
   let reporting = $state(false);
@@ -327,14 +352,32 @@
   </div>
 
   {#if crash}
+    <!-- Only the message and errors are announced; the report preview is read on demand. -->
+    <div class="notice crash">
+      <Icon name="alert" size={16} />
+      <div class="grow crash-body">
+        <div class="crash-body" role="status">
+          <span>
+            Backsight {crash.startsWith("stuck-") ? "got stuck" : "closed unexpectedly"} last time. You can send a report
+            to help fix it. Nothing is sent unless you choose to.
+          </span>
+          {#if crashError}<span class="small">{crashError}</span>{/if}
+        </div>
+        {#if shared !== null}
+          <span class="faint small">This is what will be shared on GitHub. Your name and file names were taken out.</span>
+          <pre class="shared">{shared}</pre>
+          <span class="faint small">Open GitHub copies it and opens a new issue in your browser; you can still change it before posting.</span>
+        {/if}
+      </div>
+      <!-- One button whose step changes, so keyboard focus stays on it. -->
+      <button type="button" class="btn" onclick={shared === null ? showReport : sendReport}>{shared === null ? "Report it" : "Open GitHub"}</button>
+      <button type="button" class="btn" onclick={dismissCrash}>Dismiss</button>
+    </div>
+  {:else if sent}
     <div class="notice" role="status">
       <Icon name="alert" size={16} />
-      <span class="grow">
-        Backsight closed unexpectedly last time. To help fix it, save a problem report and attach it to a new issue at
-        github.com/backsight-app/backsight/issues.
-      </span>
-      <button type="button" class="btn" onclick={saveReport} disabled={reporting}>Save a problem report</button>
-      <button type="button" class="btn" onclick={dismissCrash}>Dismiss</button>
+      <span class="grow">The report is copied. On the GitHub page, paste it into the Log box (Ctrl+V), say what you were doing, and press Create.</span>
+      <button type="button" class="btn" bind:this={sentOk} onclick={() => (sent = false)}>OK</button>
     </div>
   {/if}
   {#if swapped || (clashes.length && clashSignature(clashes) !== dismissed)}
@@ -871,6 +914,25 @@
   }
   .notice.ready :global(svg) {
     color: var(--accent);
+  }
+  .notice.crash {
+    align-items: flex-start;
+  }
+  .crash-body {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+  .shared {
+    max-height: 220px;
+    overflow: auto;
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: rgb(0 0 0 / 0.3);
+    font-size: 12px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
   .clashes {
     display: grid;

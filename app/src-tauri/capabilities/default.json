@@ -38,6 +38,8 @@
     "allow-clips-space",
     "allow-press-action",
     "allow-crash-dismiss",
+    "allow-crash-report-text",
+    "allow-crash-report-send",
     "allow-crash-open-folder",
     "allow-open-logs-folder",
     "allow-about-open",

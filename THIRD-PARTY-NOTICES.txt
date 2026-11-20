@@ -147,7 +147,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 4. Rust crates
 ========================================================================
 
-Backsight is built with 272 Rust crates (libraries) from crates.io. Each license text
+Backsight is built with 279 Rust crates (libraries) from crates.io. Each license text
 below comes after the list of crates it covers. Crates under the Mozilla Public License 2.0
 are used unchanged, and their source code is at the crates.io address given for each.
 
@@ -571,7 +571,7 @@ Used by:
   siphasher 1.0.4  (https://github.com/jedisct1/rust-siphash)
   utf8_iter 1.1.0  (https://github.com/hsivonen/utf8_iter)
   utf_types 1.0.0  (https://github.com/hsivonen/utf_types)
-  zeroize 1.9.1  (https://github.com/RustCrypto/utils)
+  zeroize 1.9.2  (https://github.com/RustCrypto/utils)
   zeroize_derive 1.5.0  (https://github.com/RustCrypto/utils)
 
 Apache License
@@ -4636,16 +4636,16 @@ Used by:
   parking_lot_core 0.9.12  (https://github.com/Amanieu/parking_lot)
   percent-encoding 2.3.2  (https://github.com/servo/rust-url/)
   png 0.18.1  (https://github.com/image-rs/image-png)
-  regex-automata 0.4.18  (https://github.com/rust-lang/regex)
-  regex-syntax 0.8.11  (https://github.com/rust-lang/regex)
-  regex 1.13.1  (https://github.com/rust-lang/regex)
+  regex-automata 0.4.19  (https://github.com/rust-lang/regex)
+  regex-syntax 0.8.12  (https://github.com/rust-lang/regex)
+  regex 1.13.2  (https://github.com/rust-lang/regex)
   ring 0.17.14  (https://github.com/briansmith/ring)
   rustls 0.23.46  (https://github.com/rustls/rustls)
   scopeguard 1.2.0  (https://github.com/bluss/scopeguard)
-  serde_with 3.24.0  (https://github.com/jonasbb/serde_with/)
-  serde_with_macros 3.24.0  (https://github.com/jonasbb/serde_with/)
+  serde_with 3.25.0  (https://github.com/jonasbb/serde_with/)
+  serde_with_macros 3.25.0  (https://github.com/jonasbb/serde_with/)
   servo_arc 0.4.3  (https://github.com/servo/stylo)
-  smallvec 1.16.5  (https://github.com/servo/rust-smallvec)
+  smallvec 1.16.6  (https://github.com/smallvec/smallvec)
   socket2 0.6.5  (https://github.com/rust-lang/socket2)
   stable_deref_trait 1.2.1  (https://github.com/storyyeller/stable_deref_trait)
   string_cache 0.9.0  (https://github.com/servo/string-cache)
@@ -4655,10 +4655,10 @@ Used by:
   tray-icon 0.25.1  (https://github.com/tauri-apps/tray-icon)
   unicode-segmentation 1.13.3  (https://github.com/unicode-rs/unicode-segmentation)
   url 2.5.8  (https://github.com/servo/rust-url)
-  uuid 1.29.2  (https://github.com/uuid-rs/uuid)
+  uuid 1.29.3  (https://github.com/uuid-rs/uuid)
   web_atoms 0.2.6  (https://github.com/servo/html5ever)
   window-vibrancy 0.8.1  (https://github.com/tauri-apps/tauri-plugin-vibrancy)
-  wry 0.57.2  (https://github.com/tauri-apps/wry)
+  wry 0.57.3  (https://github.com/tauri-apps/wry)
 
 Apache License
                         Version 2.0, January 2004
@@ -5074,10 +5074,17 @@ limitations under the License.
 Apache License 2.0 (Apache-2.0)
 Used by:
   block-buffer 0.10.4  (https://github.com/RustCrypto/utils)
+  block-buffer 0.12.1  (https://github.com/RustCrypto/utils)
+  const-oid 0.10.3  (https://github.com/RustCrypto/formats)
   cpufeatures 0.2.17  (https://github.com/RustCrypto/utils)
+  cpufeatures 0.3.1  (https://github.com/RustCrypto/utils)
   crypto-common 0.1.7  (https://github.com/RustCrypto/traits)
+  crypto-common 0.2.2  (https://github.com/RustCrypto/traits)
   digest 0.10.7  (https://github.com/RustCrypto/traits)
+  digest 0.11.3  (https://github.com/RustCrypto/traits)
+  hybrid-array 0.4.15  (https://github.com/RustCrypto/hybrid-array)
   sha2 0.10.9  (https://github.com/RustCrypto/hashes)
+  sha2 0.11.1  (https://github.com/RustCrypto/hashes)
 
 Apache License
                         Version 2.0, January 2004
@@ -5909,7 +5916,7 @@ Apache License
 Apache License 2.0 (Apache-2.0)
 Used by:
   dpi 0.1.2  (https://github.com/rust-windowing/winit)
-  tao 0.37.2  (https://github.com/tauri-apps/tao)
+  tao 0.37.3  (https://github.com/tauri-apps/tao)
 
 Apache License
                            Version 2.0, January 2004
@@ -6116,7 +6123,7 @@ Apache License
 ------------------------------------------------------------------------
 Apache License 2.0 (Apache-2.0)
 Used by:
-  ctor 1.0.13  (https://github.com/mmastrac/linktime)
+  ctor 1.0.14  (https://github.com/mmastrac/linktime)
 
 Apache License
                            Version 2.0, January 2004
@@ -6343,7 +6350,7 @@ Used by:
   miniz_oxide 0.9.1  (https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide)
   num-conv 0.2.2  (https://github.com/jhpratt/num-conv)
   paste 1.0.15  (https://github.com/dtolnay/paste)
-  pin-project-lite 0.2.17  (https://github.com/taiki-e/pin-project-lite)
+  pin-project-lite 0.2.18  (https://github.com/taiki-e/pin-project-lite)
   prettyplease 0.3.0  (https://github.com/dtolnay/prettyplease)
   proc-macro2 1.0.107  (https://github.com/dtolnay/proc-macro2)
   quote 1.0.47  (https://github.com/dtolnay/quote)
@@ -6360,16 +6367,16 @@ Used by:
   syn 2.0.119  (https://github.com/dtolnay/syn)
   syn 3.0.10  (https://github.com/dtolnay/syn)
   sync_wrapper 1.0.2  (https://github.com/Actyx/sync_wrapper)
-  tauri-codegen 2.7.4  (https://github.com/tauri-apps/tauri)
-  tauri-macros 2.7.4  (https://github.com/tauri-apps/tauri)
+  tauri-codegen 2.7.6  (https://github.com/tauri-apps/tauri)
+  tauri-macros 2.7.6  (https://github.com/tauri-apps/tauri)
   tauri-plugin-dialog 2.8.4  (https://github.com/tauri-apps/plugins-workspace)
   tauri-plugin-fs 2.7.1  (https://github.com/tauri-apps/plugins-workspace)
   tauri-plugin-single-instance 2.5.5  (https://github.com/tauri-apps/plugins-workspace)
   tauri-plugin-updater 2.14.1  (https://github.com/tauri-apps/plugins-workspace)
-  tauri-runtime-wry 2.12.3  (https://github.com/tauri-apps/tauri)
-  tauri-runtime 2.12.2  (https://github.com/tauri-apps/tauri)
-  tauri-utils 2.10.2  (https://github.com/tauri-apps/tauri)
-  tauri 2.12.5  (https://github.com/tauri-apps/tauri)
+  tauri-runtime-wry 2.12.5  (https://github.com/tauri-apps/tauri)
+  tauri-runtime 2.12.4  (https://github.com/tauri-apps/tauri)
+  tauri-utils 2.10.4  (https://github.com/tauri-apps/tauri)
+  tauri 2.12.7  (https://github.com/tauri-apps/tauri)
   thiserror-impl 2.0.21  (https://github.com/dtolnay/thiserror)
   thiserror 2.0.21  (https://github.com/dtolnay/thiserror)
   time-core 0.1.9  (https://github.com/time-rs/time)
@@ -6457,8 +6464,8 @@ limitations under the License.
 BSD 3-Clause "New" or "Revised" License (BSD-3-Clause)
 Used by:
   alloc-no-stdlib 3.0.0  (https://github.com/dropbox/rust-alloc-no-stdlib)
-  brotli-decompressor 6.3.1  (https://github.com/dropbox/rust-brotli-decompressor)
-  brotli 9.1.1  (https://github.com/dropbox/rust-brotli)
+  brotli-decompressor 6.3.2  (https://github.com/dropbox/rust-brotli-decompressor)
+  brotli 9.1.3  (https://github.com/dropbox/rust-brotli)
 
 Copyright (c) 2016 Dropbox, Inc.
 All rights reserved.
@@ -7291,7 +7298,7 @@ fn is_meta_character(c: char) -> bool {
 ------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  brotli 9.1.1  (https://github.com/dropbox/rust-brotli)
+  brotli 9.1.3  (https://github.com/dropbox/rust-brotli)
 
 Copyright (c) 2009, 2010, 2013-2016 by the Brotli Authors.
 
@@ -7316,7 +7323,7 @@ THE SOFTWARE.
 ------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  mio 1.2.4  (https://github.com/tokio-rs/mio)
+  mio 1.2.5  (https://github.com/tokio-rs/mio)
 
 Copyright (c) 2014 Carl Lerche and other MIO contributors
 
@@ -7366,7 +7373,7 @@ THE SOFTWARE.
 ------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  plist 1.10.3  (https://github.com/ebarnard/rust-plist/)
+  plist 1.10.4  (https://github.com/ebarnard/rust-plist/)
 
 Copyright (c) 2015 Edward Barnard
 
@@ -7422,7 +7429,7 @@ DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  bytes 1.12.1  (https://github.com/tokio-rs/bytes)
+  bytes 1.12.2  (https://github.com/tokio-rs/bytes)
 
 Copyright (c) 2018 Carl Lerche
 
@@ -8277,7 +8284,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 MIT License (MIT)
 Used by:
   tracing-core 0.1.36  (https://github.com/tokio-rs/tracing)
-  zip 9.6.1  (https://github.com/zip-rs/zip2)
+  zip 9.8.1  (https://github.com/zip-rs/zip2)
 
 The MIT License (MIT)
 
@@ -10170,7 +10177,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 ------------------------------------------------------------------------
 
-@tauri-apps/api 2.12.4
+@tauri-apps/api 2.12.5
 License: Apache-2.0 OR MIT
 Source: https://github.com/tauri-apps/tauri.git
 
@@ -10383,7 +10390,7 @@ The license texts are the ones printed for @tauri-apps/api (same project, same l
 
 ------------------------------------------------------------------------
 
-svelte 5.57.3
+svelte 5.59.0
 License: MIT
 Source: https://github.com/sveltejs/svelte.git
 

@@ -125,7 +125,11 @@
     <section class="card">
       <header><h2>Setup</h2></header>
       <Row term="first-run-setup" label="Check this PC again">
-        <button type="button" class="btn" onclick={() => (app.setupOpen = true)}>Run setup</button>
+        <button type="button" class="btn" onclick={(e) => {
+            // Taken before setup opens: the page behind it then becomes inert and loses focus.
+            app.setupOpener = e.currentTarget;
+            app.setupOpen = true;
+          }}>Run setup</button>
       </Row>
     </section>
 

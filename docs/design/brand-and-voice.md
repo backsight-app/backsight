@@ -35,9 +35,9 @@ The brand gradient is `135°, #8B5CF6 → #6366F1 → #22D3EE`.
 | --- | --- | --- |
 | `--bg` / `--bg-card` | `#0A0B0F` / `#111218` | Window background / cards |
 | `--border` | `#1F212A` | Card and input borders |
-| `--text` / `--text-dim` / `--text-faint` | `#ECECF1` / `#A0A2B0` / `#7C7F8D` | Primary / secondary / faint text |
+| `--text` / `--text-dim` / `--text-faint` | `#ECECF1` / `#A0A2B0` / `#7E818F` | Primary / secondary / faint text |
 | `--accent` | `#A395FF` | Links, focus, selected items |
-| `--accent-grad` | `135°, #7C5CFF → #4F7CFF` | Primary buttons (Save clip) |
+| `--accent-grad` | `135°, #7859F6 → #466DE0` | Primary buttons (Save clip) |
 | `--rec` | `#F0506E` | Recording state, conflicts. Never decorative |
 | `--ok` / `--warn` | `#34D399` / `#D4B25B` | Status |
 

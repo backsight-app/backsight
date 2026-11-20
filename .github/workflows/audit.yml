@@ -1,0 +1,50 @@
+name: Audit
+
+# Weekly check of every Rust crate and npm package against the public advisory databases. A
+# finding opens an issue, so it shows up where the project is watched.
+on:
+  schedule:
+    - cron: '41 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    if: github.repository == 'backsight-app/backsight'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+      - run: cargo install cargo-audit --locked
+      # Counts come from the JSON reports: a tool that fails to run fails the job without an issue.
+      - name: Audit
+        id: audit
+        run: |
+          cargo audit --json > rust.json || true
+          (cd app && npm audit --json) > npm.json || true
+          rust=$(jq -e '.vulnerabilities.count' rust.json)
+          npm=$(jq -e '.metadata.vulnerabilities.total' npm.json)
+          jq -r '.vulnerabilities.list[] | "- Rust \(.package.name) \(.package.version): \(.advisory.id) \(.advisory.title)"' rust.json > found.md
+          jq -r '.vulnerabilities | to_entries[] | "- npm \(.key) (\(.value.severity)): \(.value.range)"' npm.json >> found.md
+          cat found.md
+          echo "Rust: $rust, npm: $npm"
+          echo "found=$(( rust + npm ))" >> "$GITHUB_OUTPUT"
+      - if: steps.audit.outputs.found != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          open=$(gh issue list --state open --search 'in:title "Dependency audit"' --json number --jq length)
+          if [ "$open" = 0 ]; then
+            { echo "The weekly audit found known problems in components. Run: $RUN"; echo; cat found.md; } > body.md
+            gh issue create --title 'Dependency audit found a problem' --body-file body.md
+          fi
+          exit 1

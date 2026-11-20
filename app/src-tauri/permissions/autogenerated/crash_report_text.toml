@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-crash-report-text"
+description = "Enables the crash_report_text command without any pre-configured scope."
+commands.allow = ["crash_report_text"]
+
+[[permission]]
+identifier = "deny-crash-report-text"
+description = "Denies the crash_report_text command without any pre-configured scope."
+commands.deny = ["crash_report_text"]

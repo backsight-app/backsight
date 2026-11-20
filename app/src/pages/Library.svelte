@@ -366,7 +366,7 @@
 
   {#if feedback && !viewer}<div class="notice" role="status">{feedback}</div>{/if}
   {#if error && lib}
-    <div class="notice"><Icon name="alert" size={18} /><span>Couldn't refresh the list, so this may be out of date. {error}</span></div>
+    <div class="notice" role="status"><Icon name="alert" size={18} /><span>Couldn't refresh the list, so this may be out of date. {error}</span></div>
   {/if}
 
   {#if !lib}
@@ -429,10 +429,10 @@
       <!-- shortcut: rows are plain DOM with content-visibility:auto, fine for thousands; use a windowed list past ~50k items -->
       {#each groups as g, gi (g.key)}
         <section>
-          <h3 class="day">
+          <h2 class="day">
             <span>{g.label}</span>
             <span class="faint">{g.items.length.toLocaleString()} {g.items.length === 1 ? "item" : "items"} · {formatBytes(g.bytes)}</span>
-          </h3>
+          </h2>
           <ul>
             {#each g.items as it, n (it.path)}
               <!-- svelte-ignore a11y_no_noninteractive_tabindex -->

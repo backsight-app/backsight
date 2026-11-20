@@ -18,6 +18,8 @@ Settings, clips, recordings, captions, screenshots, Library thumbnails, the capt
 
 **Save a problem report** writes a file to the desktop; nothing is sent. The Windows user name is removed, but the report includes the settings and the names of programs that were in front while Backsight ran, such as games. Review it before sharing, and attach it to a public issue only if its contents may be public.
 
+After Backsight crashed or got stuck (within the last 14 days), Home offers **Report it**. It first shows the report, with the user name, PC name and file names removed; its last log lines can name games. **Open GitHub** copies that text to the clipboard and opens GitHub's new-issue form in the browser, with the Backsight, Windows and graphics card versions from the report filled in. Backsight sends nothing itself: the report is shared only if the user pastes it into the form and posts the issue, which is public. **Dismiss** only hides the offer.
+
 ## Contact
 
 Questions: <https://github.com/backsight-app/backsight/issues>. Security issues: [SECURITY.md](../SECURITY.md).

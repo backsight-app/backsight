@@ -16,6 +16,7 @@ use std::{
         Mutex, OnceLock,
         atomic::{AtomicBool, Ordering},
     },
+    time::SystemTime,
 };
 
 /// Reports kept; older ones are deleted when a new one is written.
@@ -304,18 +305,39 @@ pub fn prune(dir: &Path, keep: usize) {
     }
 }
 
-/// The newest report the user hasn't dismissed yet, as a file name.
-pub fn pending(dir: &Path) -> Option<String> {
-    let newest = list(dir).pop()?.file_name()?.to_str()?.to_owned();
-    let seen = fs::read_to_string(dir.join("seen.txt")).unwrap_or_default();
-    (seen.trim() != newest).then_some(newest)
+/// Crash and "got stuck" reports older than this aren't offered on start.
+const OFFER_DAYS: u64 = 14;
+
+/// The newest crash report in `dir` or "got stuck" report (`stuck-*.txt`, `watchdog.rs`) in the
+/// logs folder next to it written before `before`, with its modified time.
+fn newest(dir: &Path, before: SystemTime) -> Option<(PathBuf, SystemTime)> {
+    let stuck =
+        fs::read_dir(dir.with_file_name("logs")).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| {
+            p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("stuck-") && n.ends_with(".txt"))
+        });
+    list(dir)
+        .into_iter()
+        .chain(stuck)
+        .filter_map(|p| Some((fs::metadata(&p).and_then(|m| m.modified()).ok()?, p)))
+        .filter(|(t, _)| *t < before)
+        .max()
+        .map(|(t, p)| (p, t))
 }
 
-/// Marks the newest report as seen.
-pub fn dismiss(dir: &Path) {
-    if let Some(name) = list(dir).pop().and_then(|p| p.file_name()?.to_str().map(str::to_owned)) {
-        let _ = fs::write(dir.join("seen.txt"), name);
-    }
+/// The newest crash or "got stuck" report from the last 14 days, written before `before` (this
+/// run's start, so one from this run waits for the next), that the user hasn't been asked about
+/// yet (`seen.txt` in `dir` holds the file name of the last one asked about).
+pub fn pending(dir: &Path, before: SystemTime) -> Option<PathBuf> {
+    let (path, modified) = newest(dir, before)?;
+    let age = SystemTime::now().duration_since(modified).unwrap_or_default();
+    let seen = fs::read_to_string(dir.join("seen.txt")).unwrap_or_default();
+    (age.as_secs() < OFFER_DAYS * 24 * 3600 && path.file_name()?.to_str()? != seen.trim()).then_some(path)
+}
+
+/// Marks the report `name` (a file name from [`pending`]) as asked about. `dir` may not exist yet
+/// when only a "got stuck" report was written.
+pub fn dismiss(dir: &Path, name: &str) {
+    let _ = fs::create_dir_all(dir).and_then(|()| fs::write(dir.join("seen.txt"), name));
 }
 
 /// Removes what could point at one person: their profile folder and Windows user name
@@ -851,10 +873,50 @@ mod tests {
         assert_eq!(files.len(), 20);
         assert!(!dir.path().join("crash-2026-12-31.txt.part").exists());
         assert!(files[0].ends_with("crash-2026-11-06.txt"));
-        assert_eq!(pending(dir.path()).as_deref(), Some("crash-2026-11-25.txt"));
-        dismiss(dir.path());
-        assert_eq!(pending(dir.path()), None);
+        let later = SystemTime::now() + std::time::Duration::from_secs(60);
+        assert_eq!(pending(dir.path(), later), Some(dir.path().join("crash-2026-11-25.txt")));
+        dismiss(dir.path(), "crash-2026-11-25.txt");
+        assert_eq!(pending(dir.path(), later), None);
         fs::write(dir.path().join("crash-2026-12-01.txt"), "x").unwrap();
-        assert_eq!(pending(dir.path()).as_deref(), Some("crash-2026-12-01.txt"));
+        assert_eq!(pending(dir.path(), later), Some(dir.path().join("crash-2026-12-01.txt")));
+    }
+
+    #[test]
+    fn offers_the_newest_crash_or_stuck_report_from_the_last_two_weeks() {
+        let root = tempfile::tempdir().unwrap();
+        let (dir, logs) = (root.path().join("crash-reports"), root.path().join("logs"));
+        fs::create_dir_all(&logs).unwrap();
+        let day = std::time::Duration::from_secs(24 * 3600);
+        let write = |path: PathBuf, days_ago: u32| {
+            fs::write(&path, "x").unwrap();
+            let f = fs::File::options().write(true).open(&path).unwrap();
+            f.set_modified(SystemTime::now() - day * days_ago).unwrap();
+            path
+        };
+        let start = SystemTime::now() - day / 2;
+        assert_eq!(pending(&dir, start), None, "nothing to offer");
+        write(logs.join("backsight.log"), 0); // not a report
+        let stuck = write(logs.join("stuck-a-save.txt"), 3);
+        assert_eq!(pending(&dir, start), Some(stuck.clone()), "the crash-reports folder doesn't exist yet");
+        dismiss(&dir, "stuck-a-save.txt");
+        assert_eq!(pending(&dir, start), None, "asked about already, the folder made for it");
+        assert_eq!(fs::read_to_string(dir.join("seen.txt")).unwrap(), "stuck-a-save.txt");
+
+        write(dir.join("crash-old.txt"), 20);
+        let crash = write(dir.join("crash-b.txt"), 5);
+        assert_eq!(pending(&dir, start), None, "older ones aren't offered after a newer one was");
+        write(logs.join("stuck-this-run.txt"), 0);
+        assert_eq!(pending(&dir, start), None, "one from this run waits for the next start");
+        let earlier = write(dir.join("crash-0-earlier-name.txt"), 1);
+        assert_eq!(pending(&dir, start), Some(earlier), "a newer one is offered, by time, whichever folder");
+        assert_eq!(pending(&dir, SystemTime::now() + day), Some(logs.join("stuck-this-run.txt")), "next start");
+        dismiss(&dir, "crash-0-earlier-name.txt");
+        assert_eq!(pending(&dir, start), None);
+        assert!(crash.exists());
+        let old = write(dir.join("crash-older-than-two-weeks.txt"), 20);
+        fs::remove_file(dir.join("crash-0-earlier-name.txt")).unwrap();
+        fs::remove_file(dir.join("crash-b.txt")).unwrap();
+        fs::remove_file(&stuck).unwrap();
+        assert_eq!(pending(&dir, start), None, "older than 14 days: {old:?}");
     }
 }

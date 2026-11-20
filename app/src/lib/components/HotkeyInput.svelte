@@ -72,7 +72,9 @@
   class="hotkey"
   class:recording
   class:conflict={!!conflict}
-  aria-label={`${label}: ${value || "no key"}. Press to change.`}
+  aria-label={recording
+    ? `${label}: press a key combo. Escape cancels, Backspace clears.`
+    : `${label}: ${value || "no key"}. Press to change.`}
   onclick={() => (recording = true)}
   onblur={() => (recording = false)}
 >

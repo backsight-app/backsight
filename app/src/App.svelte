@@ -68,6 +68,8 @@
     if (current === "library" && feed.lib) markSeen();
   });
   const fresh = $derived(feed.lib && current !== "library" ? newSince(feed.lib.items, feed.seen) : 0);
+  // About 10 minutes of 4K recording; below it a long recording may stop.
+  const low = $derived(!!feed.space && feed.space[0] < 5 * 1024 ** 3);
   const used = $derived(feed.space && feed.space[1] ? 1 - feed.space[0] / feed.space[1] : 0);
   const setupVisible = $derived(app.loaded && (app.setupOpen || !app.settings.setup?.done));
   $effect(() => { if (setupVisible) closeMenu(false); });
@@ -168,14 +170,14 @@
         }}
         onclick={(e) => showMenu(e.currentTarget)}>Backsight menu</button>
       {#if feed.space}
-        <div class="space" title="Free space on the drive that holds your clips folder">
-          <span>Clips folder</span><span class="free">{formatBytes(feed.space[0])} free</span>
+        <div class="space" class:low title={low ? "The drive that holds your clips is nearly full: a recording may stop. Delete old clips or pick another folder on the General page." : "Free space on the drive that holds your clips folder"}>
+          <span>Clips folder</span><span class="free">{low ? "Only " : ""}{formatBytes(feed.space[0])} free</span>
           <div class="bar" role="meter" aria-label="Clips drive used" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(used * 100)}>
             <div style:width={`${Math.round(used * 100)}%`}></div>
           </div>
         </div>
       {/if}
-      <span class="status" class:error={app.status === "error"} title={app.error}>
+      <span class="status" class:error={app.status === "error"} title={app.error} role="status">
         <span class="status-dot"></span>{statusText[app.status]}
       </span>
     </div>
@@ -326,6 +328,12 @@
   }
   .space .free {
     color: var(--text);
+  }
+  .space.low .free {
+    color: var(--warn);
+  }
+  .space.low .bar div {
+    background: var(--warn);
   }
   .bar {
     grid-column: 1 / -1;

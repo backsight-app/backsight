@@ -107,10 +107,10 @@
       <Select name="container" label="File format" value={v.container} choices={containerChoices} onchange={(id) => change(() => (v.container = id))} />
     </Row>
     {#if note}
-      <div class="notice"><Icon name="info" size={18} /><span>{note}</span></div>
+      <div class="notice" role="status"><Icon name="info" size={18} /><span>{note}</span></div>
     {/if}
     {#if broken[v.encoder]}
-      <div class="notice"><Icon name="info" size={18} /><span>{encoder?.label} doesn't work on this PC. {broken[v.encoder]} Pick another encoder.</span></div>
+      <div class="notice" role="status"><Icon name="info" size={18} /><span>{encoder?.label} doesn't work on this PC. {broken[v.encoder]} Pick another encoder.</span></div>
     {/if}
     {#if box?.id === "mkv"}
       <Row term="remux">

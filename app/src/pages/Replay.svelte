@@ -25,6 +25,7 @@
         step={catalog.limits.replayLength.step}
         value={r.length_seconds}
         aria-label="Replay length"
+        aria-valuetext={formatDuration(r.length_seconds)}
         oninput={(e) => (r.length_seconds = Number(e.currentTarget.value))}
       />
       <span class="value">{formatDuration(r.length_seconds)}</span>
@@ -48,7 +49,7 @@
   </section>
 
   <section class="card">
-    <header><h2>Hotkeys</h2><a class="link" href="#hotkeys">Change</a></header>
+    <header><h2>Hotkeys</h2><a class="link" href="#hotkeys" aria-label="Change hotkeys">Change</a></header>
     <div class="keys">
       <span>Save the replay</span><Kbd combo={app.settings.hotkeys["save-replay"]} />
       <span>Turn Instant Replay on or off</span><Kbd combo={app.settings.hotkeys["toggle-replay"]} />

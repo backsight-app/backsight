@@ -2253,19 +2253,6 @@ fn show_main_window(app: &AppHandle) {
     }
 }
 
-/// A crash report saved by the last run that the user hasn't dismissed (`crash.rs`).
-#[tauri::command(async)]
-fn crash_notice() -> Option<String> {
-    backsight_engine::crash::pending(&backsight_engine::crash::reports_dir()?)
-}
-
-#[tauri::command(async)]
-fn crash_dismiss() {
-    if let Some(dir) = backsight_engine::crash::reports_dir() {
-        backsight_engine::crash::dismiss(&dir);
-    }
-}
-
 #[tauri::command(async)]
 fn crash_open_folder() {
     open_folder(backsight_engine::crash::reports_dir());
@@ -2408,6 +2395,7 @@ fn shut_down(engine: &Engine) {
 }
 
 fn main() {
+    std::sync::LazyLock::force(&report::STARTED);
     if let Some(code) = cli::run() {
         std::process::exit(code);
     }
@@ -2456,8 +2444,10 @@ fn main() {
             setup::overload_status,
             setup::lighter_video,
             setup::overlay_scan,
-            crash_notice,
-            crash_dismiss,
+            report::crash_notice,
+            report::crash_dismiss,
+            report::crash_report_text,
+            report::crash_report_send,
             crash_open_folder,
             open_logs_folder,
             about_open,

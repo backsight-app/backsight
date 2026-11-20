@@ -15,7 +15,7 @@ use std::{
     fs,
     io::Write as _,
     path::{Path, PathBuf},
-    sync::mpsc,
+    sync::{LazyLock, mpsc},
     time::{Duration, SystemTime},
 };
 
@@ -55,6 +55,103 @@ pub async fn save_problem_report() -> Result<String, String> {
     })
     .await
     .map_err(|_| "Backsight couldn't make the report. Please try again.".to_owned())?
+}
+
+/// Where "Report it" files a new issue: the bug report form (the repository allows no blank issues).
+const NEW_ISSUE: &str = "https://github.com/backsight-app/backsight/issues/new?template=bug_report.yml";
+/// GitHub refuses an issue text over 65 536 characters: a longer report keeps its start and end.
+const MAX_SHARE: usize = 60_000;
+const SHARE_HEAD: usize = 4_000;
+
+/// When this run started: a report written since then is offered at the next start, not as "last time".
+pub static STARTED: LazyLock<SystemTime> = LazyLock::new(SystemTime::now);
+
+/// The report on offer (`crash::pending`) and the reports folder, if `name` (from [`crash_notice`])
+/// is still exactly that file name, so no other file can be named.
+fn offered(name: &str) -> Option<(PathBuf, PathBuf)> {
+    let dir = crash::reports_dir()?;
+    let path = crash::pending(&dir, *STARTED)?;
+    (path.file_name()? == name).then_some((path, dir))
+}
+
+/// The file name of a crash or "got stuck" report (`crash-*` or `stuck-*`) from an earlier run
+/// that the user hasn't been asked about.
+#[tauri::command(async)]
+pub fn crash_notice() -> Option<String> {
+    let path = crash::pending(&crash::reports_dir()?, *STARTED)?;
+    Some(path.file_name()?.to_string_lossy().into_owned())
+}
+
+/// Stops offering report `name`.
+#[tauri::command(async)]
+pub fn crash_dismiss(name: String) {
+    if let Some((_, dir)) = offered(&name) {
+        crash::dismiss(&dir, &name);
+    }
+}
+
+/// Report `name` as it would be shared: scrubbed again with this PC's rules (reports from older
+/// versions too) and short enough for an issue. `None`: it's no longer on offer.
+#[tauri::command(async)]
+pub fn crash_report_text(name: String) -> Option<String> {
+    let (path, _) = offered(&name)?;
+    Some(share_text(&fs::read_to_string(path).ok()?, &crash::this_pc_rules()))
+}
+
+/// Copies report `name` to the clipboard, opens GitHub's bug report form in the browser (the user
+/// pastes it into the Log box), then stops offering it.
+#[tauri::command(async)]
+pub fn crash_report_send(name: String) -> Result<(), String> {
+    let (path, dir) = offered(&name).ok_or("Backsight couldn't find the report.")?;
+    let report = share_text(
+        &fs::read_to_string(&path).map_err(|_| "Backsight couldn't read the report.")?,
+        &crash::this_pc_rules(),
+    );
+    system::copy_text(&report).map_err(|_| "Backsight couldn't copy the report. Please try again.")?;
+    let title = if name.starts_with("stuck-") { "Backsight got stuck" } else { "Backsight closed unexpectedly" };
+    system::open_path(Path::new(&issue_url(title, &report)), false)
+        .map_err(|_| "Backsight couldn't open your web browser.")?;
+    crash::dismiss(&dir, &name);
+    Ok(())
+}
+
+/// The scrubbed report, its middle cut out if it's longer than an issue may be.
+fn share_text(text: &str, rules: &Rules) -> String {
+    let text = crash::scrub(text.trim_end(), rules);
+    if text.len() <= MAX_SHARE {
+        return text;
+    }
+    let head = &text[..text.floor_char_boundary(SHARE_HEAD)];
+    let tail = &text[text.ceil_char_boundary(text.len() - (MAX_SHARE - SHARE_HEAD - 100))..];
+    format!("{head}\n\n[... part of the report was cut here to fit ...]\n\n{tail}")
+}
+
+/// The bug report form's link with `title`, and its version, Windows and graphics card fields
+/// filled in from the report's header lines when it has them. Short: the report itself is pasted.
+fn issue_url(title: &str, report: &str) -> String {
+    let mut url = format!("{NEW_ISSUE}&title={}", url_encode(title));
+    // The first line is the report's own title ("Backsight: a step got stuck"), not a field.
+    let field = |prefix: &str| report.lines().skip(1).find_map(|l| l.strip_prefix(prefix)).map(str::trim);
+    for (id, prefix) in [("version", "Backsight: "), ("windows", "Windows: "), ("gpu", "graphics card: ")] {
+        if let Some(v) = field(prefix).filter(|v| !v.is_empty() && !["not started yet", "unknown"].contains(v)) {
+            // 60 characters each keeps the link well under 2000 characters.
+            let _ = write!(url, "&{id}={}", url_encode(&v.chars().take(60).collect::<String>()));
+        }
+    }
+    url
+}
+
+/// Percent-encodes everything but letters, digits and `-._~`.
+fn url_encode(s: &str) -> String {
+    s.bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect()
 }
 
 /// Collects, scrubs and writes the report on the Desktop; the error is plain words.
@@ -225,6 +322,38 @@ mod tests {
         }
         assert!(text.contains("<user>") && text.contains("<pc>") && text.contains("<clips folder>"));
         assert!(text.contains("===== Windows =====") && text.contains("Windows 11"));
+    }
+
+    #[test]
+    fn a_shared_report_hides_the_user_and_fits_github() {
+        let rules = Rules::new(r"C:\Users\Avery", "avery", &[], &[], vec!["mp4".to_owned()], &|_| None);
+        let text = share_text(
+            "Backsight crash report (panic)\n\nBacksight: 0.1.13 (built y)\nWindows: Windows 11 & co #1\n\
+             graphics card: not started yet\n\ncrash in C:\\Users\\Avery\\AppData\\x\n",
+            &rules,
+        );
+        assert!(!text.contains("Avery") && text.contains("<user>"), "{text}");
+
+        // The form's fields from the header; no report in the link.
+        let url = issue_url("Backsight closed unexpectedly", &text);
+        assert_eq!(
+            url,
+            format!(
+                "{NEW_ISSUE}&title=Backsight%20closed%20unexpectedly&version=0.1.13%20%28built%20y%29\
+                 &windows=Windows%2011%20%26%20co%20%231"
+            )
+        );
+        // A stuck report's title line isn't a version; long header lines keep the link short.
+        let url = issue_url("Backsight got stuck", "Backsight: a step got stuck\nBacksight: 1.0\nWindows: é");
+        assert!(url.ends_with("&title=Backsight%20got%20stuck&version=1.0&windows=%C3%A9"), "{url}");
+        let wide = format!("x\nBacksight: {0}\nWindows: {0}\ngraphics card: {0}", "€".repeat(500));
+        assert!(issue_url("Backsight got stuck", &wide).len() < 2000);
+
+        // Too long for an issue: the start and the end are kept.
+        let long: String = (0..2000).map(|i| format!("log line {i} é\n")).collect();
+        let huge = share_text(&long.repeat(5), &rules);
+        assert!(huge.len() <= MAX_SHARE && huge.starts_with("log line 0 ") && huge.ends_with("log line 1999 é"));
+        assert!(huge.contains("was cut here"));
     }
 
     #[test]
