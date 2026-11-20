@@ -115,10 +115,16 @@ mod platform {
 
     /// Runs while the thread is paused: no allocation, no locks of ours.
     fn walk(thread: &Handle, w: &Watched, frames: &mut Vec<usize>) -> Result<(), &'static str> {
-        let mut ctx = CONTEXT { ContextFlags: CONTEXT_CONTROL_AMD64 | CONTEXT_INTEGER_AMD64, ..Default::default() };
-        // SAFETY: `ctx` is a 16-byte-aligned CONTEXT (the type's own alignment) with its flags
-        // set; GetThreadContext also waits for the pause to take effect.
-        unsafe { GetThreadContext(thread.0, &mut ctx) }.map_err(|_| "couldn't read the thread's registers")?;
+        // GetThreadContext needs a 16-byte-aligned CONTEXT, but the `windows` crate's type is only
+        // 8-aligned: without this wrapper it failed (ERROR_NOACCESS) whenever the stack placed it badly.
+        #[repr(C, align(16))]
+        struct Aligned(CONTEXT);
+        let mut aligned =
+            Aligned(CONTEXT { ContextFlags: CONTEXT_CONTROL_AMD64 | CONTEXT_INTEGER_AMD64, ..Default::default() });
+        let ctx = &mut aligned.0;
+        // SAFETY: `ctx` is a 16-byte-aligned CONTEXT with its flags set; GetThreadContext also
+        // waits for the pause to take effect.
+        unsafe { GetThreadContext(thread.0, ctx) }.map_err(|_| "couldn't read the thread's registers")?;
         let on_stack = |sp: u64| (w.low as u64..w.high as u64).contains(&sp);
         while frames.len() < MAX_FRAMES && ctx.Rip != 0 && on_stack(ctx.Rsp) {
             frames.push(ctx.Rip as usize);
@@ -134,10 +140,11 @@ mod platform {
                 ctx.Rsp += 8;
             } else {
                 let (mut handler, mut frame) = (std::ptr::null_mut(), 0u64);
-                // SAFETY: `entry` belongs to the module at `base` and to `Rip`; RtlVirtualUnwind only
-                // reads the paused thread's stack (inside its range) and updates `ctx`.
+                // SAFETY: `entry` belongs to the module at `base` and to `Rip`; RtlVirtualUnwind reads
+                // the paused thread's stack where the unwind data says (inside its range for an intact
+                // frame; a corrupt frame pointer could make it read elsewhere) and updates `ctx`.
                 unsafe {
-                    RtlVirtualUnwind(UNW_FLAG_NHANDLER, base, ctx.Rip, entry, &mut ctx, &mut handler, &mut frame, None)
+                    RtlVirtualUnwind(UNW_FLAG_NHANDLER, base, ctx.Rip, entry, ctx, &mut handler, &mut frame, None)
                 };
             }
             if ctx.Rsp <= before {
@@ -210,6 +217,33 @@ mod tests {
         assert!(frames.len() >= 3, "{text}");
         assert!(text.contains("ntdll.dll+0x"), "the wait itself is in Windows:\n{text}");
         assert!(text.contains(&format!("{exe}+0x")), "the unwind reached this program:\n{text}");
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn a_deep_stack_stops_at_the_frame_limit() {
+        fn deep(n: usize, wait: &dyn Fn()) {
+            if n == 0 {
+                wait()
+            } else {
+                deep(std::hint::black_box(n - 1), wait)
+            }
+            std::hint::black_box(n);
+        }
+        let (tx, rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel::<()>();
+        let blocked = std::thread::spawn(move || {
+            tx.send(Watched::this_thread()).unwrap();
+            deep(2 * MAX_FRAMES, &|| {
+                let _ = done_rx.recv();
+            });
+        });
+        let watched = rx.recv().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(100)); // let it reach the wait
+        let frames = watched.capture().unwrap();
+        done_tx.send(()).unwrap();
+        blocked.join().unwrap();
+        assert_eq!(frames.len(), MAX_FRAMES);
     }
 
     #[test]

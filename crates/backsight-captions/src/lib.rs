@@ -257,6 +257,28 @@ mod tests {
         let mut out = Vec::new();
         assert_eq!(child_main(&["a".into()], &mut out), 1);
         assert!(String::from_utf8(out).unwrap().starts_with("error: usage"));
+        // Three arguments are a job: here one that fails (no models, or no such clip), but not on usage.
+        let mut out = Vec::new();
+        let job = [r"C:\no\such clip.mp4".into(), "last".into(), "auto".into()];
+        assert_eq!(child_main(&job, &mut out), 1);
+        let line = String::from_utf8(out).unwrap();
+        assert!(line.starts_with("error: ") && !line.contains("usage"), "{line}");
+    }
+
+    #[test]
+    fn the_captions_process_runs_below_normal_priority() {
+        use std::os::windows::io::AsRawHandle;
+        use windows::Win32::{
+            Foundation::HANDLE,
+            System::Threading::{BELOW_NORMAL_PRIORITY_CLASS, GetPriorityClass},
+        };
+        let job = Job { clip: "x.mp4".into(), track: None, language: "auto".into() };
+        let cmd = std::env::var("ComSpec").unwrap_or_else(|_| r"C:\Windows\System32\cmd.exe".into());
+        let mut child = command(Path::new(&cmd), &job).spawn().unwrap();
+        // SAFETY: the child's handle stays open until `child` drops.
+        let class = unsafe { GetPriorityClass(HANDLE(child.as_raw_handle())) };
+        let _ = child.wait();
+        assert_eq!(class, BELOW_NORMAL_PRIORITY_CLASS.0);
     }
 
     #[test]

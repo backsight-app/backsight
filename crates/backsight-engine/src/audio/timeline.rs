@@ -201,11 +201,22 @@ mod tests {
     }
 
     #[test]
+    fn a_gap_of_a_second_is_silence_and_longer_is_a_stall() {
+        let mut t = Timeline::new(RATE, T0);
+        t.place(T0, PACKET);
+        assert_eq!(t.place(T0 + 1010 * MS, PACKET), silent(48_000));
+        let mut t = Timeline::new(RATE, T0);
+        t.place(T0, PACKET);
+        assert_eq!(t.place(T0 + 1010 * MS + 209, PACKET).jump, 48_001, "one frame more");
+    }
+
+    #[test]
     fn a_stamp_far_from_now_is_replaced_by_the_next_expected_time() {
         let mut t = Timeline::new(RATE, T0);
         t.place(T0, PACKET);
         let now = T0 + 20 * MS;
-        assert_eq!(t.packet_time(T0 + 10 * MS, false, now), T0 + 10 * MS, "a good stamp is kept");
+        assert_eq!(t.packet_time(T0 + 12 * MS, false, now), T0 + 12 * MS, "a good stamp is kept");
+        assert_eq!(t.packet_time(now - 1000 * MS, false, now), now - 1000 * MS, "a second off is still good");
         assert_eq!(t.packet_time(T0 + 10 * MS, true, now), t.next_time(), "flagged");
         for bad in [now + 5000 * MS, now - 5000 * MS] {
             let time = t.packet_time(bad, false, now);
@@ -220,15 +231,17 @@ mod tests {
         // The device delivers 481 frames per 10 ms of QPC time (+0.2 %): after 60 packets it is
         // 60 frames ahead (1.25 ms, tolerated); by about 500 packets it passes 10 ms and 5 ms is trimmed,
         // then 5 ms again every 240 packets.
-        let mut trims = 0;
+        let (mut trims, mut trimmed) = (0, 0);
         for i in 0..2000u64 {
             let p = t.place(T0 + i * 10 * MS, PACKET + 1);
             assert_eq!(p.silence, 0);
             trims += (p.skip > 0) as u32;
+            trimmed += p.skip;
             let drift = t.written as i64 - t.frames_at(T0 + (i + 1) * 10 * MS) as i64;
             assert!(drift.unsigned_abs() <= t.tolerance() + PACKET + 1, "drift {drift} at {i}");
         }
         assert!((6..=8).contains(&trims), "{trims} trims");
+        assert_eq!(t.stats().trimmed_frames, trimmed);
     }
 
     #[test]

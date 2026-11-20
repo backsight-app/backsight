@@ -317,12 +317,14 @@ mod tests {
     fn srt_files_are_read_and_bad_blocks_skipped() {
         let srt = "1\r\n00:00:01,500 --> 00:00:03,000\r\nHello there,\r\nhow are you?\r\n\r\n\
                    2\n00:01:02,000 --> 00:01:04,250\nfine\n\n3\nnot a time\nskipped\n\n\
-                   4\n00:00:05,000 --> 00:00:04,000\nbackwards\n";
+                   4\n00:00:05,000 --> 00:00:04,000\nbackwards\n\n5\n00:00:06,000 --> 00:00:06,000\nno time\n\n\
+                   6\n01:00:00,000 --> 01:00:01,000\nan hour in\n";
         assert_eq!(
             parse_srt(srt),
             vec![
                 Cue { start_us: 1_500_000, end_us: 3_000_000, text: "Hello there, how are you?".into() },
                 Cue { start_us: 62_000_000, end_us: 64_250_000, text: "fine".into() },
+                Cue { start_us: 3_600_000_000, end_us: 3_601_000_000, text: "an hour in".into() },
             ]
         );
         assert!(Captions::new(parse_srt("")).is_none());
@@ -379,5 +381,65 @@ mod tests {
         assert_eq!(y, [[100; 8], [235; 8], [100; 8]].concat(), "white in its rows only");
         assert_eq!(u, [60, 60, 128, 128, 60, 60], "the chroma row under it is neutral");
         assert_eq!(v, [200, 200, 128, 128, 200, 200]);
+    }
+
+    #[test]
+    fn ten_bit_samples_sit_in_the_top_bits() {
+        let mut row = vec![0u8; 8];
+        for (i, v) in [10, 572, 64, 1000].into_iter().enumerate() {
+            HDR.set(&mut row, i, v);
+        }
+        assert_eq!((0..4).map(|i| HDR.get(&row, i)).collect::<Vec<_>>(), [10, 572, 64, 1000]);
+        assert_eq!(u16::from_le_bytes([row[2], row[3]]), 572 << 6);
+        assert_eq!(SDR.get(&[7, 9], 1), 9);
+    }
+
+    #[test]
+    fn half_transparent_captions_mix_with_the_picture() {
+        // A 4×4 caption of half alpha (dark grey, premultiplied) at rows 2..6 of a 4×6 frame.
+        let (w, h) = (4, 6);
+        let overlay = Overlay::new(2, w, vec![[64, 128]; w * 4]);
+        let mut y = vec![100u8; w * h];
+        let (mut u, mut v) = (vec![60u8; w / 2 * h / 2], vec![200u8; w / 2 * h / 2]);
+        overlay.blend(&mut [Some((&mut y, w)), Some((&mut u, w / 2)), Some((&mut v, w / 2))], &SDR);
+        // (100 × 127 + 16 × 128 + 64 × 219) / 255, and (60 × 127 + 128 × 128) / 255.
+        assert_eq!(y, [&[100; 8][..], &[112; 16]].concat());
+        assert_eq!(u, [60, 60, 94, 94, 94, 94], "both chroma rows under it");
+        assert_eq!(v, [200, 200, 163, 163, 163, 163]);
+
+        // NV12 whose last chroma row is cut short: only the samples there are touched.
+        let mut y = vec![100u8; w * h];
+        let mut uv = vec![60u8; w * 2 + 3];
+        overlay.blend(&mut [Some((&mut y, w)), Some((&mut uv, w)), None], &SDR);
+        assert_eq!(uv, [&[60; 4][..], &[94; 4], &[94; 3]].concat());
+        // The same at 10 bits.
+        let mut y = vec![0u8; w * h * 2];
+        let mut uv = vec![0u8; w * 2 * 2 + 6];
+        overlay.blend(&mut [Some((&mut y, w * 2)), Some((&mut uv, w * 2)), None], &HDR);
+        let samples: Vec<_> = uv.chunks(2).map(|s| u16::from_le_bytes([s[0], s[1]]) >> 6).collect();
+        assert_eq!(samples, [&[0; 4][..], &[257; 4], &[257; 3]].concat());
+    }
+
+    #[test]
+    fn the_outline_rings_the_text_and_the_text_is_centred() {
+        let (w, h) = (594, 1056);
+        let painter = Painter::new(w, h).unwrap();
+        let o = painter.draw("Hey, gg").unwrap();
+        let rows = o.px.len() / w;
+        // Bounding box (left, right, top, bottom) of the pixels `keep` picks.
+        let bbox = |keep: &dyn Fn([u8; 2]) -> bool| {
+            let hits: Vec<_> = (0..rows * w).filter(|&i| keep(o.px[i])).map(|i| (i % w, i / w)).collect();
+            let (xs, ys) = (hits.iter().map(|p| p.0), hits.iter().map(|p| p.1));
+            (xs.clone().min().unwrap(), xs.max().unwrap(), ys.clone().min().unwrap(), ys.max().unwrap())
+        };
+        let ink = bbox(&|p| p[1] > 0);
+        let white = bbox(&|p| p[0] > 200);
+        assert_eq!((ink.2, ink.3), (0, rows - 1), "only rows with text are kept");
+        // Clipped at the band's bottom, the outline there would be thinner.
+        let margins = [white.0 - ink.0, ink.1 - white.1, white.2 - ink.2, ink.3 - white.3];
+        assert!(margins.iter().all(|m| (2..=5).contains(m)), "about size / 10 on every side: {margins:?}");
+        assert!(ink.0.abs_diff(w - 1 - ink.1) <= 2, "centred: {ink:?}");
+        let bottom = o.top + rows - painter.top;
+        assert!(bottom > painter.height * 3 / 4, "at the band's bottom: row {bottom} of {}", painter.height);
     }
 }

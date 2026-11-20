@@ -455,11 +455,13 @@ mod tests {
         let ptt = SourceOptions { muted: false, push_to_talk: true };
         let mut m = Mixer::new(T0, &[ptt], false);
         m.push(0, &tone(20_000, 1.0), T0);
+        m.key(0, false, at(500)); // a release without a press opens nothing
         m.key(0, true, at(1000));
         m.key(0, false, at(5000));
         let mut o = Out::default();
         mix(&mut m, T0, &mut o);
         let l = left(&o, 0..20_000);
+        assert_eq!(PTT_TAIL_FRAMES, 7200, "150 ms");
         let close = 5000 + PTT_TAIL_FRAMES as usize; // 12 200
         assert!(l[..1000].iter().all(|v| *v == 0.0), "closed before the key");
         assert!((l[1000] - 1.0 / RAMP_FRAMES as f32).abs() < 1e-6, "ramps up from the press");
@@ -507,6 +509,24 @@ mod tests {
         mix(&mut m, later + 10 * MS, &mut o);
         assert_eq!(o.times[0].1, later - 200 * MS);
         assert_eq!(o.mix, tone(PACKET, 0.5));
+    }
+
+    #[test]
+    fn a_second_of_nothing_is_mixed_as_silence_and_only_more_jumps() {
+        let mut m = Mixer::new(T0, &[SourceOptions::default()], false);
+        let mut o = Out::default();
+        mix(&mut m, at(PENDING_FRAMES as u64) + LATENCY_MS * MS, &mut o);
+        assert_eq!(o.mix, tone(PENDING_FRAMES, 0.0), "exactly the buffer: no jump yet");
+    }
+
+    #[test]
+    fn audio_far_past_the_buffer_is_dropped() {
+        let mut m = Mixer::new(T0, &[SourceOptions::default()], false);
+        m.push(0, &tone(PACKET, 1.0), at(2 * PENDING_FRAMES as u64));
+        assert!(m.sources[0].pending.is_empty(), "not kept");
+        let mut o = Out::default();
+        mix(&mut m, T0, &mut o);
+        assert!(o.mix.is_empty());
     }
 
     #[test]

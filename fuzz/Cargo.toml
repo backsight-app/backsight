@@ -1,0 +1,65 @@
+# Fuzz targets for the parsers of files and text Backsight doesn't control. Not part of the
+# workspace or CI; run by hand from this folder (Windows needs the MSVC AddressSanitizer DLL,
+# `VC\Tools\MSVC\<ver>\bin\Hostx64\x64`, and `third_party\ffmpeg\bin` on PATH):
+#   cargo +nightly fuzz run <target> -- -max_total_time=600
+# Targets: settings, obs, json_apps, ini_and_registry, names, media. Seed `corpus/<target>/`
+# with real files (an OBS basic.ini + NUL + scene JSON, the media fixtures, ...) first.
+[package]
+name = "backsight-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+backsight-config = { path = "../crates/backsight-config" }
+backsight-engine = { path = "../crates/backsight-engine" }
+backsight-encode = { path = "../crates/backsight-encode" }
+toml = "1"
+
+[workspace]
+
+[[bin]]
+name = "settings"
+path = "fuzz_targets/settings.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "obs"
+path = "fuzz_targets/obs.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "json_apps"
+path = "fuzz_targets/json_apps.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ini_and_registry"
+path = "fuzz_targets/ini_and_registry.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "names"
+path = "fuzz_targets/names.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "media"
+path = "fuzz_targets/media.rs"
+test = false
+doc = false
+bench = false

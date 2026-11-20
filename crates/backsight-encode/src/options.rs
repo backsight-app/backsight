@@ -146,6 +146,7 @@ mod tests {
         assert_eq!(get(&video_options(&enc, &v, 60), "bf"), Some("2"));
         limit_bframes(&enc.id, 0);
         assert_eq!(get(&video_options(&enc, &v, 60), "bf"), Some("0"));
+        assert_eq!(get(&video_options(&enc, &v, 60), "g"), Some("120"), "only B-frames are clamped");
         assert_eq!(get(&mapped("nvenc-h264", &[("bframes", 2.into())]), "bf"), Some("2"), "other encoders keep theirs");
         // Fresh installs use none: on NVENC two B-frames cost about a quarter more encoder time
         // (HEVC) and 3D work a game would feel (platform-notes.md, "What Instant Replay costs").
@@ -191,6 +192,13 @@ mod tests {
         let o = mapped("x264", &[("rc", "cq".into())]);
         assert_eq!((get(&o, "crf"), get(&o, "b")), (Some("21"), None));
         assert_eq!(get(&mapped("aom-av1", &[("rc", "cq".into())]), "b"), Some("0"));
+        assert_eq!(get(&mapped("nvenc-h264", &[("rc", "cbr".into())]), "bufsize"), None, "NVENC has its own rc");
+    }
+
+    #[test]
+    fn zero_latency_turns_x26x_b_frames_off() {
+        assert_eq!(get(&mapped("x264", &[]), "bf"), Some("2"));
+        assert_eq!(get(&mapped("x264", &[("tune", "zerolatency".into())]), "bf"), Some("0"));
     }
 
     #[test]
@@ -198,6 +206,7 @@ mod tests {
         assert_eq!(get(&mapped("amf-h264", &[("rc", "cq".into())]), "rc"), Some("qvbr"));
         assert_eq!(get(&mapped("amf-h264", &[("rc", "vbr".into())]), "rc"), Some("vbr_peak"));
         assert_eq!(get(&mapped("x264", &[("tune", "none".into())]), "tune"), None);
+        assert_eq!(get(&mapped("x264", &[("tune", "film".into())]), "tune"), Some("film"));
     }
 
     #[test]
@@ -205,6 +214,9 @@ mod tests {
         let aac = Catalog::get().audio_encoder("aac").unwrap();
         let o = audio_options(aac, &resolve(&aac.options, None));
         assert_eq!(get(&o, "b"), Some("192000"));
+        // A hand-edited settings file may hold a decimal bitrate.
+        let def = aac.options.iter().find(|d| d.ffmpeg == "b").unwrap();
+        assert_eq!(ffmpeg_value(def, &Value::Float(2.5)), "2500");
     }
 
     /// Every option and choice the catalog offers is a name and value the linked FFmpeg accepts.

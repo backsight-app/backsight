@@ -443,6 +443,63 @@ mod tests {
     }
 
     #[test]
+    fn only_a_video_gap_over_the_limit_starts_over() {
+        let mut buf = ReplayBuffer::new(Duration::from_secs(120), usize::MAX);
+        let packet = |stream, pts_us, keyframe| Packet {
+            stream,
+            pts_us,
+            dts_us: pts_us,
+            duration_us: FRAME_US,
+            keyframe,
+            data: vec![1].into(),
+        };
+        feed(&mut buf, 600, 120, 10);
+        let held = buf.packets.len();
+        // Audio far ahead (one bad stamp) leaves the video alone, and so does a gap of exactly
+        // the limit.
+        buf.push(packet(StreamKind::Audio(0), buf.latest_pts_us + 2 * GAP_US, true));
+        buf.push(packet(StreamKind::Video, buf.latest_pts_us + GAP_US, false));
+        assert_eq!(buf.packets.len(), held + 2);
+        // After a sleep, audio from up to the limit before the new video is kept for its keyframe.
+        let wake = buf.latest_pts_us + 3_600_000_000;
+        buf.push(packet(StreamKind::Audio(0), wake - GAP_US, true));
+        buf.push(packet(StreamKind::Audio(0), wake, true));
+        buf.push(packet(StreamKind::Video, wake, false));
+        let left: Vec<_> = buf.packets.iter().map(|p| p.pts_us).collect();
+        assert_eq!(left, [wake - GAP_US, wake]);
+    }
+
+    #[test]
+    fn room_is_what_the_ceiling_leaves() {
+        let mut buf = ReplayBuffer::new(Duration::from_secs(10), 1 << 20);
+        assert_eq!(buf.room(), 1 << 20);
+        feed(&mut buf, 1, 1, 10);
+        assert!(buf.bytes() > 0);
+        assert_eq!(buf.room(), (1 << 20) - buf.bytes());
+    }
+
+    #[test]
+    fn a_huge_keyframe_at_the_ceiling_frees_spare_chunks_first() {
+        let ceiling = 4 << 20; // 64 KB chunks
+        let mut buf = ReplayBuffer::new(Duration::from_secs(2), ceiling);
+        let mut i = 0;
+        while i < 60 * 4 || buf.spare_bytes == 0 {
+            feed_encoded(&mut buf, i..i + 1, 50_000, 3_000);
+            i += 1;
+            assert!(i < 60 * 20, "the window trims, leaving spares");
+        }
+        assert_eq!(buf.bytes(), buf.held + buf.spare_bytes, "spares count");
+        let (huge, pts_us) = (vec![1; 3 << 20], i * FRAME_US); // a chunk of its own
+        buf.push_encoded(
+            StreamKind::Video,
+            0,
+            Encoded { data: &huge, pts_us, dts_us: pts_us, duration_us: 0, keyframe: true },
+        );
+        assert!(buf.bytes() <= ceiling, "{} B held", buf.bytes());
+        assert_eq!(buf.spare_bytes, buf.spare.iter().map(|c| c.capacity()).sum::<usize>());
+    }
+
+    #[test]
     fn clip_starts_on_a_keyframe_at_or_before_the_requested_length() {
         let mut buf = ReplayBuffer::new(Duration::from_secs(30), usize::MAX);
         feed(&mut buf, 60 * 40, 120, 10);

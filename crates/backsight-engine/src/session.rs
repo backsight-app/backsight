@@ -1027,12 +1027,15 @@ impl Drop for ReplaySession {
     fn drop(&mut self) {
         let watch = Watch::start(Step::CaptureStop);
         self.shared.stop.store(true, Relaxed);
+        if let Some(t) = self.video_thread.take() {
+            let _ = t.join();
+        }
+        // Before any frame pool closes: this one's, or (window mode) the game watcher's, which
+        // stops without calling `follow_window` again.
+        release_held(&self.shared);
         self.capture = None; // a callback already running finishes on its own Arc
         if let Some(audio) = &mut self.audio_capture {
             audio.stop();
-        }
-        if let Some(t) = self.video_thread.take() {
-            let _ = t.join();
         }
         drop(watch); // finishing the recording has its own limit
         let _ = self.stop_recording(); // finishes the file; the result is logged
@@ -1068,6 +1071,9 @@ impl Shared {
             return Ok(()); // after a failure, until the session is dropped
         }
         let mut input = lock(&self.input);
+        if self.stopped() {
+            return Ok(()); // Drop's release_held may have run while we waited: keep no frame past it
+        }
         let current = match &input.converter {
             VideoConverter::Sdr(c) => c.input_size(),
             VideoConverter::Hdr(c) => c.input_size(),
@@ -1251,6 +1257,7 @@ fn encode_video(
                 VideoConverter::Hdr(c) => c.convert_from(gpu, &frame),
             };
             if let Err(e) = converted {
+                drop(input); // before `held`: never give a frame back while holding the lock
                 return s.fail(VIDEO_STOPPED, &e);
             }
         }
@@ -1353,7 +1360,7 @@ fn follow_window(
                 OK => {}
                 CLOSED => {
                     tracing::info!("the captured game window closed");
-                    release_held(&s);
+                    retire_window(&s, sources);
                     // Not carried into a restart, nor naming clips any more.
                     *lock(&captured_out) = None;
                     (current, lost, failed) = (None, true, None);
@@ -1362,7 +1369,7 @@ fn follow_window(
                     hdr_moved.store(false, Relaxed);
                 }
                 _ => {
-                    release_held(&s);
+                    retire_window(&s, sources);
                     if hdr && hdr_tries.failed(*id, !fresh.load(Relaxed)) {
                         give_up = lock(&captured_out).clone(); // set when this capture started
                     }
@@ -1523,6 +1530,15 @@ fn hdr_window_failed(exe: &str) -> bool {
 
 /// Gives back the frame the video thread hasn't converted yet, before its window capture (and frame
 /// pool) is dropped: Microsoft doesn't say a frame stays usable after its pool closes.
+/// A window capture ended with the session still running: its late frames (numbered up to `newest`)
+/// are ignored from now on, then the held ones are released before its frame pool closes.
+fn retire_window(s: &Shared, newest: u64) {
+    let mut input = lock(&s.input);
+    input.window_source = input.window_source.max(newest + 1);
+    drop(input);
+    release_held(s);
+}
+
 fn release_held(s: &Shared) {
     let held = {
         let mut input = lock(&s.input);

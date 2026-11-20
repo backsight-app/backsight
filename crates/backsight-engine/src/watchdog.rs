@@ -374,6 +374,40 @@ mod tests {
     }
 
     #[test]
+    fn steps_have_their_own_keys_and_names() {
+        let steps = [
+            Step::CaptureStart,
+            Step::CaptureStop,
+            Step::SaveClip { bytes: 0 },
+            Step::FinishRecording { bytes: 0 },
+            Step::Convert { bytes: 0 },
+            Step::Recover { bytes: 0 },
+        ];
+        assert_eq!(steps.map(Step::key), ["capture", "stop", "save", "recording", "convert", "recover"]);
+        let names: std::collections::HashSet<_> = steps.iter().map(|s| s.name()).collect();
+        assert_eq!(names.len(), steps.len());
+        assert_eq!(Step::SaveClip { bytes: 0 }.name(), "saving a clip");
+    }
+
+    #[test]
+    fn a_step_ends_when_its_watch_is_dropped_and_each_has_its_own_id() {
+        let id = Watch::start(Step::CaptureStart).id;
+        assert!(!lock(&global().board).running.iter().any(|r| r.id == id));
+        let t0 = Instant::now();
+        let (mut b, first) = board_with(SEC * 3, t0);
+        let second = b.add("stop", "stopping capture", SEC * 3, Watched::this_thread(), t0);
+        assert_ne!(first, second);
+        assert!(b.remove(first).is_some_and(|r| r.key == "save"));
+    }
+
+    #[test]
+    fn a_gap_of_exactly_the_sleep_limit_does_not_count() {
+        let t0 = Instant::now();
+        let (mut b, _) = board_with(LATE, t0);
+        assert!(b.tick(t0 + LATE).is_empty());
+    }
+
+    #[test]
     fn limits_grow_with_what_a_step_writes() {
         assert_eq!(Step::CaptureStart.limit(), SEC * 30);
         assert_eq!(Step::SaveClip { bytes: 0 }.limit(), SEC * 60);
@@ -384,6 +418,9 @@ mod tests {
     #[test]
     fn a_step_held_past_a_tiny_limit_writes_exactly_one_report() {
         let dir = tempfile::tempdir().unwrap();
+        // 300 lines, 30 KB: the report has the last 100.
+        let log: String = (0..300).map(|i| format!("log line {i:03} {}\n", "x".repeat(88))).collect();
+        std::fs::write(dir.path().join("backsight.log"), log).unwrap();
         let dog = Watchdog::spawn(Duration::from_millis(10), Some(dir.path().to_owned()));
         {
             let _w = dog.watch("save", "saving a clip", Duration::from_millis(50));
@@ -391,12 +428,19 @@ mod tests {
         }
         std::thread::sleep(Duration::from_millis(100));
         drop(dog);
-        let reports: Vec<PathBuf> = std::fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.path()).collect();
+        let reports: Vec<PathBuf> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| !p.ends_with("backsight.log"))
+            .collect();
         assert_eq!(reports.len(), 1, "{reports:?}");
         let name = reports[0].file_name().unwrap().to_string_lossy().into_owned();
         assert!(name.starts_with("stuck-") && name.ends_with("-save.txt"), "{name}");
         let text = std::fs::read_to_string(&reports[0]).unwrap();
         assert!(text.contains("step: saving a clip"), "{text}");
+        assert!(text.contains("other steps running:\nnone\n"), "the stuck step isn't one of the others:\n{text}");
+        assert!(text.contains("log line 200") && !text.contains("log line 199"), "the last 100 log lines");
         #[cfg(target_arch = "x86_64")]
         assert!(text.contains("ntdll.dll+0x"), "the stuck thread's stack is in the report:\n{text}");
     }

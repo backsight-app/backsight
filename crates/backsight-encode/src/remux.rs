@@ -6,11 +6,7 @@ use crate::{
     mux::{close_output, dictionary, free_name, push_chapter, push_markers},
     session::Result,
 };
-use rsmpeg::{
-    avcodec::AVCodecParameters,
-    avformat::{AVFormatContextInput, AVFormatContextOutput},
-    ffi,
-};
+use rsmpeg::{avcodec::AVCodecParameters, avformat::AVFormatContextOutput, ffi};
 use std::{
     collections::BTreeMap,
     ffi::{CStr, CString, OsString},
@@ -150,8 +146,7 @@ pub fn copy(
     salvage: bool,
     cancel: Option<&AtomicBool>,
 ) -> Result<Copied> {
-    let cin = CString::new(input.to_str().ok_or("path is not valid Unicode")?).map_err(|e| e.to_string())?;
-    let mut src = AVFormatContextInput::open(&cin).map_err(|e| format!("can't open {}: {e}", input.display()))?;
+    let mut src = crate::media::open_input(input)?;
     let cout = CString::new(output.to_str().ok_or("path is not valid Unicode")?).map_err(|e| e.to_string())?;
     let cmuxer = CString::new(muxer).map_err(|e| e.to_string())?;
     let mut out = AVFormatContextOutput::builder()

@@ -364,6 +364,19 @@ fn stamp_at(stem: &str) -> Option<usize> {
     fits.then_some(at)
 }
 
+/// Every name check on one file name, for `fuzz/`.
+#[cfg(fuzzing)]
+pub(crate) fn fuzz_names(name: &str) {
+    for suffix in [RECORDING_PART, RECOVERED_PART] {
+        let plain = Path::new(name).file_name().and_then(|n| n.to_str()) == Some(name);
+        if let Some((stem, ext)) = owned_with(Path::new(name), suffix).filter(|_| plain) {
+            assert_eq!(format!("{stem}.{ext}{suffix}"), name);
+        }
+    }
+    let _ = stamp_key(name);
+    let _ = conversion_mark(Path::new(name));
+}
+
 /// Sorts names by their time stamp, then the whole name.
 fn stamp_key(name: &str) -> (&str, &str) {
     let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
@@ -428,6 +441,7 @@ mod tests {
         assert_eq!(ours("2026-11-10 14.03.07.mp4.recording.part"), None, "no name before the time");
         assert_eq!(ours("Game 2026-11-10 14.03.mp4.recording.part"), None, "not a whole time");
         assert_eq!(ours("Game 2026-11-10 14.03.07 ().mp4.recording.part"), None, "not a number");
+        assert_eq!(ours(" 2026-11-10 14.03.07.mp4.recording.part"), None, "only a space before the time");
         let mut names =
             ["Zelda 2026-11-10 14.03.07.mp4", "Apex 2026-11-10 15.00.00.mp4", "Apex 2026-11-10 14.03.07 (2).mp4"];
         names.sort_by(|a, b| stamp_key(a).cmp(&stamp_key(b)));
@@ -501,5 +515,25 @@ mod tests {
         assert!(finish_conversion(&cut).is_err());
         assert_eq!(fs::read(&half_2).unwrap(), b"x");
         assert_eq!(fs::read(&clip).unwrap(), b"x");
+
+        // Turned off since: the cut-off `.part` and the mark go, the MKV stays.
+        mark_conversion(&cut);
+        fs::write(conversion_mark(&cut), half_2.to_str().unwrap()).unwrap();
+        drop_conversion(&cut);
+        assert!(!half_2.exists() && !conversion_mark(&cut).exists());
+        assert_eq!(fs::read(&cut).unwrap(), b"x");
+    }
+
+    #[test]
+    fn a_recovery_mark_naming_a_finished_clip_removes_nothing() {
+        let d = tempfile::tempdir().unwrap();
+        let part = d.path().join("Backsight 2026-11-10 14.03.07.mkv.recording.part");
+        fs::write(&part, b"not a video").unwrap();
+        let clip = d.path().join("Backsight 2026-11-10 12.00.00.mkv");
+        fs::write(&clip, b"x").unwrap();
+        fs::write(d.path().join(format!("Backsight 2026-11-10 14.03.07.mkv{RECOVERING_PART}")), clip.to_str().unwrap())
+            .unwrap();
+        assert!(recover(&part, None).is_err());
+        assert_eq!(fs::read(&clip).unwrap(), b"x", "not a copy of ours");
     }
 }

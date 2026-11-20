@@ -233,8 +233,32 @@ mod tests {
         let first = write_new(dir.path(), "one").unwrap();
         let second = write_new(dir.path(), "two").unwrap();
         assert_ne!(first, second);
-        assert_eq!(fs::read_to_string(first).unwrap(), "\u{feff}one");
-        assert_eq!(fs::read_to_string(second).unwrap(), "\u{feff}two");
+        assert_eq!(fs::read_to_string(&first).unwrap(), "\u{feff}one");
+        assert_eq!(fs::read_to_string(&second).unwrap(), "\u{feff}two");
+        let name = |p: &Path| p.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(!name(&first).contains(" ("), "{}", name(&first));
+        assert!(name(&second).ends_with(" (2).txt"), "{}", name(&second));
+        assert!(write_new(&dir.path().join("gone"), "x").is_err(), "a missing folder is an error, not a retry");
+    }
+
+    #[test]
+    fn files_are_read_up_to_their_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let big = dir.path().join("big.log");
+        fs::write(&big, "a line of the log\n".repeat(8_000)).unwrap(); // 144 000 bytes
+        assert_eq!(read_all(&big, LOG_TAIL).len(), 144_000, "a log is copied whole up to 300 KB");
+        let tail = read_all(&big, FILE_TAIL).len();
+        assert!((90_000..=102_400).contains(&tail), "other files: the last 100 KB, got {tail}");
+        fs::write(dir.path().join("empty.txt"), " \n").unwrap();
+        assert_eq!(read_all(&dir.path().join("empty.txt"), FILE_TAIL), "(empty)");
+        assert_eq!(read_all(&dir.path().join("gone.txt"), FILE_TAIL), "(not there)");
+    }
+
+    #[test]
+    fn the_report_asks_windows_and_lists_its_parts() {
+        assert_eq!(ask(|| 5), Some(5));
+        let titles: Vec<_> = gather().into_iter().map(|(t, _)| t).take(4).collect();
+        assert_eq!(titles, ["Backsight", "Windows", "Graphics cards", "Monitors"]);
     }
 
     #[test]

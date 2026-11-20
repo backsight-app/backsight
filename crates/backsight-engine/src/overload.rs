@@ -259,6 +259,9 @@ mod tests {
         assert!(said.contains("NVIDIA"), "{said}");
         let (v, _) = lighter(&video("x265"), &["nvenc-h264".into(), "nvenc-hevc".into()], FULL_HD).unwrap();
         assert_eq!(v.encoder, "nvenc-hevc");
+        // FLV holds only H.264: an HEVC card can't take over.
+        let flv = Video { container: "flv".into(), ..video("x264") };
+        assert_eq!(lighter(&flv, &["nvenc-hevc".into()], FULL_HD).unwrap().0.encoder, "x264");
     }
 
     #[test]
@@ -289,6 +292,10 @@ mod tests {
         let opt = Catalog::get().video_options(Catalog::get().video_encoder("svt-av1").unwrap());
         let default = opt.iter().find(|o| o.id == "preset").unwrap().default.as_integer().unwrap();
         assert_eq!(v.encoder_options["svt-av1"]["preset"].as_integer(), Some(default + 2));
+        let max = opt.iter().find(|o| o.id == "preset").unwrap().max.unwrap() as i64;
+        let mut v = video("svt-av1");
+        v.encoder_options.entry("svt-av1".into()).or_default().insert("preset".into(), max.into());
+        assert_eq!(lighter(&v, &[], FULL_HD).unwrap().0.resolution, "720p", "already the fastest");
         let mut v = video("nvenc-h264");
         v.encoder_options.entry("nvenc-h264".into()).or_default().insert("preset".into(), "p4".into());
         let (v, _) = lighter(&v, &[], FULL_HD).unwrap();

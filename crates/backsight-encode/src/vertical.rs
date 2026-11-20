@@ -57,6 +57,14 @@ pub fn vertical_crop(width: u32, height: u32) -> Option<VerticalCrop> {
     })
 }
 
+/// A frame rate rounded to whole frames per second (at least 1); `None` when there is none.
+fn whole_fps(r: ffi::AVRational) -> Option<u32> {
+    (r.num > 0 && r.den > 0).then(|| {
+        let fps = (i64::from(r.num) + i64::from(r.den) / 2) / i64::from(r.den);
+        u32::try_from(fps).unwrap_or(0).max(1)
+    })
+}
+
 /// An audio packet read before the first video packet was written (see [`Output::video`]).
 struct Held {
     track: usize,
@@ -136,11 +144,10 @@ pub fn make_vertical(
         let s = &input.streams()[vi];
         let par = s.codecpar();
         let crop = vertical_crop(size(par.width), size(par.height)).ok_or("the clip is too small to crop")?;
-        let rate = s.guess_framerate().filter(|r| r.num > 0 && r.den > 0).ok_or("the clip has no frame rate")?;
-        let fps = (i64::from(rate.num) + i64::from(rate.den) / 2) / i64::from(rate.den);
+        let fps = s.guess_framerate().and_then(whole_fps).ok_or("the clip has no frame rate")?;
         dec.apply_codecpar(&par).map_err(|e| e.to_string())?;
         let hdr = par.color_trc == ffi::AVCOL_TRC_SMPTE2084;
-        (s.time_base, crop, u32::try_from(fps).unwrap_or(0).max(1), hdr)
+        (s.time_base, crop, fps, hdr)
     };
     dec.set_pkt_timebase(vtb);
     // One thread: the job's thread runs at background priority, FFmpeg's own threads would not.
@@ -298,6 +305,8 @@ mod tests {
         // Narrower than 9:16: the full width, cut at top and bottom.
         assert_eq!(c(720, 1600), Some((0, 160, 720, 1280, 720, 1280)));
         assert_eq!(c(100, 50), None);
+        // The smallest crop still made.
+        assert_eq!(c(200, 64), Some((82, 0, 36, 64, 36, 64)));
         for (w, h) in [(1280, 720), (1366, 768), (1600, 900), (1920, 1200), (5120, 1440), (854, 480)] {
             let k = vertical_crop(w, h).unwrap();
             assert_eq!(k.width * 16, k.height * 9, "{w}x{h} is 9:16");
@@ -305,5 +314,13 @@ mod tests {
             assert!(k.x + k.width <= w && k.y + k.height <= h, "{w}x{h} inside the frame");
             assert!(k.out_height <= k.height.min(MAX_HEIGHT), "{w}x{h} never enlarged");
         }
+    }
+
+    #[test]
+    fn frame_rates_round_to_whole_frames() {
+        let fps = |num, den| whole_fps(ffi::AVRational { num, den });
+        assert_eq!((fps(30_000, 1001), fps(60_000, 1001), fps(60, 1)), (Some(30), Some(60), Some(60)));
+        assert_eq!(fps(1, 3), Some(1), "never 0");
+        assert_eq!((fps(0, 1), fps(30, 0)), (None, None));
     }
 }

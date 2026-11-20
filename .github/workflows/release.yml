@@ -43,19 +43,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
       # One version everywhere: the installer and updater (tauri.conf.json), the General page
-      # (which imports it) and the program (Cargo). Later releases always count higher.
+      # (which imports it) and the program (Cargo). The newest v0.1.N tag plus one, so a skipped or
+      # failed run leaves no gap.
       - name: Version and notes
         id: version
         shell: pwsh
         env:
-          RUN_NUMBER: ${{ github.run_number }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           REPO: ${{ github.repository }}
         run: |
           # Only the newest main becomes a release: re-running an old CI run must not roll everyone back.
           git fetch --no-tags origin main
           if ((git rev-parse FETCH_HEAD) -ne $env:HEAD_SHA) { throw "$env:HEAD_SHA is not the newest main; not releasing it." }
-          $Version = "0.1.$env:RUN_NUMBER"
+          $Last = git tag -l 'v0.1.*' | ForEach-Object { [int]($_ -replace '^v0\.1\.', '') } | Measure-Object -Maximum
+          $Version = "0.1.$([int]$Last.Maximum + 1)"
           $Conf = 'app/src-tauri/tauri.conf.json'
           # The signed update files (.sig, latest.json) only here: local builds have no key.
           (Get-Content $Conf -Raw) -replace '"version": "[^"]*"', "`"version`": `"$Version`"" -replace '"bundle": \{', '"bundle": { "createUpdaterArtifacts": true,' | Set-Content $Conf -NoNewline

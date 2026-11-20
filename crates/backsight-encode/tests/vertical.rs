@@ -98,6 +98,8 @@ fn a_wide_clip_becomes_a_9_16_clip_with_its_audio() {
     assert_eq!(video["codec_name"], "h264");
     let audio = streams.iter().find(|s| s["codec_type"] == "audio").expect("audio copied");
     assert_eq!(audio["codec_name"], "aac");
+    let audio_secs: f64 = audio["duration"].as_str().unwrap().parse().unwrap();
+    assert!((1.8..2.2).contains(&audio_secs), "audio from the start, got {audio_secs} s");
     let secs: f64 = v["format"]["duration"].as_str().unwrap().parse().unwrap();
     assert!((1.8..2.2).contains(&secs), "about 2 s long, got {secs}");
 
@@ -114,6 +116,39 @@ fn a_wide_clip_becomes_a_9_16_clip_with_its_audio() {
     assert_eq!(differ(&rows(&plain, 0, 470), &rows(&burned, 0, 470)), 0, "the top is untouched");
     assert!(differ(&rows(&plain, 475, 898), &rows(&burned, 475, 898)) > 2000, "the caption shows");
     assert_eq!(differ(&luma_at(&out, "0.1"), &luma_at(&again, "0.1")), 0, "not before its time");
+    let _ = fs::remove_dir_all(&d);
+}
+
+#[test]
+fn captions_count_from_the_start_of_a_clip_whose_clock_starts_late() {
+    let d = dir("late");
+    let src = make_clip(&d);
+    let late = d.join("late.mkv");
+    let ok = Command::new(tool("ffmpeg.exe"))
+        .args(["-v", "error", "-i"])
+        .arg(&src)
+        .args(["-c", "copy", "-output_ts_offset", "5"])
+        .arg(&late)
+        .status()
+        .unwrap();
+    assert!(ok.success());
+    let srt = d.join("late.srt");
+    fs::write(
+        &srt,
+        "1
+00:00:00,500 --> 00:00:02,000
+That was close!
+",
+    )
+    .unwrap();
+    let mut captions = Captions::load(&srt).unwrap();
+
+    let c = Catalog::get();
+    let container = Catalog::clip_container(c.container("mp4").unwrap());
+    let venc = c.video_encoder("x264").unwrap();
+    let values = resolve(&c.video_options(venc), None);
+    make_vertical(&late, &d.join("late (vertical).mp4"), &container, venc, &values, Some(&mut captions)).unwrap();
+    assert!(captions.burned(), "the caption at 0.5 s of the file shows");
     let _ = fs::remove_dir_all(&d);
 }
 

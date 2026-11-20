@@ -2,7 +2,21 @@
 
 Each release lists **Major** and **Minor** changes. Versions are `0.1.<build>`; the newest section is also the release's notes on the [Releases page](https://github.com/backsight-app/backsight/releases).
 
-## 0.1.15 - 2026-11-19
+## 0.1.17 - 2026-11-20
+
+### Major
+
+- Damaged or unusual video files (no picture or sound, broken time stamps) are refused plainly instead of crashing Backsight or using gigabytes of memory for thumbnails, previews, captions and repairs.
+- Fixed a rare memory-safety problem in game-only audio when Windows was slow to start it.
+- Fixed a rare problem when screen or game-window capture stopped while a picture was arriving.
+
+### Minor
+
+- Freeze reports read the stuck part of Backsight correctly.
+- The Windows Ease of Access box is no longer treated as a game.
+- A deep check (fuzzing, mutation testing, a 3-hour run) added about 400 tests; memory and graphics memory stay steady over long sessions.
+
+## 0.1.16 - 2026-11-19
 
 ### Major
 

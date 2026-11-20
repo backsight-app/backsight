@@ -43,7 +43,13 @@ const SNIPPET_US: i64 = 1_500_000;
 pub(crate) fn open_input(path: &Path) -> Result<AVFormatContextInput> {
     let c = CString::new(path.to_str().ok_or("path is not valid Unicode")?).map_err(|e| e.to_string())?;
     // Also runs avformat_find_stream_info, which fills in sizes, frame rates and durations.
-    AVFormatContextInput::open(&c).map_err(|e| format!("can't open {}: {e}", path.display()))
+    let input = AVFormatContextInput::open(&c).map_err(|e| format!("can't open {}: {e}", path.display()))?;
+    // Without streams FFmpeg's list is a null pointer, which rsmpeg's `streams()` turns into a slice
+    // (undefined behaviour; a debug build stops on it). A file with no tracks has nothing to read anyway.
+    if input.nb_streams == 0 {
+        return Err(format!("can't open {}: it has no video or sound", path.display()));
+    }
+    Ok(input)
 }
 
 fn positive(v: i32) -> Option<u32> {
@@ -118,7 +124,7 @@ impl Decoder {
         if us <= 0 && !self.read_any {
             return Ok(());
         }
-        let ts = self.start + rescale(us, 1, 1_000_000, self.tb.num.into(), self.tb.den.into());
+        let ts = self.start.saturating_add(rescale(us, 1, 1_000_000, self.tb.num.into(), self.tb.den.into()));
         self.input
             .seek(self.stream as i32, ts, ffi::AVSEEK_FLAG_BACKWARD as i32)
             .map_err(|e| format!("can't seek: {e}"))?;
@@ -134,7 +140,7 @@ impl Decoder {
             match self.ctx.receive_frame() {
                 Ok(f) if f.best_effort_timestamp == NOPTS => continue,
                 Ok(f) => {
-                    let us = to_us(f.best_effort_timestamp - self.start, self.tb);
+                    let us = to_us(f.best_effort_timestamp.saturating_sub(self.start), self.tb);
                     return Ok(Some((f, us)));
                 }
                 Err(RsmpegError::DecoderDrainError) => {}
@@ -309,7 +315,8 @@ fn snippets(duration_us: i64) -> Vec<(i64, i64)> {
     if duration_us <= SNIPPETS * SNIPPET_US {
         return vec![(0, SNIPPETS * SNIPPET_US)];
     }
-    (1..=SNIPPETS).map(|k| duration_us * k / (SNIPPETS + 1) - SNIPPET_US / 2).map(|s| (s, s + SNIPPET_US)).collect()
+    // Divided first: a damaged file can claim a length near i64::MAX.
+    (1..=SNIPPETS).map(|k| duration_us / (SNIPPETS + 1) * k - SNIPPET_US / 2).map(|s| (s, s + SNIPPET_US)).collect()
 }
 
 /// Encoder and file of a preview, opened at its first frame (which sets the size).
@@ -414,6 +421,7 @@ pub fn read_speech(path: &Path, track: Option<usize>) -> Result<Vec<f32>> {
             .map_err(|e| format!("can't resample this sound track: {e}"))?;
     swr.init().map_err(|e| format!("can't resample this sound track: {e}"))?;
     let start_us = if input.start_time == NOPTS { 0 } else { input.start_time };
+    let duration_us = input.duration;
 
     let mut out = Vec::new();
     let mut first = true;
@@ -422,8 +430,8 @@ pub fn read_speech(path: &Path, track: Option<usize>) -> Result<Vec<f32>> {
             match ctx.receive_frame() {
                 Ok(f) => {
                     if std::mem::take(&mut first) && f.best_effort_timestamp != NOPTS {
-                        let lead_us = to_us(f.best_effort_timestamp, tb) - start_us;
-                        out.resize((lead_us.max(0) * i64::from(SPEECH_RATE) / 1_000_000) as usize, 0.0);
+                        let lead_us = to_us(f.best_effort_timestamp, tb).saturating_sub(start_us);
+                        out.resize(lead_samples(lead_us, duration_us), 0.0);
                     }
                     resample(swr, Some(&f), out)?;
                 }
@@ -444,6 +452,20 @@ pub fn read_speech(path: &Path, track: Option<usize>) -> Result<Vec<f32>> {
     while resample(&mut swr, None, &mut out)? > 0 {}
     Ok(out)
 }
+
+/// Silence before a sound track's first sample (`lead_us` after the file's start), in samples at
+/// [`SPEECH_RATE`]. A damaged file's timestamps can claim hours (gigabytes of silence): the gap
+/// never exceeds the file's length (`duration_us`, unknown when not positive) or [`MAX_LEAD_US`].
+fn lead_samples(lead_us: i64, duration_us: i64) -> usize {
+    let most = if duration_us > 0 { duration_us.min(MAX_LEAD_US) } else { MAX_LEAD_US };
+    let lead_us = lead_us.clamp(0, most);
+    (lead_us * i64::from(SPEECH_RATE) / 1_000_000) as usize
+}
+
+/// Ten minutes (38 MB of samples); a real clip's sound starts within its first seconds.
+// shortcut: a track that really starts later (an outside file whose mic joins late) gets early
+// captions; raise the cap or pad lazily if such files ever need captions.
+const MAX_LEAD_US: i64 = 600_000_000;
 
 /// Appends `frame` (or, with `None`, what the resampler still holds) to `out`; returns the count.
 fn resample(swr: &mut SwrContext, frame: Option<&AVFrame>, out: &mut Vec<f32>) -> Result<usize> {
@@ -481,6 +503,37 @@ mod tests {
         assert_eq!(s.len(), 4);
         assert_eq!(s[0], (11_250_000, 12_750_000));
         assert_eq!(s[3], (47_250_000, 48_750_000));
+        // A damaged header's length doesn't overflow.
+        assert!(snippets(i64::MAX).iter().all(|(a, b)| 0 < *a && a < b));
+    }
+
+    /// Found by fuzzing: a file FFmpeg opens without any stream used to reach a slice made from a
+    /// null pointer. Every reader now refuses it plainly.
+    #[test]
+    fn a_file_without_streams_is_refused() {
+        // An MP4 whose `moov` holds only its header (`mvhd`), no track.
+        let head = [&b"\0\0\0\x14ftypisom\0\0\0\0isom\0\0\0\x74moov\0\0\0\x6cmvhd"[..], &[0; 100]].concat();
+        let path = std::env::temp_dir().join(format!("backsight-no-streams-{}.mp4", std::process::id()));
+        fs::write(&path, head).unwrap();
+        let no_tracks = |r: Result<()>| r.is_err_and(|e| e.contains("no video or sound"));
+        assert!(no_tracks(probe(&path).map(|_| ())), "{:?}", probe(&path));
+        assert!(no_tracks(read_speech(&path, None).map(|_| ())));
+        assert!(no_tracks(thumbnail(&path, &path.with_extension("jpg"))));
+        let copy =
+            crate::remux::copy(&path, &path.with_extension("out.mp4"), "mp4", &Default::default(), &[], true, None);
+        assert!(no_tracks(copy.map(|_| ())));
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn silence_before_the_sound_is_bounded() {
+        assert_eq!(lead_samples(1_500_000, 60_000_000), 24_000, "1.5 s");
+        assert_eq!(lead_samples(-5, 60_000_000), 0);
+        assert_eq!(lead_samples(90_000_000, 60_000_000), 960_000, "never past the end");
+        assert_eq!(lead_samples(1_000_000, i64::MIN), 16_000, "unknown length");
+        assert_eq!(lead_samples(1_000_000, 0), 16_000, "a length of 0 is unknown too");
+        // A damaged timestamp near i64::MAX: at most ten minutes, not an overflow or exabytes.
+        assert_eq!(lead_samples(i64::MAX, i64::MAX), 9_600_000);
     }
 
     #[test]
@@ -496,5 +549,26 @@ mod tests {
         // A pure BT.2020 red stays red.
         let [r, g, b] = pq_to_sdr([0.58, 0.0, 0.0]);
         assert!(r > 0.8 && g < 0.05 && b < 0.05, "{r} {g} {b}");
+    }
+
+    #[test]
+    fn greys_stay_grey_and_bright_ones_roll_off_by_the_curve() {
+        for pq in [0.3, 0.5, 0.58, 0.75, 0.9] {
+            let [r, g, b] = pq_to_sdr([pq; 3]);
+            assert!((r - g).abs() < 1e-3 && (g - b).abs() < 1e-3, "PQ {pq}: {r} {g} {b}");
+        }
+        // Pure primaries don't leak into a channel the matrix takes away from.
+        assert_eq!(pq_to_sdr([0.0, 0.58, 0.0])[0], 0.0);
+        assert_eq!(pq_to_sdr([0.0, 0.0, 0.58])[1], 0.0);
+        // Paper white (linear 1.0) is a quarter past the knee: 0.75 + 0.25 × ½, then sRGB's curve.
+        let white = pq_to_sdr([0.58; 3])[0];
+        assert!((white - 0.942).abs() < 2e-3, "{white}");
+        let bright = pq_to_sdr([0.75; 3])[0]; // about 1000 nits
+        assert!((bright - 0.9936).abs() < 5e-4, "{bright}");
+    }
+
+    #[test]
+    fn sizes_must_be_positive() {
+        assert_eq!([-1, 0, 5].map(positive), [None, None, Some(5)]);
     }
 }

@@ -632,7 +632,41 @@ mod tests {
 
     #[test]
     fn user_name_inside_a_word_stays() {
-        assert_eq!(scrub("Averycat Avery", &plain()), "Averycat <user>");
+        assert_eq!(scrub("catAvery Averycat Avery", &plain()), "catAvery Averycat <user>");
+    }
+
+    #[test]
+    fn a_drive_alone_or_a_local_pipe_is_not_hidden() {
+        assert!(path_forms(r"C:\", &|_| None).is_empty(), "C: would hide every C: in the report");
+        assert_eq!(scrub(r"open \\.\pipe\x", &plain()), r"open \\.\pipe\x");
+        assert_eq!(scrub_files("see .mp4 files", &exts()), "see .mp4 files", "no name before it");
+    }
+
+    #[test]
+    fn near_misses_are_not_addresses() {
+        assert!(!is_email("@x.com") && !is_email("a@localhost") && !is_email("a@x."));
+        assert!(is_ip("fe80::1") && !is_ip("backsight::session2"));
+        assert!(!is_ip("1..2.3") && !is_ip("1234.5.6.7"));
+    }
+
+    #[test]
+    fn this_pc_is_read() {
+        let t = local_time();
+        assert!(t.len() == 19 && t.starts_with("20") && t.as_bytes()[10] == b' ', "{t}");
+        let v = windows_version();
+        let build: u32 = v.split("(build ").nth(1).and_then(|b| b.trim_end_matches(')').parse().ok()).unwrap();
+        // A server (GitHub's runners) names itself "Windows Server ...".
+        let desktop = if build >= 22000 { "Windows 11" } else { "Windows 10" };
+        assert!(v.starts_with(desktop) || v.starts_with("Windows Server"), "{v}");
+        let pc = std::env::var("COMPUTERNAME").unwrap().to_uppercase();
+        assert!(platform::pc_names().iter().any(|n| n.to_uppercase().starts_with(&pc)), "{pc}");
+        assert_eq!(platform::short_path(r"C:\Windows").as_deref(), Some(r"C:\Windows"));
+        assert_eq!(platform::short_path(r"C:\No Such Folder Here"), None);
+        assert!(reports_dir().is_some_and(|d| d.ends_with(r"Backsight\crash-reports")));
+        let user = std::env::var("USERNAME").unwrap();
+        assert!(!scrub(&format!("by {user} here"), &this_pc_rules()).contains(&user));
+        note_gpu("Test GPU");
+        assert_eq!(*GPU.lock().unwrap(), "Test GPU");
     }
 
     #[test]
@@ -776,8 +810,31 @@ mod tests {
         let p = dir.path().join("log");
         fs::write(&p, "first line\nsecond line\nthird line\n").unwrap();
         assert_eq!(read_tail(&p, 1000), "first line\nsecond line\nthird line\n");
+        assert_eq!(read_tail(&p, 34), "first line\nsecond line\nthird line\n", "exactly the whole file");
         assert_eq!(read_tail(&p, 20), "third line\n");
         assert_eq!(read_tail(&dir.path().join("missing"), 20), "");
+    }
+
+    /// What `install` sets up, without its hooks: a report written by hand is whole and scrubbed.
+    #[test]
+    fn a_report_is_written_whole_with_the_log_tail_and_scrubbed() {
+        let root = tempfile::tempdir().unwrap();
+        let (dir, logs) = (root.path().join("crash-reports"), root.path().join("logs"));
+        fs::create_dir_all(&logs).unwrap();
+        // 300 lines, 30 KB: the report has the last 200.
+        let log: String = (0..300).map(|i| format!("log line {i:03} {}\n", "x".repeat(88))).collect();
+        fs::write(logs.join("backsight.log"), log).unwrap();
+        let ctx =
+            Context { dir: dir.clone(), version: "9.9.9 (test)".into(), windows: "Windows".into(), rules: plain() };
+        assert!(CONTEXT.set(ctx).is_ok(), "only this test sets the crash context");
+        assert_eq!(installed_version(), Some("9.9.9 (test)"));
+        write_report("panic", r"thread: main at C:\Users\Avery\x");
+        let [report] = list(&dir).try_into().unwrap();
+        let name = report.file_name().unwrap().to_str().unwrap();
+        assert!(name.starts_with("crash-20") && name.ends_with(".txt") && !name.contains(' '), "{name}");
+        let text = fs::read_to_string(&report).unwrap();
+        assert!(text.contains("Backsight: 9.9.9 (test)") && text.contains(r"<user>\x") && !text.contains("Avery"));
+        assert!(text.contains("log line 100") && !text.contains("log line 099"), "the last 200 log lines");
     }
 
     #[test]

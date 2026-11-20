@@ -60,7 +60,7 @@ pub fn encode(bgra: &[u8], width: u32, height: u32, format: &ScreenshotFormat, q
     }
     let mut target = frame(pixel_format)?;
     // SAFETY: our allocated frame is exclusively owned; quality is a plain integer field.
-    unsafe { (*target.as_mut_ptr()).quality = (2 + (100 - quality as i32) * 29 / 99) * ffi::FF_QP2LAMBDA as i32 };
+    unsafe { (*target.as_mut_ptr()).quality = jpeg_lambda(quality) };
     SwsContext::get_context(w, h, source.format, w, h, target.format, ffi::SWS_BILINEAR, None, None, None)
         .ok_or("Couldn't convert screenshot pixels.")?
         .scale_frame(&source, 0, h, &mut target)
@@ -70,6 +70,11 @@ pub fn encode(bgra: &[u8], width: u32, height: u32, format: &ScreenshotFormat, q
     let packet = enc.receive_packet().map_err(|e| e.to_string())?;
     // SAFETY: the received packet owns size bytes until it drops, after this copy.
     Ok(unsafe { std::slice::from_raw_parts(packet.data, packet.size as usize) }.to_vec())
+}
+
+/// The frame quality for `quality` 1–100: JPEG scale 31 (worst) to 2 (best), in FFmpeg's lambda units.
+fn jpeg_lambda(quality: u8) -> i32 {
+    (2 + (100 - i32::from(quality)) * 29 / 99) * ffi::FF_QP2LAMBDA as i32
 }
 
 #[cfg(test)]
@@ -96,5 +101,41 @@ mod tests {
         assert!(encode(&pixels, 7, 5, f("jxr"), 85).is_err());
         assert!(encode(&pixels, 7, 5, f("png"), 0).is_ok(), "PNG ignores quality");
         assert!(encode(&pixels, 7, 5, f("jpeg"), 0).is_err());
+        assert!(encode(&[], 0, 5, f("png"), 85).unwrap_err().starts_with("invalid screenshot input"));
+    }
+
+    fn format(id: &str) -> &'static ScreenshotFormat {
+        crate::Catalog::get().screenshot_formats.iter().find(|f| f.id == id).unwrap()
+    }
+
+    #[test]
+    fn png_keeps_every_pixel_in_place() {
+        let (w, h) = (7usize, 5usize);
+        let bgra: Vec<u8> = (0..w * h).flat_map(|i| [(i * 7) as u8, (255 - i * 3) as u8, (i * 5) as u8, 255]).collect();
+        let png = encode(&bgra, w as u32, h as u32, format("png"), 85).unwrap();
+        let file = std::env::temp_dir().join(format!("backsight-shot-{}.png", std::process::id()));
+        std::fs::write(&file, png).unwrap();
+        let ffmpeg = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../third_party/ffmpeg/bin/ffmpeg.exe");
+        let out = std::process::Command::new(ffmpeg)
+            .args(["-v", "error", "-i"])
+            .arg(&file)
+            .args(["-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+            .output()
+            .unwrap();
+        std::fs::remove_file(&file).ok();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        let rgb: Vec<u8> = bgra.chunks(4).flat_map(|p| [p[2], p[1], p[0]]).collect();
+        assert_eq!(out.stdout, rgb);
+    }
+
+    #[test]
+    fn quality_sets_the_jpeg_scale_and_the_file_size() {
+        let bgra: Vec<u8> = (0..64 * 64 * 4u32).map(|i| (i.wrapping_mul(2_654_435_761) >> 24) as u8).collect();
+        assert_eq!([100, 85, 50, 1].map(|q| jpeg_lambda(q) / ffi::FF_QP2LAMBDA as i32), [2, 6, 16, 31]);
+        assert_eq!(jpeg_lambda(50) % ffi::FF_QP2LAMBDA as i32, 0);
+        for id in ["jpeg", "webp"] {
+            let size = |quality| encode(&bgra, 64, 64, format(id), quality).unwrap().len();
+            assert!(size(10) < size(95), "{id}: {} vs {}", size(10), size(95));
+        }
     }
 }

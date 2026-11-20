@@ -63,8 +63,9 @@ pub(crate) fn open_with_options(ctx: &mut AVCodecContext, options: &FfmpegOption
         // and copied by FFmpeg.
         unsafe { ffi::av_dict_set(&mut dict, ck.as_ptr(), cv.as_ptr(), 0) };
     }
-    // SAFETY: `ctx` is a valid, unopened context; avcodec_open2 frees our dictionary and leaves the
-    // unused entries in `dict` (or null), whether it succeeds or fails.
+    // SAFETY: `ctx` is a valid, unopened context. Once avcodec_open2 has applied the options it frees
+    // our dictionary and leaves the unused entries in `dict` (or null); a failure before that leaves
+    // `dict` as it was. Either way `dict` is ours to free, exactly once, below.
     let ret = unsafe { ffi::avcodec_open2(ctx.as_mut_ptr(), ptr::null(), &mut dict) };
     // SAFETY: `dict` is null or a dictionary FFmpeg just handed us; rsmpeg frees it on drop.
     let unused = NonNull::new(dict).map(|p| unsafe { AVDictionary::from_raw(p) });

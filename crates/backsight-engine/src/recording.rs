@@ -38,7 +38,10 @@ use std::{
     path::PathBuf,
     sync::{
         Arc, Mutex, OnceLock,
-        atomic::{AtomicU64, AtomicUsize, Ordering::Relaxed},
+        atomic::{
+            AtomicU64, AtomicUsize,
+            Ordering::{Acquire, Relaxed, Release},
+        },
         mpsc::{self, Receiver, SyncSender, TrySendError},
     },
     time::Duration,
@@ -395,7 +398,8 @@ impl Feed {
     /// the other.
     pub fn queued_bytes(&self) -> usize {
         let held: usize = self.held.iter().chain(&self.waiting).map(|a| a.counted).sum();
-        self.queued.load(Relaxed).saturating_sub(held)
+        // Acquire pairs with the writer's Release: bytes counted as written are seen once their item has left.
+        self.queued.load(Acquire).saturating_sub(held)
     }
 
     /// Packet bytes the writer has written to the file so far (all parts).
@@ -664,7 +668,7 @@ pub fn drain(sink: Sink, user: &str, mut write: impl FnMut(&Item) -> Result<(), 
         if let Data::Pooled(buf) = item.data {
             give(&sink.pool, buf); // before the count drops, so an empty queue means all are back
         }
-        sink.queued.fetch_sub(counted, Relaxed);
+        sink.queued.fetch_sub(counted, Release);
     }
     result
 }
@@ -706,11 +710,19 @@ pub fn write_parts(sink: Sink, user: &str, mut first: Muxer, mut next: impl FnMu
     });
     let last =
         written.and_then(|()| mux.take().ok_or_else(|| "no file to finish".to_string())?.finish_noting_markers());
-    let mut markers_lost = last.as_ref().is_ok_and(|(_, lost)| *lost);
-    let last = last.map(|(path, _)| path);
-    let (mut parts, mut unfinished) = (Vec::new(), Vec::new());
-    for (i, f) in finishing.into_iter().enumerate() {
-        match f.join() {
+    let (parts, unfinished, earlier_lost) = finished_parts(finishing.into_iter().map(|f| f.join()));
+    let markers_lost = earlier_lost || last.as_ref().is_ok_and(|(_, lost)| *lost);
+    (parts, unfinished, last.map(|(path, _)| path), markers_lost)
+}
+
+/// The earlier parts' finishing threads' results: the finished files, the numbers (from 1) of the
+/// parts that couldn't be finished, and whether any lost its markers.
+fn finished_parts(
+    results: impl Iterator<Item = std::thread::Result<Result<(PathBuf, bool), String>>>,
+) -> (Vec<PathBuf>, Vec<usize>, bool) {
+    let (mut parts, mut unfinished, mut markers_lost) = (Vec::new(), Vec::new(), false);
+    for (i, result) in results.enumerate() {
+        match result {
             Ok(Ok((path, lost))) => {
                 markers_lost |= lost;
                 parts.push(path);
@@ -725,7 +737,7 @@ pub fn write_parts(sink: Sink, user: &str, mut first: Muxer, mut next: impl FnMu
             }
         }
     }
-    (parts, unfinished, last, markers_lost)
+    (parts, unfinished, markers_lost)
 }
 
 /// Tells the user which earlier parts of a split recording couldn't be finished (numbers from 1).
@@ -1227,6 +1239,18 @@ mod tests {
     }
 
     #[test]
+    fn late_audio_goes_straight_in_and_audio_at_videos_time_waits() {
+        let (mut feed, sink) = channel(16);
+        let send = |f: &mut Feed, s, pts: i64, key| f.send(s, pts, pts, F, key, &pts.to_le_bytes()).unwrap();
+        send(&mut feed, StreamKind::Video, 0, true); // no audio yet: video goes on alone
+        send(&mut feed, StreamKind::Video, F, false);
+        send(&mut feed, StreamKind::Audio(0), 0, true); // video already passed it
+        assert_eq!(sink.items.try_iter().count(), 3);
+        send(&mut feed, StreamKind::Audio(0), F, true); // not before video's decode time: held
+        assert_eq!(sink.items.try_iter().count(), 0);
+    }
+
+    #[test]
     fn a_stalled_disk_stops_the_feed_instead_of_growing() {
         let (mut feed, _sink) = channel(0); // nobody drains: the disk is stuck
         video(&mut feed, true, 1).unwrap();
@@ -1259,8 +1283,8 @@ mod tests {
     #[test]
     fn the_byte_budget_holds_too() {
         let (mut feed, _sink) = channel(0);
-        video(&mut feed, true, MAX_QUEUED / 2).unwrap();
-        assert!(video(&mut feed, false, MAX_QUEUED / 2 + 1).is_err());
+        video(&mut feed, true, Feed::queue_limit() / 2).unwrap();
+        assert!(video(&mut feed, false, Feed::queue_limit() / 2 + 1).is_err());
     }
 
     #[test]
@@ -1273,10 +1297,142 @@ mod tests {
                 std::thread::yield_now(); // let the writer keep up
             }
         }
-        assert!(feed.made <= 2, "made {} buffers", feed.made);
-        assert!(lock(&feed.pool).bytes <= POOL_BYTES);
+        assert!((1..=2).contains(&feed.made), "made {} buffers", feed.made);
+        let p = lock(&feed.pool);
+        assert!(p.bytes <= POOL_BYTES);
+        assert_eq!(p.bytes, p.bufs.iter().map(Vec::capacity).sum::<usize>(), "the pool counts its bytes");
+        drop(p);
+        let big = (0..MAX_PACKETS * 4).filter(|i| i % 50 == 0).count();
+        assert_eq!(feed.written_bytes(), (big << 20) as u64 + (MAX_PACKETS * 4 - big) as u64 * 100);
         drop(feed);
         writer.join().unwrap().unwrap();
+    }
+
+    #[test]
+    fn the_pool_keeps_buffers_only_within_its_limits() {
+        let pool = Mutex::new(Pool { bufs: Vec::with_capacity(2), bytes: 0 });
+        give(&pool, Vec::with_capacity(POOL_BYTES + 1));
+        assert!(lock(&pool).bufs.is_empty(), "a buffer over the byte limit is freed");
+        for _ in 0..3 {
+            give(&pool, Vec::with_capacity(10));
+        }
+        let p = lock(&pool);
+        assert_eq!(p.bufs.len(), 2, "no more buffers than it has room for");
+        assert_eq!(p.bytes, p.bufs.iter().map(Vec::capacity).sum::<usize>());
+    }
+
+    #[test]
+    fn earlier_parts_are_counted_from_one_with_lost_markers_noted() {
+        let part = |name: &str, lost| Ok(Ok((PathBuf::from(name), lost)));
+        let panicked = Err(Box::new("boom") as Box<dyn std::any::Any + Send>);
+        let results = [part("1", false), Ok(Err("disk".to_string())), panicked, part("4", true)];
+        let (parts, unfinished, lost) = finished_parts(results.into_iter());
+        assert_eq!(parts, [PathBuf::from("1"), PathBuf::from("4")]);
+        assert_eq!(unfinished, [2, 3]);
+        assert!(lost, "part 4 lost its markers");
+        assert!(!finished_parts([part("1", false)].into_iter()).2);
+    }
+
+    #[test]
+    fn audio_still_held_at_stop_ends_at_a_pause_video_has_not_reached() {
+        let mut c = Cuts::new();
+        (c.open, c.audio_from, c.presses) = (true, 0, VecDeque::from([100]));
+        assert!(c.keeps_audio_at_stop(50));
+        assert!(!c.keeps_audio_at_stop(100), "from the pause on");
+        assert!(!c.keeps_audio_at_stop(150));
+        c.presses.clear();
+        assert!(c.keeps_audio_at_stop(150), "no pause pending");
+    }
+
+    #[test]
+    fn a_sleep_ends_the_cut_where_the_next_frame_was_due() {
+        let none = VecDeque::new();
+        let started = || {
+            let mut c = Cuts::new();
+            assert_eq!(c.video(0, 0, F, true, &none), Some(false));
+            assert_eq!(c.video(F, F, F, false, &none), Some(false));
+            c
+        };
+        // Decoded after the gap: resume from that frame's decode time.
+        let mut c = started();
+        assert_eq!(c.video(HOUR, HOUR, F, false, &none), None);
+        assert_eq!((c.ended_at, c.presses.front()), (Some(2 * F), Some(&HOUR)));
+        // A B-frame decoded before the gap (or exactly at its limit): resume just after it is shown.
+        for dts in [2 * F, F + MAX_GAP_US] {
+            let mut c = started();
+            assert_eq!(c.video(HOUR, dts, F, false, &none), None);
+            assert_eq!((c.ended_at, c.presses.front()), (Some(2 * F), Some(&(HOUR + RESUME_SLACK_US + 1))));
+        }
+        // A gap of exactly the limit is not a sleep.
+        let mut c = started();
+        assert_eq!(c.video(F + MAX_GAP_US, F + MAX_GAP_US, F, false, &none), Some(false));
+        // A pause due on the first frame after the sleep ends before the gap too.
+        let mut c = started();
+        c.presses.push_back(10 * F);
+        assert_eq!(c.video(HOUR, HOUR, F, false, &none), None);
+        assert_eq!(c.ended_at, Some(2 * F));
+    }
+
+    /// Paused at 2F (the frame shown at 2F is the first left out), with `audio_end`, then resumed
+    /// at 5F; returns the cuts after the keyframe at 10F (decoded at 6F) and `held`.
+    fn resumed(audio_end: Option<i64>, held: &VecDeque<Item>) -> Cuts {
+        let mut c = Cuts::new();
+        let none = VecDeque::new();
+        c.video(0, 0, F, true, &none);
+        c.video(F, F, F, false, &none);
+        c.presses.push_back(2 * F);
+        assert_eq!(c.video(2 * F, 2 * F, F, false, &none), None);
+        (c.audio_end, c.audio_dur) = (audio_end, A);
+        c.presses.push_back(5 * F);
+        assert_eq!(c.video(10 * F, 6 * F, F, true, held), Some(false));
+        c
+    }
+
+    fn held_audio(pts: i64) -> VecDeque<Item> {
+        let a = Item {
+            stream: StreamKind::Audio(0),
+            pts_us: pts,
+            dts_us: pts,
+            duration_us: A,
+            keyframe: true,
+            new_part: false,
+            data: Data::Marker,
+            counted: 0,
+        };
+        VecDeque::from([a])
+    }
+
+    #[test]
+    fn a_resume_removes_the_time_from_the_pause_to_the_keyframes_decode_time() {
+        // From the pause (2F) to the keyframe's decode time (6F); its display time (10F) is later.
+        assert_eq!(resumed(None, &VecDeque::new()).removed_us, 4 * F);
+        // Frames shown after the pause cap it: P5 (decoded at F) was shown up to 6F, so a
+        // keyframe shown at 9F can move back by 3F at most.
+        let mut c = Cuts::new();
+        let none = VecDeque::new();
+        c.video(0, 0, F, true, &none);
+        c.video(5 * F, F, F, false, &none);
+        c.presses.push_back(2 * F);
+        assert_eq!(c.video(2 * F, 2 * F, F, false, &none), Some(false), "B2 is shown before P5");
+        assert_eq!(c.video(6 * F, 3 * F, F, false, &none), None);
+        c.presses.push_back(8 * F);
+        assert_eq!(c.video(9 * F, 9 * F, F, true, &none), Some(false));
+        assert_eq!(c.removed_us, 3 * F);
+    }
+
+    #[test]
+    fn a_resume_continues_audio_seamlessly_from_the_packet_playing_at_the_cut() {
+        // 4F (the time removed without audio) after the last audio written ends.
+        let (end, most) = (2 * F, 4 * F);
+        let limit = end + most;
+        // A held packet plays across the limit: audio resumes with it.
+        let c = resumed(Some(end), &held_audio(limit - A + 1));
+        assert_eq!((c.audio_from, c.removed_us), (limit - A + 1, most - A + 1));
+        // The one held ends right at the limit, so the packet playing then was left out: whole
+        // packets after the last one written.
+        let c = resumed(Some(end), &held_audio(limit - A));
+        let whole = most / A * A;
+        assert_eq!((c.audio_from, c.removed_us), (end + whole, whole));
     }
 
     #[test]

@@ -79,12 +79,15 @@ mod tests {
             ("VKTakeScreenshot".to_owned(), RegValue::Dword(0x2C)),
             ("VKMTakeScreenshot".to_owned(), RegValue::Dword(2 | 8)),
             ("VKToggleRecording".to_owned(), RegValue::Dword(0)),
+            ("VKToggleBroadcast".to_owned(), RegValue::Dword(0x42)),
+            ("VKMToggleBroadcast".to_owned(), RegValue::Dword(4)),
         ]);
         let saved = parse(&values);
         let k = |id: &str| saved.keys[id].as_ref().map(ToString::to_string);
         assert_eq!(k("SaveHistoricalVideo").as_deref(), Some("Ctrl+Alt+F10"));
         assert_eq!(k("TakeScreenshot").as_deref(), Some("Alt+Win+PrintScreen"));
         assert_eq!(k("ToggleRecording"), None);
+        assert_eq!(k("ToggleBroadcast").as_deref(), Some("Shift+B"));
         assert!(!saved.keys.contains_key("ToggleGameBar"));
     }
 

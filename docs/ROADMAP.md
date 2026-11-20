@@ -14,7 +14,7 @@ Each milestone ends with something usable and a definition of done that is measu
 
 On hold: Authenticode signing of the installer, AMD encoder testing (no hardware), microphone switching mid-recording (hand check), the NVIDIA overlay clash check with the overlay on, the exclusive-fullscreen recording-cost gate. Later: see [Later](#later-).
 
-Releases: every version since v0.1.3 is on [GitHub Releases](https://github.com/backsight-app/backsight/releases), built and signed by CI as `0.1.<run>`. Changes per version: [CHANGELOG.md](../CHANGELOG.md).
+Releases: every version since v0.1.3 is on [GitHub Releases](https://github.com/backsight-app/backsight/releases), built and signed by CI as `0.1.<N>`, one higher than the last release. Changes per version: [CHANGELOG.md](../CHANGELOG.md).
 
 ## M0 · Foundation ✅
 
@@ -78,7 +78,7 @@ Open or dropped checks:
 - ✅ NSIS installer with a slim FFmpeg build (about 44 MB of DLLs); per-user install; the uninstaller keeps clips and settings; builds carry no personal names or paths ([ADR 0011](adr/0011-nsis-installer.md))
 - ✅ Local crash reports stay on the PC unless shared manually
 - ✅ Automated performance regression check on GitHub ([testing.md](architecture/testing.md))
-- ✅ Public repository [backsight-app/backsight](https://github.com/backsight-app/backsight) since 2026-11-18; every green push to `main` is released by CI as `0.1.<run>` (v0.1.3 to v0.1.8 so far)
+- ✅ Public repository [backsight-app/backsight](https://github.com/backsight-app/backsight) since 2026-11-18; every green push to `main` is released by CI as the next `0.1.<N>`
 - ✅ FFmpeg corresponding source published as the release [`ffmpeg-8.1.3-slim-r1`](https://github.com/backsight-app/backsight/releases/tag/ffmpeg-8.1.3-slim-r1) (GPL, [ADR 0005](adr/0005-license-gpl.md))
 - ✅ Automatic updates from GitHub Releases (`tauri-plugin-updater`), signed with minisign: checks at start, hourly and when the window opens; installs by itself when idle shortly after start, otherwise **Restart to update** on Home ([ADR 0014](adr/0014-updates-from-github-releases.md)). Quiet install without an installer window from 0.1.9 on
 - ✅ The installer offers to close a running Backsight (0.1.7)

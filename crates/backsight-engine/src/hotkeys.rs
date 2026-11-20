@@ -290,6 +290,28 @@ mod tests {
     }
 
     #[test]
+    fn a_released_modifier_no_longer_counts() {
+        let seq = [(M(LAlt), true), (M(LAlt), false), (Key("F12"), true)];
+        assert_eq!(run(&mut matcher(), &seq), [Event::Pressed(Act::Shot)]);
+    }
+
+    #[test]
+    fn any_modifier_released_out_of_sight_is_forgotten() {
+        let mut m = matcher();
+        run(&mut m, &[(M(LAlt), true), (M(RShift), true)]);
+        m.forget_released_modifiers(|k| k == LAlt);
+        assert_eq!(run(&mut m, &[(Key("F10"), true)]), [Event::Pressed(Act::Save)], "Shift no longer counts");
+    }
+
+    #[test]
+    fn a_loose_action_bound_with_a_modifier_matches_exactly() {
+        for combo in ["Ctrl+Mouse4", "Shift+Mouse4", "Win+Mouse4"] {
+            let mut m = Matcher::new(&BTreeMap::from([(Act::Talk, combo.parse().unwrap())])).with_loose(Act::Talk);
+            assert_eq!(run(&mut m, &[(M(LAlt), true), (Key("Mouse4"), true), (Key("Mouse4"), false)]), [], "{combo}");
+        }
+    }
+
+    #[test]
     fn a_conflicting_later_binding_is_ignored() {
         let mut m = matcher();
         let seq = [(M(LAlt), true), (Key("F10"), true)];

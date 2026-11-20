@@ -26,7 +26,7 @@ use windows::{
 /// Windows shell processes whose windows take focus but are never a game.
 // shortcut: UWP apps (ApplicationFrameHost.exe owns their window) count as the shell; resolve the
 // hosted app's process if users ask for Store games.
-const SHELL: [&str; 11] = [
+const SHELL: [&str; 12] = [
     "explorer.exe",
     "startmenuexperiencehost.exe",
     "shellexperiencehost.exe",
@@ -36,7 +36,8 @@ const SHELL: [&str; 11] = [
     "applicationframehost.exe",
     "textinputhost.exe",
     "lockapp.exe",
-    "pickerhost.exe", // the file-open and save boxes of Store apps
+    "pickerhost.exe",         // the file-open and save boxes of Store apps
+    "easeofaccessdialog.exe", // the Ease of Access box (e.g. Sticky Keys after pressing Shift 5 times)
     "backsight.exe",
 ];
 

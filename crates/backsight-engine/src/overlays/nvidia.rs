@@ -22,7 +22,7 @@ pub fn read() -> Option<Saved> {
 
 /// Off unless the overlay runs or `IsShadowPlayEnabledUser` is set; `None` (defaults) when on
 /// with no saved keys.
-fn saved(values: Option<BTreeMap<String, u32>>, overlay_running: bool) -> Option<Saved> {
+pub(super) fn saved(values: Option<BTreeMap<String, u32>>, overlay_running: bool) -> Option<Saved> {
     // shortcut: the on/off signals were only seen with the overlay off (platform-notes.md); check
     // them with it on, on a PC where toggling NVIDIA's overlay is fine, before trusting a "no clash".
     let on = overlay_running || values.as_ref().and_then(|v| v.get("IsShadowPlayEnabledUser")).is_some_and(|v| *v != 0);

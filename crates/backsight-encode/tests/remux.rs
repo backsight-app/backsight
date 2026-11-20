@@ -42,8 +42,8 @@ fn make_mkv(dir: &Path) -> PathBuf {
     make_mkv_with(dir, None)
 }
 
-/// [`make_mkv`], writing the `dup`th audio packet twice: Matroska takes the repeated timestamp,
-/// MP4 refuses it.
+/// [`make_mkv`], writing the `n`th audio packet `extra` more times when `dup` is `(n, extra)`:
+/// Matroska takes the repeated timestamp, MP4 refuses it.
 /// Hard-to-compress luma, so a clip is big enough (about 1 MB) to be written out mid-copy.
 fn noise(x: usize, row: usize, i: usize) -> u8 {
     let mut h = (x as u32).wrapping_mul(0x9E37_79B1)
@@ -54,7 +54,7 @@ fn noise(x: usize, row: usize, i: usize) -> u8 {
     (h >> 24) as u8
 }
 
-fn make_mkv_with(dir: &Path, dup: Option<usize>) -> PathBuf {
+fn make_mkv_with(dir: &Path, dup: Option<(usize, usize)>) -> PathBuf {
     let c = Catalog::get();
     let container = c.container("mkv").unwrap();
     let gh = needs_global_header(container);
@@ -77,8 +77,10 @@ fn make_mkv_with(dir: &Path, dup: Option<usize>) -> PathBuf {
             .push(&tone, &mut |p| {
                 mux.write(Track::Audio(0), &p).unwrap();
                 audio_packets += 1;
-                if dup == Some(audio_packets) {
-                    mux.write(Track::Audio(0), &p).unwrap();
+                if let Some((n, extra)) = dup
+                    && n == audio_packets
+                {
+                    (0..extra).for_each(|_| mux.write(Track::Audio(0), &p).unwrap());
                 }
             })
             .unwrap();
@@ -139,7 +141,7 @@ fn remux_keeps_streams_duration_and_the_keyframe_start() {
 #[test]
 fn salvage_leaves_out_a_refused_packet_and_copies_the_rest() {
     let d = dir("refused");
-    let mkv = make_mkv_with(&d, Some(20));
+    let mkv = make_mkv_with(&d, Some((20, 1)));
     let out = d.join("out.mp4");
     let options = Default::default();
     let c = copy(&mkv, &out, "mp4", &options, &[], true, None).unwrap();
@@ -151,6 +153,16 @@ fn salvage_leaves_out_a_refused_packet_and_copies_the_rest() {
     // Without salvage the same packet is an error, and not one about the drive.
     let e = copy(&mkv, &out, "mp4", &options, &[], false, None).unwrap_err();
     assert!(!e.starts_with(backsight_encode::remux::CANT_WRITE), "{e}");
+    fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn salvage_stops_after_100_refused_packets_in_a_row() {
+    let d = dir("refused-run");
+    let mkv = make_mkv_with(&d, Some((20, 120)));
+    let c = copy(&mkv, &d.join("out.mp4"), "mp4", &Default::default(), &[], true, None).unwrap();
+    assert_eq!(c.refused, 100, "{c:?}");
+    assert!(c.cut_off.as_deref().is_some_and(|w| w.starts_with("packets couldn't be copied")), "{c:?}");
     fs::remove_dir_all(&d).unwrap();
 }
 

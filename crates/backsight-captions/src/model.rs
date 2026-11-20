@@ -220,6 +220,53 @@ mod tests {
         remove(dir.path()).unwrap();
     }
 
+    /// Hands out `steps` one read at a time: bytes, or an error of that kind.
+    struct Steps(Vec<Result<&'static [u8], io::ErrorKind>>);
+
+    impl Read for Steps {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            if self.0.is_empty() {
+                return Ok(0);
+            }
+            let bytes = self.0.remove(0)?;
+            buf[..bytes.len()].copy_from_slice(bytes);
+            Ok(bytes.len())
+        }
+    }
+
+    #[test]
+    fn a_download_arriving_in_pieces_survives_interruptions_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let no = AtomicBool::new(false);
+        let mut seen = vec![];
+        let pieces = Steps(vec![Ok(b"he"), Err(io::ErrorKind::Interrupted), Ok(b"l"), Ok(b"lo")]);
+        install(&HELLO, pieces, dir.path(), &mut |n| seen.push(n), &no).unwrap();
+        assert_eq!(seen, [2, 3, 5]);
+        let broken = Steps(vec![Ok(b"he"), Err(io::ErrorKind::ConnectionReset), Ok(b"llo")]);
+        let err = install(&HELLO, broken, dir.path(), &mut |_| {}, &no).unwrap_err();
+        assert_eq!(err, NO_NETWORK);
+        assert_eq!(plain("words", &"detail"), "words");
+    }
+
+    #[test]
+    fn files_already_there_are_not_downloaded_again() {
+        let dir = tempfile::tempdir().unwrap();
+        for f in FILES {
+            fs::File::create(dir.path().join(f.name)).unwrap().set_len(f.size).unwrap();
+        }
+        let mut calls = vec![];
+        download(dir.path(), |done, total| calls.push((done, total)), &AtomicBool::new(false)).unwrap();
+        assert_eq!(calls, [(download_size(), download_size())]);
+    }
+
+    #[test]
+    fn remove_reports_what_it_couldnt_delete() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join(WHISPER.name)).unwrap();
+        assert!(remove(dir.path()).is_err(), "a folder in the model's place");
+        assert!(super::dir().unwrap().ends_with("models"));
+    }
+
     #[test]
     fn release_files_are_pinned() {
         for f in FILES {

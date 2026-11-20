@@ -134,6 +134,10 @@ mod tests {
     fn nothing_is_sent_before_the_first_frame() {
         let mut p = Pacer::new(60, FREQ);
         assert_eq!((p.next_deadline(), p.poll(123)), (None, None));
+        assert_eq!(p.start(), None);
+        p.frame_arrived(500);
+        p.frame_arrived(900);
+        assert_eq!(p.start(), Some(500), "slot 0 is the first frame's arrival");
     }
 
     #[test]

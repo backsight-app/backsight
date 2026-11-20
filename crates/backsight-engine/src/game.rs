@@ -320,6 +320,21 @@ mod tests {
     }
 
     #[test]
+    fn a_program_is_named_by_its_label_or_else_its_file() {
+        let exe = std::fs::File::open(std::env::current_exe().unwrap()).unwrap();
+        let program = |label: &str| Program {
+            pid: 1,
+            process: Arc::new(exe.try_clone().unwrap().into()),
+            exe: r"C:\Games\Doom Eternal\DOOMEternalx64vk.exe".into(),
+            label: label.into(),
+            window: 0,
+            started: 0,
+        };
+        assert_eq!(program_name(&program("DOOM Eternal")).as_deref(), Some("DOOM Eternal"));
+        assert_eq!(program_name(&program("")).as_deref(), Some("DOOMEternalx64vk"));
+    }
+
+    #[test]
     fn a_program_settles_after_steady_focus() {
         let s = CLOCK_HZ;
         let mut steady = Steady::default();
@@ -342,5 +357,24 @@ mod tests {
         steady.retry();
         assert_eq!(steady.observe(Some(Some(5)), 24 * s), None);
         assert_eq!(steady.observe(Some(Some(5)), 27 * s), Some(Some(5)), "settles again");
+    }
+
+    #[test]
+    fn the_watch_polls_until_it_is_dropped() {
+        let polls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = polls.clone();
+        let watch = GameWatch::start(None, move |_| {
+            counted.fetch_add(1, Relaxed);
+        })
+        .unwrap();
+        let started = std::time::Instant::now();
+        while polls.load(Relaxed) < 2 {
+            assert!(started.elapsed() < Duration::from_secs(5), "it looks every 100 ms");
+            thread::sleep(Duration::from_millis(10));
+        }
+        drop(watch);
+        let after = polls.load(Relaxed);
+        thread::sleep(POLL * 3);
+        assert_eq!(polls.load(Relaxed), after, "the thread stopped");
     }
 }

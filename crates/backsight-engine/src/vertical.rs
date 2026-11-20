@@ -451,15 +451,20 @@ mod tests {
 
     /// A 1 s, 640×360 x264 clip as clips are saved.
     fn clip(path: &Path) {
+        clip_of(path, 30);
+    }
+
+    /// [`clip`], `frames` long at 30 fps.
+    fn clip_of(path: &Path, frames: i64) {
         let c = Catalog::get();
         let container = Catalog::clip_container(c.container("mp4").unwrap());
         let venc = c.video_encoder("x264").unwrap();
         let gh = needs_global_header(&container);
         let mut video = VideoSession::open(venc, &resolve(&c.video_options(venc), None), 640, 360, 30, gh).unwrap();
         let mut mux = Muxer::create(path, &container, &video.params(), &[]).unwrap();
-        for i in 0..30 {
+        for i in 0..frames {
             for (data, _) in video.planes_mut().unwrap().into_iter().flatten() {
-                data.fill((i * 8) as u8);
+                data.fill((i * 8 % 256) as u8);
             }
             video.send(i, &mut |p| mux.write(Track::Video, &p).unwrap()).unwrap();
         }
@@ -511,6 +516,18 @@ mod tests {
         });
         assert_eq!(fs::read(d.join("vertical-jobs.json.damaged")).unwrap(), b"{ not json", "kept aside");
         assert_eq!(edit_at(Some(record.clone()), |e| e.clone()), vec![entry], "crash counting goes on");
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_record_that_cant_be_read_now_is_left_alone() {
+        let d = dir("record-unreadable");
+        let record = d.join("vertical-jobs.json");
+        fs::create_dir(&record).unwrap(); // reading it fails, but not because it's missing or damaged
+        let entry = Entry { wide: d.join("a.mp4"), keep_wide: true, tries: 0, made: None };
+        edit_at(Some(record.clone()), |e| e.push(entry));
+        assert!(record.is_dir(), "not set aside");
+        assert_eq!(files(&d), vec![record], "nothing written over it");
         let _ = fs::remove_dir_all(&d);
     }
 
@@ -604,6 +621,8 @@ mod tests {
 
         let jobs = unfinished_in(&d, &d);
         assert_eq!(jobs, vec![resumed(d.join("a.mp4"), false, false), resumed(game.join("b.mp4"), true, false)]);
+        let recorded = edit(|e| e.iter().filter(|e| e.wide.starts_with(&d)).count());
+        assert_eq!(recorded, 2, "jobs found by their files are written down too");
         assert!(!d.join("c (vertical).mp4.part").exists());
         assert!(d.join("d.mp4.part").exists() && d.join("e (vertical).mp4").exists());
         jobs.iter().for_each(|j| forget(&j.wide));
@@ -635,6 +654,80 @@ mod tests {
         forget(&wide);
         let _ = fs::remove_dir_all(&d);
         let _ = fs::remove_dir_all(&now);
+    }
+
+    #[test]
+    fn a_recorded_job_found_only_in_the_record_keeps_its_tries_and_what_was_made() {
+        let (d, now) = (dir("record-only"), dir("record-only-new-folder"));
+        let wide = d.join("a.mp4");
+        fs::write(&wide, b"clip").unwrap();
+        Job::after_save(&wide, Shape::Both).unwrap();
+        let made = d.join("a (vertical).mp4");
+        edit(|e| {
+            e.iter_mut()
+                .filter(|x| same(&x.wide, &wide))
+                .for_each(|x| (x.tries, x.made) = (1, Some((made.clone(), true))))
+        });
+        let [job] = unfinished_in(&now, &d).try_into().unwrap();
+        assert_eq!(
+            job,
+            Job { wide: wide.clone(), keep_wide: true, resumed: true, cut_off: true, made: Some((made, true)) }
+        );
+        forget(&wide);
+        let _ = fs::remove_dir_all(&d);
+        let _ = fs::remove_dir_all(&now);
+    }
+
+    #[test]
+    fn a_clip_that_cant_be_moved_away_stays_wide_for_its_job() {
+        let d = dir("cant-move");
+        let wide = d.join("a.mp4"); // not there: moving it fails
+        let job = Job::after_save(&wide, Shape::Vertical).unwrap();
+        assert_eq!(job.source(), wide, "the vertical clip comes next to it");
+        forget(&wide);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_job_is_counted_as_started_while_it_is_made() {
+        let _turn = one_run_at_a_time();
+        let d = dir("counted");
+        let wide = d.join("a.mp4");
+        clip_of(&wide, 150);
+        let job = Job::after_save(&wide, Shape::Both).unwrap();
+        let tries = || edit(|e| e.iter().find(|x| same(&x.wide, &wide)).map(|x| x.tries));
+        let seen = std::thread::scope(|s| {
+            let run = s.spawn(|| job.run(&x264(), |_| None));
+            let mut seen = Vec::new();
+            while !run.is_finished() {
+                let now = tries();
+                if seen.last() != Some(&now) {
+                    seen.push(now);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            run.join().unwrap().unwrap();
+            seen
+        });
+        // A crash now would be counted at the next start (`cut_off`).
+        assert!(seen.contains(&Some(1)), "{seen:?}");
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_clip_written_down_as_made_but_gone_is_made_again() {
+        let _turn = one_run_at_a_time();
+        let d = dir("made-gone");
+        let wide = d.join("a.mp4");
+        clip(&wide);
+        Job::after_save(&wide, Shape::Vertical).unwrap();
+        let vertical = d.join("a (vertical).mp4");
+        let made = |e: &mut Entry| e.made = Some((vertical.clone(), false));
+        edit(|entries| entries.iter_mut().filter(|e| same(&e.wide, &wide)).for_each(made));
+        let [job] = unfinished_in(&d, &d).try_into().unwrap();
+        assert_eq!(job.run(&x264(), |_| None).unwrap(), vertical);
+        assert!(vertical.is_file() && fs::metadata(&vertical).unwrap().len() > 1000, "a real clip");
+        let _ = fs::remove_dir_all(&d);
     }
 
     #[test]

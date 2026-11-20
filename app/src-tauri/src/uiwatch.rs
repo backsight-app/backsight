@@ -527,4 +527,41 @@ mod tests {
         }
         assert_eq!(recovery(None, 0), Recovery::Log);
     }
+
+    #[test]
+    fn ticks_exactly_late_tick_apart_still_count_towards_a_freeze() {
+        let (mut w, t0) = (MainWatch::default(), Instant::now());
+        assert_eq!(w.tick(t0, true), Tick::Post);
+        assert_eq!(w.tick(t0 + LATE_TICK, false), Tick::Wait);
+        assert_eq!(w.tick(t0 + LATE_TICK * 2, false), Tick::Froze(LATE_TICK * 2));
+    }
+
+    #[test]
+    fn every_failure_kind_has_its_own_words() {
+        let names: Vec<_> = [Some(0), Some(1), Some(2), Some(3), Some(4), Some(5), Some(6), Some(7), None]
+            .into_iter()
+            .map(kind_name)
+            .collect();
+        assert_eq!(names[0], "the WebView2 browser process ended");
+        assert_eq!(names[7], "a WebView2 process ended");
+        assert_eq!(names[8], names[7]);
+        assert_eq!(names[..8].iter().collect::<HashSet<_>>().len(), 8, "{names:?}");
+    }
+
+    #[test]
+    fn window_state_is_remembered_and_forgotten() {
+        lock(&GAVE_UP).get_or_insert_default().insert("test-gave-up".to_owned());
+        assert!(given_up("test-gave-up") && !given_up("test-other"));
+        RECREATING.store(true, Relaxed);
+        assert!(recreating());
+        recreated();
+        assert!(!recreating());
+
+        let page = Page { last: Instant::now(), visible: true, stalled: false };
+        lock(&PAGES).get_or_insert_default().insert("test-gone".to_owned(), page);
+        lock(&HOOKED).get_or_insert_default().insert("test-gone".to_owned());
+        forget("test-gone");
+        assert!(!lock(&PAGES).as_ref().unwrap().contains_key("test-gone"));
+        assert!(!lock(&HOOKED).as_ref().unwrap().contains("test-gone"));
+    }
 }

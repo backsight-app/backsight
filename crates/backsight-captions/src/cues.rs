@@ -306,6 +306,8 @@ mod tests {
         );
         assert_eq!(s[0].text, " café");
         assert!(split_segment(&spans, &[], 0.0).is_empty());
+        // A pause of exactly a second doesn't split.
+        assert_eq!(split_segment(&spans, &[tok(" a", 0, 500), tok(" b", 1500, 1900)], 0.0).len(), 1);
     }
 
     #[test]
@@ -313,6 +315,7 @@ mod tests {
         assert_eq!(wrap("one two three", 7), ["one two", "three"]);
         assert_eq!(wrap("  spaced   out  ", 42), ["spaced out"]);
         assert_eq!(wrap("abcdefghij", 4), ["abcd", "efgh", "ij"]);
+        assert_eq!(wrap("ab cd", 4), ["ab", "cd"], "the space counts");
         assert_eq!(wrap("日本語のテキスト", 3), ["日本語", "のテキ", "スト"], "counts characters, not bytes");
         assert!(wrap("", 42).is_empty());
         let long = "Okay, we are pushing the left side now. Watch the corner, there is one player behind the boxes.";
@@ -334,6 +337,18 @@ mod tests {
             seg(7000, 7000, "zero length"),
         ]);
         assert_eq!(c, [Cue { start_ms: 4000, end_ms: 5000, lines: vec!["Push left.".into()] }]);
+        assert!(is_noise("*laughs*") && is_noise("♪ la la ♪"));
+        assert!(!is_noise("(laughs) Nice one") && !is_noise("Nice one [sic]"), "only a whole tag is noise");
+        let mut edge = seg(0, 1000, "Maybe.");
+        edge.no_speech = NO_SPEECH;
+        assert_eq!(cues(&[edge]).len(), 1, "Whisper's own threshold is still speech");
+    }
+
+    #[test]
+    fn a_cue_cut_to_nothing_by_the_next_is_dropped() {
+        let two_lines = "Behind you, behind you, turn around now, quickly!";
+        let c = cues(&[seg(0, 2000, two_lines), seg(0, 1000, "Go.")]);
+        assert_eq!(c, [Cue { start_ms: 0, end_ms: 1000, lines: vec!["Go.".into()] }]);
     }
 
     #[test]

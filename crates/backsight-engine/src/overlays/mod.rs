@@ -227,6 +227,11 @@ fn reader(name: &str) -> Option<fn() -> Option<Saved>> {
     Some(read)
 }
 
+#[cfg(fuzzing)]
+pub(crate) fn nvidia_saved(values: &BTreeMap<String, u32>, overlay_running: bool) -> Option<Saved> {
+    nvidia::saved(Some(values.clone()), overlay_running)
+}
+
 /// PrintScreen opens Snipping Tool unless `PrintScreenKeyForSnippingEnabled` is 0.
 fn snipping() -> Option<Saved> {
     // shortcut: a missing value keeps the default (on, as on Windows 11 22621+); Windows 10 PCs
@@ -663,6 +668,78 @@ mod tests {
         let idle = all_defaults();
         assert!(!explained(&idle, "Alt+R"), "an app that isn't running holds nothing");
         assert!(explained(&idle, "Win+PrintScreen"), "Windows has no process to look for");
+    }
+
+    /// Holds `keys` (modifiers, virtual-key code) with RegisterHotKey on another thread, as another
+    /// program would, while `f` runs. False (and `f` not run) when one is already taken on this PC
+    /// or the session refuses hotkeys, so the test skips rather than fails.
+    fn holding(keys: &[(u32, u32)], f: impl FnOnce()) -> bool {
+        use windows::Win32::UI::Input::KeyboardAndMouse::HOT_KEY_MODIFIERS;
+        let (ready_tx, ready) = std::sync::mpsc::channel();
+        let (done, done_rx) = std::sync::mpsc::channel::<()>();
+        let keys = keys.to_vec();
+        let holder = std::thread::spawn(move || {
+            let mut registered = 0;
+            for (i, &(mods, vk)) in (0x100..).zip(&keys) {
+                // SAFETY: thread hotkeys, unregistered on this thread below.
+                if unsafe { RegisterHotKey(None, i, HOT_KEY_MODIFIERS(mods), vk) }.is_err() {
+                    break;
+                }
+                registered += 1;
+            }
+            ready_tx.send(registered == keys.len()).unwrap();
+            let _ = done_rx.recv();
+            for (i, _) in (0x100..).zip(&keys[..registered]) {
+                // SAFETY: registered on this thread above.
+                let _ = unsafe { UnregisterHotKey(None, i) };
+            }
+        });
+        let all = ready.recv().unwrap();
+        if all {
+            f();
+        } else {
+            eprintln!("skipped: a test hotkey is already taken on this PC");
+        }
+        drop(done);
+        holder.join().unwrap();
+        all
+    }
+
+    #[test]
+    fn keys_another_program_holds_are_found() {
+        let key = |s: &str| -> Hotkey { s.parse().unwrap() };
+        // Ctrl+F12 isn't plain F12; Ctrl+F20 is held with Ctrl, not alone.
+        let held_all = holding(&[(MOD_CONTROL.0, 0x7B), (0, 0x82), (MOD_CONTROL.0, 0x83)], || {
+            assert!(held(&key("Ctrl+F12")) && held(&key("F19")) && held(&key("Ctrl+F20")));
+            assert!(!held(&key("F20")));
+            let hotkeys = BTreeMap::from([(Action::SaveReplay, "Ctrl+F20".to_owned())]);
+            let settings = Settings { hotkeys, ..Default::default() };
+            let taken = scan(&settings).taken;
+            assert_eq!(taken, [Taken { action: Action::SaveReplay, key: "Ctrl+F20".into() }]);
+        });
+        assert!(!held_all || !held(&key("Ctrl+F12")), "free again");
+    }
+
+    #[test]
+    fn this_pc_has_windows_programs_and_this_process() {
+        assert!(apps().iter().any(|a| a.id == "windows" && !a.keys.is_empty()));
+        let here = Here::read();
+        assert!(!here.programs.is_empty() && !here.packages.is_empty());
+        let exe = std::env::current_exe().unwrap();
+        let exe = exe.file_name().unwrap().to_string_lossy().to_lowercase();
+        assert!(processes().contains(&exe), "{exe}");
+    }
+
+    #[test]
+    fn registry_values_read_back() {
+        const NT: &str = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion";
+        assert_eq!(reg_dword(HKEY_LOCAL_MACHINE, NT, "CurrentMajorVersionNumber"), Some(10));
+        let build = reg_string(HKEY_LOCAL_MACHINE, NT, "CurrentBuildNumber").unwrap();
+        assert!(build.len() >= 5 && build.bytes().all(|b| b.is_ascii_digit()), "{build}");
+        assert_eq!(reg_dword(HKEY_LOCAL_MACHINE, NT, "NoSuchValueHere"), None);
+        assert_eq!(reg_string(HKEY_LOCAL_MACHINE, NT, "NoSuchValueHere"), None);
+        assert!(subkeys(HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft").iter().any(|k| k == "Windows"));
+        assert!(subkeys(HKEY_LOCAL_MACHINE, r"SOFTWARE\No Such Key Here").is_empty());
     }
 
     #[test]

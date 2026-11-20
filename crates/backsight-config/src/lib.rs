@@ -388,6 +388,7 @@ mod tests {
         s.general.start_with_windows = true;
         s.save_to(&old.join("settings.toml")).unwrap();
         fs::write(old.join("settings.backup.toml"), "kept").unwrap();
+        fs::create_dir_all(old.join("some folder")).unwrap(); // only files are copied
         let new = root.join("Backsight/config/settings.toml");
         let missing = root.join("Pictures/Clipwise");
 
@@ -451,7 +452,9 @@ mod tests {
         text = text.replacen("hdr = false\n", "", 1).replacen("captions = false\n", "", 1);
         text = text.replace("name_after_game = true\n", "").replace("folder_per_game = false\n", "");
         text = text.replace("capture_target = \"monitor\"\n", "").replace("capture_monitor = \"\"\n", "");
+        text = text.replace("clip_shape = \"wide\"\n", "");
         assert!(!text.contains("sounds") && !text.contains("_game") && !text.contains("capture_target"), "{text}");
+        assert!(!text.contains("clip_shape"), "{text}");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, text).unwrap();
         let loaded = Settings::load_from(&path).unwrap();
@@ -460,6 +463,7 @@ mod tests {
         assert_eq!(loaded.general.popup_position, None, "no saved spot: the corner");
         assert!(loaded.general.name_after_game && !loaded.general.folder_per_game, "file naming defaults");
         assert_eq!((loaded.video.capture_target.as_str(), loaded.video.capture_monitor.as_str()), ("monitor", ""));
+        assert_eq!(loaded, Settings::default(), "every missing field takes its default");
         fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 
@@ -504,8 +508,35 @@ mod tests {
 
     #[test]
     fn default_hotkeys_are_valid_and_conflict_free() {
-        let parsed = Settings::default().parsed_hotkeys().expect("default hotkeys parse");
+        let s = Settings::default();
+        let parsed = s.parsed_hotkeys().expect("default hotkeys parse");
         assert!(conflicts(&parsed).is_empty());
+        assert_eq!(parsed.len(), s.hotkeys.values().filter(|c| !c.is_empty()).count());
+        assert!(!parsed.is_empty());
+    }
+
+    #[test]
+    fn an_unreadable_settings_file_is_an_error_not_the_defaults() {
+        let dir = temp_path("unreadable");
+        fs::create_dir_all(&dir).unwrap(); // a folder where the file should be
+        assert!(matches!(Settings::load_from(&dir), Err(SettingsError::Io(_))));
+        fs::remove_dir_all(dir.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn folders_default_under_the_user_folders_and_settings_under_app_data() {
+        let mut g = Settings::default().general;
+        g.video_folder = r"D:\Clips".into();
+        g.screenshot_folder = r"D:\Shots".into();
+        assert_eq!((g.video_dir(), g.screenshot_dir()), (Some(r"D:\Clips".into()), Some(r"D:\Shots".into())));
+        g.video_folder.clear();
+        g.screenshot_folder.clear();
+        let (videos, shots) = (g.video_dir().unwrap(), g.screenshot_dir().unwrap());
+        assert!(videos.ends_with("Backsight") && videos.is_absolute(), "{videos:?}");
+        assert!(shots.ends_with("Backsight") && shots.is_absolute() && shots != videos, "{shots:?}");
+        let app = app_dir().unwrap();
+        assert!(app.ends_with("Backsight") && app.is_absolute(), "{app:?}");
+        assert_eq!(Settings::default_path().unwrap(), app.join("config").join("settings.toml"));
     }
 
     #[test]

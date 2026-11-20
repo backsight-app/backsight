@@ -94,9 +94,35 @@ fn windows_build() -> Option<u32> {
 }
 
 /// Signals when Windows has finished the activation. Objects made with `implement` are agile
-/// (`IAgileObject` and the free-threaded marshaler), as the completion handler must be.
+/// (`IAgileObject` and the free-threaded marshaler), as the completion handler must be. It also
+/// owns the activation parameters: Microsoft doesn't say Windows copies them, and Windows keeps
+/// the handler alive until it has called it, even after we stop waiting.
 #[implement(IActivateAudioInterfaceCompletionHandler)]
-struct Activated(SyncSender<()>);
+struct Activated(SyncSender<()>, #[allow(dead_code)] Owned);
+
+/// Owns the `Params` allocation through a raw pointer, so the pointers into it handed to Windows
+/// stay valid however this wrapper moves (a moved `Box` would invalidate them under Stacked Borrows).
+struct Owned(*mut Params);
+
+// SAFETY: the pointee is plain data that only Windows reads; ours only frees it, from any thread.
+unsafe impl Send for Owned {}
+// SAFETY: as above; no shared mutation from our side.
+unsafe impl Sync for Owned {}
+
+impl Drop for Owned {
+    fn drop(&mut self) {
+        // SAFETY: made by Box::into_raw in `open` and freed only here, once.
+        drop(unsafe { Box::from_raw(self.0) });
+    }
+}
+
+/// The process-loopback parameters and the VT_BLOB `PROPVARIANT` pointing at them, at a fixed
+/// heap address. `PROPVARIANT`'s `Drop` calls PropVariantClear, which would free `params` as if
+/// Windows had allocated it (heap corruption), so `prop` is never dropped.
+struct Params {
+    params: AUDIOCLIENT_ACTIVATION_PARAMS,
+    prop: ManuallyDrop<PROPVARIANT>,
+}
 
 impl IActivateAudioInterfaceCompletionHandler_Impl for Activated_Impl {
     fn ActivateCompleted(&self, _: Ref<'_, IActivateAudioInterfaceAsyncOperation>) -> Result<()> {
@@ -106,33 +132,44 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Activated_Impl {
 }
 
 fn open(pid: u32) -> Result<Device> {
-    let mut params = AUDIOCLIENT_ACTIVATION_PARAMS {
-        ActivationType: AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
-        Anonymous: AUDIOCLIENT_ACTIVATION_PARAMS_0 {
-            ProcessLoopbackParams: AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
-                TargetProcessId: pid,
-                ProcessLoopbackMode: PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE,
+    let raw = Box::into_raw(Box::new(Params {
+        params: AUDIOCLIENT_ACTIVATION_PARAMS {
+            ActivationType: AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
+            Anonymous: AUDIOCLIENT_ACTIVATION_PARAMS_0 {
+                ProcessLoopbackParams: AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
+                    TargetProcessId: pid,
+                    ProcessLoopbackMode: PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE,
+                },
             },
         },
+        prop: ManuallyDrop::new(PROPVARIANT::default()),
+    }));
+    let owned = Owned(raw);
+    // SAFETY: `raw` is a live, uniquely owned allocation; these place projections make no references.
+    let blob = BLOB {
+        cbSize: size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32,
+        pBlobData: unsafe { &raw mut (*raw).params }.cast(),
     };
-    // A VT_BLOB pointing at `params`. `PROPVARIANT`'s `Drop` calls PropVariantClear, which
-    // would free `params` as if Windows had allocated it (heap corruption), so never drop it.
-    let blob = BLOB { cbSize: size_of_val(&params) as u32, pBlobData: (&raw mut params).cast() };
-    let prop = ManuallyDrop::new(PROPVARIANT {
-        Anonymous: PROPVARIANT_0 {
-            Anonymous: ManuallyDrop::new(PROPVARIANT_0_0 {
-                vt: VT_BLOB,
-                Anonymous: PROPVARIANT_0_0_0 { blob },
-                ..Default::default()
-            }),
-        },
-    });
+    // SAFETY: as above; writing a field that holds no resources (ManuallyDrop of a default value).
+    unsafe {
+        (*raw).prop = ManuallyDrop::new(PROPVARIANT {
+            Anonymous: PROPVARIANT_0 {
+                Anonymous: ManuallyDrop::new(PROPVARIANT_0_0 {
+                    vt: VT_BLOB,
+                    Anonymous: PROPVARIANT_0_0_0 { blob },
+                    ..Default::default()
+                }),
+            },
+        })
+    };
+    // SAFETY: as above; ManuallyDrop is repr(transparent), so the cast keeps the layout.
+    let prop: *const PROPVARIANT = unsafe { &raw const (*raw).prop }.cast();
     let (done, finished) = sync_channel(1);
-    let handler: IActivateAudioInterfaceCompletionHandler = Activated(done).into();
-    // SAFETY: `prop` and `params` outlive the wait for completion below; the handler is
-    // reference counted, so Windows keeps it alive even if we stop waiting.
+    let handler: IActivateAudioInterfaceCompletionHandler = Activated(done, owned).into();
+    // SAFETY: `prop` and the parameters it points at live in the handler's box, which Windows keeps
+    // (with the handler) until the activation completes, even if the wait below times out.
     let operation = unsafe {
-        ActivateAudioInterfaceAsync(VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, &IAudioClient::IID, Some(&*prop), &handler)?
+        ActivateAudioInterfaceAsync(VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, &IAudioClient::IID, Some(prop), &handler)?
     };
     finished.recv_timeout(ACTIVATE_TIMEOUT).map_err(|_| Error::from(ERROR_TIMEOUT))?;
     let (mut result, mut client) = (HRESULT(0), None);

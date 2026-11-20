@@ -140,6 +140,16 @@ mod tests {
         assert_eq!(saved.keys.len(), 6);
     }
 
+    #[test]
+    fn keys_inside_lists_are_found() {
+        let mods = modules(&[(
+            "CmdPal",
+            r#"{"Hotkeys":[{"win":false,"ctrl":true,"alt":false,"shift":false,"code":75,"key":"K"}]}"#,
+        )]);
+        let saved = parse("{}", &mods, &[]).unwrap();
+        assert_eq!(saved.keys["CmdPal.Hotkeys.0"].as_ref().map(ToString::to_string).as_deref(), Some("Ctrl+K"));
+    }
+
     /// Shows what this PC has with --nocapture; never fails.
     #[test]
     fn reads_this_pc() {

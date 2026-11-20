@@ -297,6 +297,41 @@ mod tests {
     }
 
     #[test]
+    fn every_key_backsight_names_has_one_code() {
+        // Digits, letters, the keypad's digits, F1-F24 and every named key but NumpadEnter, which
+        // shares Enter's code.
+        let names: Vec<_> = (0..=0xFF).filter_map(key_name).collect();
+        assert_eq!(names.len(), 10 + 26 + 10 + 24 + 37);
+        assert_eq!(names.iter().collect::<std::collections::HashSet<_>>().len(), names.len());
+    }
+
+    #[test]
+    fn a_dotnet_letter_d_is_a_key_not_a_digit() {
+        assert_eq!(dotnet_key("D").as_deref(), Some("D"));
+    }
+
+    #[test]
+    fn files_text_and_folders_are_read() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("a.ini");
+        std::fs::write(&p, "\u{feff}[A]\nx=1").unwrap();
+        assert_eq!(read_text(&p).as_deref(), Some("[A]\nx=1"), "byte-order mark dropped");
+        assert_eq!(read_capped(&d.path().join("gone.ini")), None);
+        assert_eq!(utf16_le(&[b'h', 0, b'i', 0, 7]), "hi");
+        assert!(env_dir("SystemRoot").is_some_and(|p| p.join("explorer.exe").is_file()));
+        assert_eq!(env_dir("NO_SUCH_VARIABLE_HERE"), None);
+    }
+
+    #[test]
+    fn registry_numbers_and_text_are_read() {
+        use windows::Win32::System::Registry::HKEY_LOCAL_MACHINE;
+        let v = reg_values(HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion").unwrap();
+        assert_eq!(v.get("CurrentMajorVersionNumber"), Some(&RegValue::Dword(10)));
+        assert!(matches!(v.get("CurrentBuildNumber"), Some(RegValue::Text(t)) if t.parse::<u32>().is_ok()));
+        assert_eq!(reg_values(HKEY_LOCAL_MACHINE, r"SOFTWARE\No Such Key Here"), None);
+    }
+
+    #[test]
     fn ini_sections() {
         let text = "[A]\nx=1\n[Hotkeys]\n; note\nOBSBasic.Screenshot = {\"bindings\":[]}\n[b]\ny=2";
         assert_eq!(ini_section(text, "hotkeys"), vec![("OBSBasic.Screenshot", "{\"bindings\":[]}")]);

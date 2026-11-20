@@ -185,6 +185,15 @@ OBSBasic.ResetStats={"bindings":[{"key":"OBS_KEY_MOUSE1"},{"key":"OBS_KEY_ASCIIT
             ("OBS_KEY_NUM0", "Numpad0"),
             ("OBS_KEY_MINUS", "Minus"),
             ("OBS_KEY_MOUSE4", "Mouse4"),
+            ("OBS_KEY_RETURN", "Enter"),
+            ("OBS_KEY_ENTER", "NumpadEnter"),
+            ("OBS_KEY_NUMASTERISK", "NumpadMultiply"),
+            ("OBS_KEY_NUMPLUS", "NumpadAdd"),
+            ("OBS_KEY_NUMMINUS", "NumpadSubtract"),
+            ("OBS_KEY_NUMPERIOD", "NumpadDecimal"),
+            ("OBS_KEY_NUMSLASH", "NumpadDivide"),
+            ("OBS_KEY_PLUS", "Equal"),
+            ("OBS_KEY_APOSTROPHE", "Quote"),
         ] {
             let b = serde_json::json!({ "key": obs });
             assert_eq!(binding(&b).map(|h| h.to_string()).as_deref(), Some(ours), "{obs}");

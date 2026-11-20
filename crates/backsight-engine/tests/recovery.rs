@@ -130,6 +130,17 @@ fn a_killed_recording_is_recovered_next_to_the_files_it_must_not_touch() {
         assert!(find_interrupted(&d).is_empty(), "{id}: a recovered recording isn't offered again");
         let names = fs::read_dir(&d).unwrap().count();
         assert_eq!(names, untouched.len() + 2, "{id}: only the recovered file was added");
+        if ext == "mkv" {
+            // Its sound alone plays, but without video it isn't a recording worth recovering.
+            let sound = d.join("Backsight 2026-11-10 16.00.00.mkv.recording.part");
+            let ffmpeg = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../third_party/ffmpeg/bin/ffmpeg.exe");
+            let mut cmd = Command::new(ffmpeg);
+            cmd.args(["-v", "error", "-i"]).arg(&r.path).args(["-vn", "-c", "copy", "-f", "matroska"]).arg(&sound);
+            let out = cmd.output().unwrap();
+            assert!(out.status.success(), "ffmpeg failed: {}", String::from_utf8_lossy(&out.stderr));
+            let e = recover(&sound, None).unwrap_err();
+            assert!(e.contains("nothing it can play"), "{e}");
+        }
         fs::remove_dir_all(&d).unwrap();
     }
 }
@@ -211,6 +222,20 @@ fn a_copy_that_cant_be_written_leaves_a_good_recording_as_it_was() {
     assert!(!chapters.exists(), "the stray .chapters.part is removed");
     assert_eq!(fs::read(&r.original).unwrap(), killed);
     assert_eq!(fs::read_dir(&d).unwrap().count(), 2, "the recovered file and the original");
+    fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn a_folder_that_refuses_new_files_is_explained_not_retried() {
+    let d = dir("no-new-files");
+    let part = d.join(format!("{NAME}.mkv.recording.part"));
+    fs::write(&part, b"bytes").unwrap();
+    icacls(&d, &["/deny", "*S-1-1-0:(WD)"]); // no new files in the folder itself
+    let e = recover(&part, None);
+    icacls(&d, &["/reset", "/T"]);
+    let e = e.unwrap_err();
+    assert!(e.contains("couldn't write the recovered video"), "{e}");
+    assert_eq!(fs::read(&part).unwrap(), b"bytes");
     fs::remove_dir_all(&d).unwrap();
 }
 

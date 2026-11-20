@@ -710,10 +710,14 @@ pub(crate) fn to_us(v: i64, tb: ffi::AVRational) -> i64 {
     rescale(v, i64::from(tb.num), i64::from(tb.den), 1, 1_000_000)
 }
 
-/// `v × (num1/den1) ÷ (num2/den2)`, rounded to nearest, without overflow.
+/// `v × (num1/den1) ÷ (num2/den2)`, rounded to nearest, without overflow: a result past i64 is
+/// capped, and a zero divisor (a damaged file's time base) gives 0.
 pub(crate) fn rescale(v: i64, num1: i64, den1: i64, num2: i64, den2: i64) -> i64 {
     let (n, d) = (i128::from(v) * i128::from(num1) * i128::from(den2), i128::from(den1) * i128::from(num2));
-    ((n + n.signum() * d / 2) / d) as i64
+    if d == 0 {
+        return 0;
+    }
+    ((n + n.signum() * d / 2) / d).clamp(i64::MIN.into(), i64::MAX.into()) as i64
 }
 
 fn to_i32(v: u32) -> Result<i32> {
@@ -868,5 +872,83 @@ mod tests {
         assert_eq!(to_us(-1, ra(1, 60)), -16_667);
         assert_eq!(to_us(1024, ra(1, 48_000)), 21_333);
         assert_eq!(rescale(1_000_000, 1, 1_000_000, 1, 90_000), 90_000);
+        assert_eq!(rescale(3, 2, 1, 3, 1), 2, "3 × 2/1 ÷ 3/1");
+    }
+
+    #[test]
+    fn the_keyframe_interval_follows_the_encoder() {
+        crate::ffmpeg::errors_only_logging();
+        let enc = Catalog::get().video_encoder("x264").unwrap();
+        let mut values = default_values(enc);
+        values.insert("keyint_sec".into(), 5.into());
+        let mut s = VideoSession::open(enc, &values, 256, 144, 30, true).unwrap();
+        assert_eq!(s.keyframe_interval_us(), 5_000_000);
+        // SAFETY: a plain integer field of the open context, only read back below.
+        unsafe { (*s.ctx.as_mut_ptr()).gop_size = 1 };
+        assert_eq!(s.keyframe_interval_us(), 2_000_000, "every frame a keyframe: no interval");
+    }
+
+    #[test]
+    fn video_packets_keep_their_keyframe_flag_and_duration() {
+        crate::ffmpeg::errors_only_logging();
+        let enc = Catalog::get().video_encoder("x264").unwrap();
+        let mut s = VideoSession::open(enc, &default_values(enc), 256, 144, 30, true).unwrap();
+        let mut got = vec![];
+        for i in 0..10 {
+            s.send(i, &mut |p| got.push((p.keyframe, p.duration_us))).unwrap();
+        }
+        s.finish(&mut |p| got.push((p.keyframe, p.duration_us))).unwrap();
+        assert_eq!(got.len(), 10);
+        assert!(got[0].0 && !got[1..].iter().any(|p| p.0), "{got:?}");
+        assert!(got.iter().all(|p| p.1 == 33_333), "{got:?}");
+    }
+
+    /// The samples written to the frame waiting for the encoder, as f32 or i16 values.
+    fn waiting(s: &AudioSession, plane: usize, n: usize) -> Vec<f32> {
+        // SAFETY: the frame holds at least `n` samples of its format in `plane`.
+        unsafe {
+            match s.frame.format {
+                ffi::AV_SAMPLE_FMT_S16 => {
+                    (0..n).map(|i| f32::from(s.frame.data[plane].cast::<i16>().add(i).read_unaligned())).collect()
+                }
+                _ => (0..n).map(|i| s.frame.data[plane].cast::<f32>().add(i).read_unaligned()).collect(),
+            }
+        }
+    }
+
+    #[test]
+    fn audio_samples_land_in_their_channel() {
+        crate::ffmpeg::errors_only_logging();
+        let c = Catalog::get();
+        let two = [0.5, -0.5, 0.25, -0.25];
+        // AAC takes planar floats: one plane per channel.
+        let aac = c.audio_encoder("aac").unwrap();
+        let mut s = AudioSession::open(aac, &crate::catalog::resolve(&aac.options, None), 48_000, 2, true).unwrap();
+        s.push(&two, &mut |_| panic!("not a whole frame yet")).unwrap();
+        assert_eq!((waiting(&s, 0, 2), waiting(&s, 1, 2)), (vec![0.5, 0.25], vec![-0.5, -0.25]));
+        // 16-bit PCM takes them interleaved, in one plane.
+        let pcm = c.audio_encoder("pcm-16").unwrap();
+        let mut s = AudioSession::open(pcm, &crate::catalog::resolve(&pcm.options, None), 48_000, 2, true).unwrap();
+        s.push(&two, &mut |_| panic!("not a whole frame yet")).unwrap();
+        assert_eq!(waiting(&s, 0, 4), [16383.0, -16383.0, 8191.0, -8191.0]);
+    }
+
+    #[test]
+    fn audio_packets_last_one_frame() {
+        crate::ffmpeg::errors_only_logging();
+        let aac = Catalog::get().audio_encoder("aac").unwrap();
+        let mut s = AudioSession::open(aac, &crate::catalog::resolve(&aac.options, None), 48_000, 2, true).unwrap();
+        let mut durations = vec![];
+        s.push(&vec![0.25; 1024 * 2 * 4], &mut |p| durations.push(p.duration_us)).unwrap();
+        s.finish(&mut |p| durations.push(p.duration_us)).unwrap();
+        assert!(!durations.is_empty() && durations.iter().all(|d| *d == 21_333), "{durations:?}");
+    }
+
+    #[test]
+    fn rescale_of_damaged_values_caps_instead_of_wrapping() {
+        assert_eq!(rescale(i64::MAX, 1, 1, 1, 1_000_000), i64::MAX, "past i64 is capped");
+        assert_eq!(rescale(i64::MIN, 1, 1, 1, 1_000_000), i64::MIN);
+        assert_eq!(to_us(5, ra(1, 0)), 0, "a zero time base");
+        assert_eq!(rescale(5, 1, 1, 0, 1), 0);
     }
 }

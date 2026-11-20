@@ -309,7 +309,7 @@ pub fn scan(video_dir: Option<&Path>, screenshot_dir: Option<&Path>, cache_dir: 
         }
     }
     if !offline {
-        prune(&media_dir, &keep);
+        prune(&media_dir, &keep, CACHE_CAP_BYTES);
     }
 
     items.sort_by(|a, b| b.created_ms.cmp(&a.created_ms).then_with(|| a.path.cmp(&b.path)));
@@ -317,8 +317,8 @@ pub fn scan(video_dir: Option<&Path>, screenshot_dir: Option<&Path>, cache_dir: 
 }
 
 /// Deletes thumbnails and previews of files that are gone or changed, then the oldest previews
-/// (and after them thumbnails) until the folder is under [`CACHE_CAP_BYTES`].
-fn prune(media_dir: &Path, keep: &HashSet<String>) {
+/// (and after them thumbnails) until the folder is under `cap` bytes.
+fn prune(media_dir: &Path, keep: &HashSet<String>, cap: u64) {
     let Ok(entries) = fs::read_dir(media_dir) else { return };
     // (is a thumbnail, modified, size, path): previews sort first, oldest first.
     let mut kept = Vec::new();
@@ -349,7 +349,7 @@ fn prune(media_dir: &Path, keep: &HashSet<String>) {
     kept.sort();
     let mut total: u64 = kept.iter().map(|k| k.2).sum();
     for (_, _, len, p) in kept {
-        if total <= CACHE_CAP_BYTES {
+        if total <= cap {
             break;
         }
         if fs::remove_file(&p).is_ok() {
@@ -419,6 +419,7 @@ mod tests {
         let (new, old) = (1_000_000 + 5_000, 1_000_000 + SETTLING_MS);
         assert!(read.holds_for(&video, new), "a good entry is kept");
         assert!(!unreadable.holds_for(&video, new) && !no_thumb.holds_for(&video, new), "retried while new");
+        assert!(!unreadable.holds_for(&video, 1_000_000 + 90_000), "two minutes to settle");
         assert!(unreadable.holds_for(&video, old) && no_thumb.holds_for(&video, old), "then given up on");
         assert!(unreadable.holds_for(&hdr_shot, new), "not meant to be read");
         assert!(!Cached { bytes: 11, ..read.clone() }.holds_for(&video, old), "the file changed");
@@ -488,7 +489,90 @@ mod tests {
     fn preview_refuses_files_outside_the_library() {
         let cache = std::env::temp_dir();
         for path in [Path::new(r"C:\Windows\win.ini"), Path::new(r"C:\Videos\..\secret.mp4")] {
-            assert!(preview(path, path, &cache).is_err());
+            assert_eq!(preview(path, path, &cache).unwrap_err(), "That file isn't a video in your library.");
         }
+    }
+
+    #[test]
+    fn the_cache_is_in_the_app_folder() {
+        let d = cache_dir().unwrap();
+        assert!(d.is_absolute() && d.ends_with(r"Backsight\cache"), "{}", d.display());
+    }
+
+    #[test]
+    fn windows_folders_links_and_unreadable_files_are_skipped() {
+        let root = tempfile::tempdir().unwrap();
+        let r = root.path();
+        for dir in ["$RECYCLE.BIN", "System Volume Information", "Game", "Game/$keep", "elsewhere"] {
+            fs::create_dir(r.join(dir)).unwrap();
+        }
+        for file in ["$RECYCLE.BIN/a.mp4", "System Volume Information/b.mp4", "Game/$keep/c.mp4", "elsewhere/d.mp4"] {
+            fs::write(r.join(file), b"x").unwrap();
+        }
+        // A folder link named like a video is neither a clip nor followed.
+        let link = std::process::Command::new("cmd")
+            .args(["/c", "mklink", "/J"])
+            .arg(r.join("Game").join("link.mp4"))
+            .arg(r.join("elsewhere"))
+            .output()
+            .unwrap();
+        assert!(link.status.success(), "{}", String::from_utf8_lossy(&link.stderr));
+        let (mut seen, mut out) = (HashSet::new(), Vec::new());
+        walk(r, true, &mut seen, &mut out);
+        let mut found: Vec<_> = out.iter().map(|f| f.path.strip_prefix(r).unwrap().to_path_buf()).collect();
+        found.sort();
+        assert_eq!(found, [PathBuf::from("Game/$keep/c.mp4"), PathBuf::from("elsewhere/d.mp4")]);
+    }
+
+    #[test]
+    fn unreadable_videos_and_ordinary_screenshots_get_no_thumbnail_attempt() {
+        let d = tempfile::tempdir().unwrap();
+        for (name, kind) in [("a.mp4", MediaKind::Video), ("b.png", MediaKind::Screenshot)] {
+            let path = d.path().join(name);
+            fs::write(&path, b"not media").unwrap();
+            let ext = name.rsplit_once('.').unwrap().1.into();
+            let f = Found { path, kind, ext, bytes: 9, modified_ms: 0, created_ms: 0 };
+            let thumb = d.path().join(format!("{name}.jpg"));
+            let c = refresh(&f, None, &thumb);
+            assert!(!c.thumbnail_failed && !thumb.exists(), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_screenshot_the_webview_shows_keeps_no_cache_files() {
+        let root = tempfile::tempdir().unwrap();
+        let (shots, cache) = (root.path().join("shots"), root.path().join("cache"));
+        fs::create_dir_all(cache.join("library")).unwrap();
+        fs::create_dir(&shots).unwrap();
+        let shot = shots.join("Game 2026-11-18 12.00.00.png");
+        fs::write(&shot, b"png").unwrap();
+        let meta = fs::metadata(&shot).unwrap();
+        let key = cache_key(&shot, meta.len(), unix_ms(meta.modified().unwrap()));
+        let stale = cache.join("library").join(format!("{key}.jpg"));
+        fs::write(&stale, b"jpg").unwrap();
+        scan(None, Some(&shots), &cache);
+        assert!(!stale.exists());
+    }
+
+    #[test]
+    fn pruning_drops_old_leftovers_then_the_oldest_previews_first() {
+        let d = tempfile::tempdir().unwrap();
+        let hours_ago = |name: &str, len: usize, hours: u64| {
+            let p = d.path().join(name);
+            fs::write(&p, vec![0; len]).unwrap();
+            let f = fs::File::options().write(true).open(&p).unwrap();
+            f.set_modified(SystemTime::now() - Duration::from_secs(hours * 3600)).unwrap();
+            p
+        };
+        let crashed = hours_ago("old.mp4.part", 1, 2);
+        let writing = hours_ago("new.jpg.tmp", 1, 0);
+        let thumb = hours_ago("t.jpg", 100, 9);
+        let p1 = hours_ago("p1.mp4", 100, 8);
+        let p2 = hours_ago("p2.mp4", 300, 7);
+        let p3 = hours_ago("p3.mp4", 300, 6);
+        let keep = ["t", "p1", "p2", "p3"].map(String::from).into();
+        prune(d.path(), &keep, 500);
+        assert!(!crashed.exists() && writing.exists());
+        assert_eq!([thumb, p1, p2, p3].map(|p| p.exists()), [true, false, false, true]);
     }
 }

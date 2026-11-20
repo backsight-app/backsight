@@ -36,13 +36,20 @@ const ALL: [Cue; 9] = [
 
 /// Plays `cue` without waiting; a newer sound cuts off the one playing.
 pub fn play(cue: Cue) {
+    if let Some(wav) = sound(cue) {
+        crate::system::play_wav(wav);
+    }
+}
+
+/// The cue's WAV, made once; `None` for [`Cue::Quiet`].
+fn sound(cue: Cue) -> Option<&'static [u8]> {
     if cue == Cue::Quiet {
-        return;
+        return None;
     }
     static WAVS: OnceLock<Vec<Vec<u8>>> = OnceLock::new();
     let wavs = WAVS.get_or_init(|| ALL.iter().map(|&c| wav(c)).collect());
     let i = ALL.iter().position(|&c| c == cue).expect("every cue is in ALL");
-    crate::system::play_wav(&wavs[i]);
+    Some(&wavs[i])
 }
 
 /// `(frequency Hz, milliseconds)` notes played one after another; 0 Hz is a short burst of noise.
@@ -116,6 +123,56 @@ mod tests {
             let peak = w[44..].chunks(2).map(|b| i16::from_le_bytes([b[0], b[1]]).unsigned_abs()).max().unwrap();
             assert!((2000..i16::MAX as u16 / 3).contains(&peak), "{cue:?}: audible, not loud ({peak})");
         }
+    }
+
+    #[test]
+    fn each_cue_plays_its_own_sound_and_quiet_plays_none() {
+        assert_eq!(sound(Cue::Quiet), None);
+        for cue in ALL.into_iter().filter(|&c| c != Cue::Quiet) {
+            assert_eq!(sound(cue), Some(&wav(cue)[..]), "{cue:?}");
+        }
+    }
+
+    fn samples(cue: Cue) -> Vec<i16> {
+        wav(cue)[44..].chunks(2).map(|b| i16::from_le_bytes([b[0], b[1]])).collect()
+    }
+
+    fn crossings(s: &[i16]) -> usize {
+        s.windows(2).filter(|p| (p[0] < 0) != (p[1] < 0)).count()
+    }
+
+    fn peak(s: &[i16]) -> u16 {
+        s.iter().map(|v| v.unsigned_abs()).max().unwrap()
+    }
+
+    #[test]
+    fn the_header_says_mono_16_bit_at_the_rate() {
+        let w = wav(Cue::Marker);
+        let u16_at = |at: usize| u16::from_le_bytes([w[at], w[at + 1]]);
+        let u32_at = |at: usize| u32::from_le_bytes(w[at..at + 4].try_into().unwrap());
+        assert_eq!((u32_at(16), u16_at(20), u16_at(22)), (16, 1, 1), "PCM, mono");
+        assert_eq!((u32_at(24), u32_at(28), u16_at(32), u16_at(34)), (RATE, RATE * 2, 2, 16));
+    }
+
+    #[test]
+    fn a_note_is_a_tone_at_its_pitch_fading_in_decaying_and_fading_out() {
+        // Marker: one 1320 Hz note for 60 ms, so about 2 × 1320 × 0.06 = 158 zero crossings.
+        let s = samples(Cue::Marker);
+        assert!((150..=170).contains(&crossings(&s)), "{} zero crossings", crossings(&s));
+        let (ms, all) = (RATE as usize / 1000, peak(&s));
+        let (head, tail) = (peak(&s[..ms]), peak(&s[s.len() - ms..]));
+        assert!(head < all / 4 && tail < all / 4, "fades: {head} and {tail} at the ends, {all} peak");
+        let half = s.len() / 2;
+        let (early, late) = (peak(&s[10 * ms..half]), peak(&s[half..s.len() - 10 * ms]));
+        assert!(late < early * 9 / 10, "decays: {early} then {late}");
+    }
+
+    #[test]
+    fn the_screenshot_click_starts_with_noise() {
+        // 35 ms of noise crosses zero far more often than any note.
+        let s = samples(Cue::Screenshot);
+        let noise = &s[..RATE as usize * 35 / 1000];
+        assert!(crossings(noise) > noise.len() / 4, "{} crossings", crossings(noise));
     }
 
     #[test]

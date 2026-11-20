@@ -435,7 +435,71 @@ pub(crate) fn close_output(out: AVFormatContextOutput) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{chapter_spans, free_name};
+    use super::*;
+    use crate::{
+        Catalog,
+        catalog::resolve,
+        session::{AudioSession, VideoSession},
+    };
+
+    #[test]
+    fn only_some_containers_take_global_headers_or_fragments() {
+        let c = Catalog::get();
+        assert!(needs_global_header(c.container("mp4").unwrap()));
+        assert!(!needs_global_header(c.container("mpegts").unwrap()));
+        assert!(fragmented(&c.container("mp4-fragmented").unwrap().muxer_options));
+        assert!(!fragmented(&c.container("mp4").unwrap().muxer_options));
+        assert!(!fragmented(&BTreeMap::new()));
+    }
+
+    #[test]
+    fn chapters_are_numbered_from_one() {
+        // SAFETY: a fresh context of our own, freed (with its chapters) at the end.
+        unsafe {
+            let ctx = ffi::avformat_alloc_context();
+            push_chapter(ctx, MICROSECONDS, 0, 5, c"a").unwrap();
+            push_chapter(ctx, MICROSECONDS, 5, 9, c"b").unwrap();
+            let ids: Vec<_> = (0..2).map(|i| (**(*ctx).chapters.add(i)).id).collect();
+            ffi::avformat_free_context(ctx);
+            assert_eq!(ids, [1, 2]);
+        }
+    }
+
+    #[test]
+    fn packets_go_to_their_track_and_a_kept_part_stays() {
+        crate::ffmpeg::errors_only_logging();
+        let dir = std::env::temp_dir().join(format!("backsight-mux-tracks-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let c = Catalog::get();
+        let venc = c.video_encoder("x264").unwrap();
+        let mut video = VideoSession::open(venc, &resolve(&c.video_options(venc), None), 256, 144, 30, true).unwrap();
+        let aenc = c.audio_encoder("aac").unwrap();
+        let audio = AudioSession::open(aenc, &resolve(&aenc.options, None), 48_000, 2, true).unwrap();
+        let mut packets = vec![];
+        let mut keep = |p: Encoded| packets.push((p.data.to_vec(), p.pts_us, p.dts_us, p.duration_us, p.keyframe));
+        (0..3).for_each(|i| video.send(i, &mut keep).unwrap());
+        video.finish(&mut keep).unwrap();
+
+        let mut mux =
+            Muxer::create(&dir.join("t.mkv"), c.container("mkv").unwrap(), &video.params(), &[&audio.params()])
+                .unwrap();
+        // As if the clip started 10 s into the recording.
+        for (data, pts, dts, duration, key) in &packets {
+            let (pts_us, dts_us) = (pts + 10_000_000, dts + 10_000_000);
+            let p = Encoded { data, pts_us, dts_us, duration_us: *duration, keyframe: *key };
+            mux.write(Track::Video, &p).unwrap();
+        }
+        let end = packets.iter().map(|p| p.1 + p.3).max().unwrap() - packets[0].2;
+        assert_eq!(mux.end_us, end, "the end, from the first decode time");
+        let p = Encoded { data: &packets[0].0, pts_us: 0, dts_us: 0, duration_us: 0, keyframe: true };
+        assert_eq!(mux.write(Track::Audio(1), &p).unwrap_err(), "no such track in this file");
+
+        let part = mux.part().to_path_buf();
+        mux.keep_part_on_failure();
+        drop(mux);
+        assert!(part.exists(), "an unfinished recording keeps its .part");
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn a_clip_waiting_for_its_vertical_copy_keeps_its_name() {

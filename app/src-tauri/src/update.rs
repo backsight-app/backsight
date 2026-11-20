@@ -119,10 +119,7 @@ async fn download_and_install(app: &AppHandle, auto: bool) -> Result<(), String>
     let bytes = update
         .download(
             |chunk, total| {
-                done += chunk as u64;
-                // About every 1%, not every chunk.
-                if total.is_none_or(|t| done - shown >= t / 100) {
-                    shown = done;
+                if progressed(&mut done, &mut shown, chunk, total) {
                     let _ = app.emit("update-progress", Progress { done, total });
                 }
             },
@@ -149,6 +146,16 @@ async fn download_and_install(app: &AppHandle, auto: bool) -> Result<(), String>
         app.restart();
     }
     Err(err)
+}
+
+/// Adds a downloaded `chunk` to `done`; whether to show it: about every 1%, not every chunk.
+fn progressed(done: &mut u64, shown: &mut u64, chunk: usize, total: Option<u64>) -> bool {
+    *done += chunk as u64;
+    let due = total.is_none_or(|t| *done - *shown >= t / 100);
+    if due {
+        *shown = *done;
+    }
+    due
 }
 
 /// Only a copy the installer put there updates itself: the installer always installs to its own
@@ -202,6 +209,32 @@ mod tests {
         assert!(plain(Error::SignatureUtf8("x".into())).contains("safety check"));
         assert!(plain(Error::MissingSignedVersion).contains("nothing was installed"));
         assert!(plain(Error::EmptyEndpoints).starts_with("Backsight couldn't update"));
+        assert!(plain(Error::ReleaseNotFound).contains("no Backsight release"));
+    }
+
+    #[test]
+    fn an_update_found_is_ready_and_installs_at_start_once_per_version() {
+        *crate::lock(&READY) = Some("9.8.7".into());
+        assert_eq!(ready().as_deref(), Some("9.8.7"));
+        let version = format!("0.0.0-test-{}", std::process::id());
+        let marker = std::env::temp_dir().join(format!("backsight-auto-update-{version}"));
+        let _ = std::fs::remove_file(&marker);
+        assert!(first_try(&version), "the first time");
+        assert!(!first_try(&version), "never again");
+        std::fs::remove_file(&marker).unwrap();
+        assert!(installed().is_err(), "a test build isn't an installed copy");
+    }
+
+    #[test]
+    fn progress_shows_about_every_percent() {
+        let (mut done, mut shown) = (0, 0);
+        let mut step = |chunk, total| progressed(&mut done, &mut shown, chunk, total);
+        assert!(!step(5, Some(1000)), "0.5%");
+        assert!(step(5, Some(1000)), "1%");
+        assert!(!step(9, Some(1000)), "0.9% more");
+        assert!(step(1, Some(1000)), "2%");
+        assert!(step(1, None), "no total: every chunk");
+        assert_eq!((done, shown), (21, 21));
     }
 
     #[test]
