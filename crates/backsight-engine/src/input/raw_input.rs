@@ -3,7 +3,16 @@
 
 use crate::hotkeys::{Event, Input, Matcher, Modifier};
 use backsight_config::{Action, Hotkey};
-use std::{collections::BTreeMap, sync::mpsc, thread::JoinHandle};
+use std::{
+    collections::BTreeMap,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering::Relaxed},
+        mpsc,
+    },
+    thread::JoinHandle,
+    time::{Duration, Instant},
+};
 use windows::{
     Win32::{
         Foundation::{HWND, LPARAM, LRESULT, WPARAM},
@@ -135,6 +144,8 @@ fn mouse_virtual_key(name: &str) -> u16 {
 pub struct Hotkeys {
     thread_id: u32,
     thread: Option<JoinHandle<()>>,
+    /// Set when dropped: a thread left running (see `Drop`) must not act on old bindings.
+    retired: Arc<AtomicBool>,
 }
 
 impl Hotkeys {
@@ -146,29 +157,52 @@ impl Hotkeys {
     /// and never call `set_device_event_filter`, which re-registers or removes it.
     pub fn start(
         bindings: BTreeMap<Action, Hotkey>,
-        on_event: impl FnMut(Event<Action>) + Send + 'static,
+        mut on_event: impl FnMut(Event<Action>) + Send + 'static,
     ) -> Result<Self> {
         let (ready, started) = mpsc::channel();
+        let retired = Arc::new(AtomicBool::new(false));
+        let gone = retired.clone();
         let thread = std::thread::Builder::new()
             .name("backsight-hotkeys".into())
             .spawn(move || {
                 // Only listen to the mouse when a binding uses it: a gaming mouse reports 8000 times a second.
                 let mouse = bindings.values().any(|h| h.key.starts_with("Mouse"));
+                let on_event = move |e| {
+                    if !gone.load(Relaxed) {
+                        on_event(e);
+                    }
+                };
                 run(Matcher::new(&bindings).with_loose(Action::PushToTalk), mouse, on_event, ready)
             })
             .expect("spawn the hotkey thread");
         let thread_id = started.recv().expect("the hotkey thread reports its start")?;
-        Ok(Hotkeys { thread_id, thread: Some(thread) })
+        Ok(Hotkeys { thread_id, thread: Some(thread), retired })
     }
 }
 
+/// How long dropping [`Hotkeys`] keeps trying to hand the thread its quit message.
+const QUIT_TRIES_FOR: Duration = Duration::from_secs(2);
+
 impl Drop for Hotkeys {
     fn drop(&mut self) {
+        self.retired.store(true, Relaxed);
+        let Some(t) = self.thread.take() else { return };
+        // The post fails when the thread's queue is full (10,000 messages, e.g. a fast mouse while
+        // it is busy): retry, and never wait on a thread that didn't get the message.
+        let deadline = Instant::now() + QUIT_TRIES_FOR;
         // SAFETY: posts to a thread with a message queue; if it already exited the call fails harmlessly.
-        let _ = unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) };
-        if let Some(t) = self.thread.take() {
-            let _ = t.join();
+        while unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) }.is_err() && !t.is_finished()
+        {
+            if Instant::now() >= deadline {
+                // shortcut: its Raw Input mouse registration stays on its window (a new listener
+                // without mouse bindings registers only the keyboard); events are ignored, but a
+                // fast mouse keeps it busy. Remove the registration (RIDEV_REMOVE) if this is ever seen.
+                tracing::warn!("the hotkey thread didn't take its quit message; left running");
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(10));
         }
+        let _ = t.join();
     }
 }
 

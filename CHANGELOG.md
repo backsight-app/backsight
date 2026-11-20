@@ -2,6 +2,17 @@
 
 Each release lists **Major** and **Minor** changes. Versions are `0.1.<build>`; the newest section is also the release's notes on the [Releases page](https://github.com/backsight-app/backsight/releases).
 
+## 0.1.18 - 2026-11-20
+
+### Major
+
+- The window no longer freezes for a few seconds when Backsight starts recording a new game's sound.
+- Backsight can no longer hang while closing or changing its hotkeys.
+
+### Minor
+
+- A hotkey listener being replaced ignores keys, so an old binding never fires after you change it.
+
 ## 0.1.17 - 2026-11-20
 
 ### Major

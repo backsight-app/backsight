@@ -101,7 +101,7 @@ impl SessionAudio {
             while !shared.stopped() {
                 let time = now();
                 if time >= next_target_check {
-                    select_game(&mut lock(&game_state), &mix, &in_front);
+                    select_game(&game_state, &mix, &in_front);
                     next_target_check = time + CLOCK_HZ / 10;
                 }
                 let target = lock(&mix).mix_target(time);
@@ -192,20 +192,30 @@ fn input(mixer: &Arc<Mutex<Mixer>>, index: usize) -> impl FnMut(&[f32], u64) + S
 
 /// Pins the game once one has kept focus for a few seconds (`crate::game::GameWatch`). When the
 /// pinned game has exited, waits for the next one instead of staying on the dead process.
-fn select_game(game: &mut Option<Game>, mixer: &Arc<Mutex<Mixer>>, in_front: &impl Fn() -> Option<Program>) {
-    if let Some(Game::Pinned(target, source)) = game
-        && !alive(&target.process)
+/// Starting the game's audio can take Windows up to 5 s, so it runs without holding `game`:
+/// `diagnostics` (the window's status) waits on that lock.
+fn select_game(game: &Mutex<Option<Game>>, mixer: &Arc<Mutex<Mixer>>, in_front: &impl Fn() -> Option<Program>) {
     {
-        if let Ok(source) = source {
-            source.stop();
+        let mut game = lock(game);
+        if let Some(Game::Pinned(target, source)) = &mut *game
+            && !alive(&target.process)
+        {
+            if let Ok(source) = source {
+                source.stop();
+            }
+            *game = Some(Game::Pending);
         }
-        *game = Some(Game::Pending);
+        if !matches!(*game, Some(Game::Pending)) {
+            return;
+        }
     }
-    if !matches!(game, Some(Game::Pending)) {
-        return;
-    }
-    if let Some(p) = in_front() {
-        *game = Some(start_game(GameAudioTarget { pid: p.pid, process: p.process, name: p.exe }, mixer));
+    let Some(p) = in_front() else { return };
+    let mut started = start_game(GameAudioTarget { pid: p.pid, process: p.process, name: p.exe }, mixer);
+    let mut game = lock(game);
+    if matches!(*game, Some(Game::Pending)) {
+        *game = Some(started);
+    } else if let Game::Pinned(_, Ok(source)) = &mut started {
+        source.stop(); // only this thread pins a game, so this is just in case
     }
 }
 
@@ -406,10 +416,10 @@ mod tests {
         let target = GameAudioTarget { process, pid: child.id(), name: "old".into() };
         child.wait().unwrap();
         let mixer = Arc::new(Mutex::new(Mixer::new(now(), &[SourceOptions::default()], false)));
-        let mut game = Some(Game::Pinned(target, Err(LOST_TARGET.into())));
+        let game = Mutex::new(Some(Game::Pinned(target, Err(LOST_TARGET.into()))));
         // Nothing in front yet: back to waiting, not stuck on the dead process.
-        select_game(&mut game, &mixer, &|| None);
-        assert!(matches!(game, Some(Game::Pending)));
+        select_game(&game, &mixer, &|| None);
+        assert!(matches!(*lock(&game), Some(Game::Pending)));
         // The next game that holds focus is picked up (a live one stays pinned).
         let mut next =
             Command::new("cmd.exe").args(["/C", "pause"]).stdin(std::process::Stdio::piped()).spawn().unwrap();
@@ -421,10 +431,16 @@ mod tests {
             window: 0,
             started: 0,
         };
-        select_game(&mut game, &mixer, &|| Some(program.clone()));
-        let Some(Game::Pinned(pinned, _)) = &mut game else { panic!("next game should be pinned") };
+        // The window's status must not wait while the game's audio starts (checked as the start
+        // begins; the start itself comes right after).
+        select_game(&game, &mixer, &|| {
+            assert!(game.try_lock().is_ok(), "game lock held while starting");
+            Some(program.clone())
+        });
+        let mut game = lock(&game);
+        let Some(Game::Pinned(pinned, _)) = &mut *game else { panic!("next game should be pinned") };
         assert_eq!(pinned.name, "new.exe");
-        if let Some(Game::Pinned(_, Ok(source))) = &mut game {
+        if let Some(Game::Pinned(_, Ok(source))) = &mut *game {
             source.stop();
         }
         next.kill().unwrap();
