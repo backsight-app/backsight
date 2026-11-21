@@ -28,7 +28,7 @@ tracing.workspace = true
 # WebView2's process-failure event (`uiwatch.rs`); the version wry uses, so it compiles once.
 webview2-com = "0.39"
 # webview_check.rs: registry read and a message box when WebView2 is missing.
-windows = { workspace = true, features = ["Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_System_Registry", "Win32_UI_WindowsAndMessaging"] }
+windows = { workspace = true, features = ["Win32_Graphics_Gdi", "Win32_System_Registry", "Win32_UI_WindowsAndMessaging"] }
 
 [features]
 # The Update button for local test builds (ADR 0009). Only `scripts/build-desktop.ps1` turns it on;

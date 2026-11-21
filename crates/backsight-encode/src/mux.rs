@@ -394,7 +394,8 @@ fn publish(part: &Path, path: &Path) -> Result<PathBuf> {
 }
 
 impl Drop for Muxer {
-    /// An unfinished clip leaves nothing behind; an unfinished recording keeps its `.part`.
+    /// An unfinished clip leaves nothing behind; an unfinished recording keeps its `.part`, unless
+    /// nothing reached it (a recording started on a full drive): there is nothing to recover.
     fn drop(&mut self) {
         // Closed first either way: Windows can't remove a file FFmpeg still holds open.
         if let Some(out) = self.out.take()
@@ -402,7 +403,8 @@ impl Drop for Muxer {
         {
             tracing::warn!("closing {}: {e}", self.part.display());
         }
-        if !self.path.as_os_str().is_empty() && !self.keep_part {
+        let empty = fs::metadata(&self.part).is_ok_and(|m| m.len() == 0);
+        if !self.path.as_os_str().is_empty() && (!self.keep_part || empty) {
             let _ = fs::remove_file(&self.part);
         }
     }
@@ -498,6 +500,17 @@ mod tests {
         mux.keep_part_on_failure();
         drop(mux);
         assert!(part.exists(), "an unfinished recording keeps its .part");
+
+        // A recording that got nothing written (a full drive) leaves no empty .part behind.
+        let mut mux =
+            Muxer::create(&dir.join("e.mkv"), c.container("mkv").unwrap(), &video.params(), &[&audio.params()])
+                .unwrap();
+        let part = mux.part().to_path_buf();
+        mux.keep_part_on_failure();
+        close_output(mux.out.take().unwrap()).unwrap();
+        std::fs::File::create(&part).unwrap();
+        drop(mux);
+        assert!(!part.exists(), "an empty .part is removed");
         std::fs::remove_dir_all(&dir).ok();
     }
 

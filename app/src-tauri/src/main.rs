@@ -31,7 +31,7 @@ use std::{
     path::PathBuf,
     sync::{
         Mutex, MutexGuard, PoisonError, TryLockError,
-        atomic::{AtomicBool, Ordering::Relaxed},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering::Relaxed},
     },
 };
 use tauri::{
@@ -93,6 +93,10 @@ struct Engine {
     tray_recording: AtomicBool,
     replay_save_busy: AtomicBool,
     quitting: AtomicBool,
+    /// Setup speed tests running (`ReplayPause`): nothing starts replay until the last ends.
+    tuning: AtomicUsize,
+    /// Clips saved since start (`overload::SafeMoment`).
+    clips_saved: AtomicU64,
     /// Files still being finished (stopped recordings, clips, recovery); quitting waits for them.
     finishing: Mutex<Finishing>,
     /// The running hotkey matcher holds the push-to-talk key.
@@ -238,6 +242,10 @@ struct Status {
 /// Replaces the session with a new one. The caller holds `apply` and not `replay`: opening the
 /// encoder takes seconds, and the hotkeys, the recording dot and Home must not wait for it.
 fn start_replay(engine: &Engine, settings: &Settings, preserve_target: bool) {
+    if engine.tuning.load(Relaxed) > 0 {
+        tracing::info!("replay starts after the speed test"); // ReplayPause applies the settings then
+        return;
+    }
     let (old, muted, target, window) = {
         let mut replay = lock(&engine.replay);
         let target = replay
@@ -296,6 +304,48 @@ pub(crate) fn idle_for_update(app: &AppHandle) -> bool {
     let engine = app.state::<Engine>();
     let replay = lock(&engine.replay);
     setup_done && !recording(&replay) && replay.session.as_ref().is_none_or(|s| s.game_name().is_none())
+}
+
+/// Instant Replay stopped until this drops, then run as the settings say again: Setup's speed test
+/// needs the encoder (and the processor) to itself.
+pub(crate) struct ReplayPause {
+    app: AppHandle,
+}
+
+impl ReplayPause {
+    /// `None` while a recording runs: it isn't cut for a test.
+    pub(crate) fn start(app: &AppHandle) -> Option<Self> {
+        let engine = app.state::<Engine>();
+        let _apply = lock(&engine.apply);
+        let mut replay = lock(&engine.replay);
+        if recording(&replay) {
+            return None;
+        }
+        engine.tuning.fetch_add(1, Relaxed);
+        if replay.session.is_some() {
+            stop_replay(&engine, &mut replay); // a start error stays shown
+        }
+        Some(Self { app: app.clone() })
+    }
+}
+
+impl Drop for ReplayPause {
+    fn drop(&mut self) {
+        let engine = self.app.state::<Engine>();
+        let _apply = lock(&engine.apply);
+        // Another test still runs, or Backsight is quitting: replay stays stopped.
+        if engine.tuning.fetch_sub(1, Relaxed) > 1 || engine.quitting.load(Relaxed) {
+            return;
+        }
+        // Runs as the settings say now: a save during the test may have turned it on or off.
+        let wants = |s: &Settings| lock(&engine.replay).toggled.unwrap_or(s.replay.enabled);
+        if let Ok(settings) = Settings::load()
+            && lock(&engine.replay).session.is_none()
+            && wants(&settings)
+        {
+            apply_replay(&engine, &settings);
+        }
+    }
 }
 
 /// Runs replay the way `settings` and the toggle hotkey say. The caller holds `apply`, so no
@@ -481,6 +531,13 @@ fn start_recording(app: &AppHandle, cued: bool) -> (&'static str, String) {
     }
     let fresh = replay.session.is_none();
     drop(replay);
+    if fresh && engine.tuning.load(Relaxed) > 0 {
+        // Not a start_error: Home and the watcher read that as a real failure.
+        return (
+            "Not recording yet",
+            "Setup is testing how fast your PC records. Press again in a few seconds.".into(),
+        );
+    }
     if fresh {
         if !cued {
             notify(app, STARTING.0, STARTING.1);
@@ -580,7 +637,11 @@ fn kind_of(title: &str) -> (&'static str, Cue) {
         "Marker added" => ("marker", Cue::Marker),
         "Microphone on" => ("mic-on", Cue::MicOn),
         "Microphone muted" => ("mic-off", Cue::MicOff),
-        "Not recording" | "Still saving the last clip" | "Instant Replay is back on" => ("info", Cue::Quiet),
+        "Not recording"
+        | "Not recording yet"
+        | "Still saving the last clip"
+        | "Instant Replay is back on"
+        | "Setting lightened" => ("info", Cue::Quiet),
         _ => ("problem", Cue::Problem),
     }
 }
@@ -1249,6 +1310,7 @@ fn watch_recording(app: &AppHandle) {
                 skipped: d.pacer.skipped,
             }
         });
+        let (now_recording, pending) = (recording(&replay), replay.pending_apply);
         let problem = replay
             .session
             .as_ref()
@@ -1260,7 +1322,8 @@ fn watch_recording(app: &AppHandle) {
         let replay_failure = match &replay.session {
             Some(s) if s.recording_time().is_none() => s.error(),
             Some(_) => None,
-            None => replay.start_error.clone().filter(|_| revival.restarted()),
+            // During a speed test nothing is restarted, so no retry counts.
+            None => replay.start_error.clone().filter(|_| revival.restarted() && engine.tuning.load(Relaxed) == 0),
         };
         drop(replay);
         if revival.back(replay_on) {
@@ -1278,8 +1341,13 @@ fn watch_recording(app: &AppHandle) {
             revival.moving(std::time::Instant::now());
             restart_replay(&engine, false);
         }
-        if let Some(warning) = setup::overload_tick(sample) {
+        let tick = setup::overload_tick(sample, now_recording, engine.clips_saved.load(Relaxed), pending);
+        if let Some(warning) = tick.warning {
             notify(app, "Clips may stutter", &warning);
+        }
+        if let Some(behind) = tick.step_down {
+            let app = app.clone();
+            std::thread::spawn(move || setup::step_down(&app, &behind)); // saving restarts the session: seconds
         }
         if failed_recording {
             // Its "Recording stopped early" pop-up says why.
@@ -1653,6 +1721,7 @@ fn on_hotkey(app: &AppHandle, action: Action) {
                 let earlier: Vec<_> = earlier.into_iter().map(Clip::save).collect();
                 let now = prepared.and_then(Clip::save);
                 if now.is_ok() || earlier.iter().any(Result::is_ok) {
+                    app.state::<Engine>().clips_saved.fetch_add(1, Relaxed); // a safe moment to lighten a setting
                     let _ = app.emit("library-changed", ());
                 }
                 let settings = lock(&app.state::<Engine>().applied).clone();
@@ -1810,6 +1879,16 @@ fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
     autostart.map_or(Ok(()), backsight_engine::autostart::set)
 }
 
+/// Saves settings the engine changed by itself (a lighter setting) the way the window does, and
+/// hands them to an open window so it can't save its older copy back over them.
+// shortcut: the caller loads, changes and saves outside the file lock, so a window save landing in
+// those milliseconds is overwritten; take the lock across all three if that ever shows up.
+fn save_by_engine(app: &AppHandle, settings: Settings) -> Result<(), String> {
+    save_settings(app.clone(), settings.clone())?;
+    let _ = app.emit("settings-changed", settings);
+    Ok(())
+}
+
 /// Brings the engine in line with the saved settings, newest only: saves that arrive while one is
 /// being applied (a session restart takes seconds) replace each other instead of waiting in line.
 fn apply_saved(app: &AppHandle) {
@@ -1901,20 +1980,12 @@ fn press_action(app: AppHandle, actions: tauri::State<Sender<Action>>, action: A
 /// Off the main thread: a sleeping or network drive can take seconds to answer.
 #[tauri::command]
 async fn clips_space() -> Option<(u64, u64)> {
-    use windows::{Win32::Storage::FileSystem::GetDiskFreeSpaceExW, core::HSTRING};
     let settings = load_settings().ok()?;
     let [videos, _] = library_dirs(&settings);
-    spawn_blocking(move || {
-        let dir = videos?.ancestors().find(|d| d.is_dir())?.to_owned();
-        let (mut free, mut total) = (0u64, 0u64);
-        // SAFETY: the path is a valid wide string and both outputs live across the call.
-        unsafe { GetDiskFreeSpaceExW(&HSTRING::from(dir.as_os_str()), Some(&mut free), Some(&mut total), None) }
-            .ok()?;
-        Some((free, total))
-    })
-    .await
-    .ok()
-    .flatten()
+    spawn_blocking(move || backsight_engine::system::disk_space(videos?.ancestors().find(|d| d.is_dir())?))
+        .await
+        .ok()
+        .flatten()
 }
 
 /// Lets the WebView load thumbnails, screenshots and previews through the asset protocol.
@@ -2443,6 +2514,9 @@ fn main() {
             setup::setup_check,
             setup::overload_status,
             setup::lighter_video,
+            setup::tune_check,
+            setup::auto_change,
+            setup::auto_change_dismiss,
             setup::overlay_scan,
             report::crash_notice,
             report::crash_dismiss,
@@ -2583,6 +2657,10 @@ fn main() {
                 verticals.into_iter().for_each(|job| make_vertical(&app, job, settings.clone()));
                 start_hotkeys(&app, &settings);
                 apply_replay(&engine, &settings);
+                if settings.setup.done {
+                    let app = app.clone();
+                    std::thread::spawn(move || setup::tune_after_driver_update(&app));
+                }
                 // Not under the startup lock: copying a long recording takes a while.
                 // Registered in `finishing`, so quitting mid-copy doesn't leave a half-written file.
                 if let Some(folder) = settings.general.video_dir() {

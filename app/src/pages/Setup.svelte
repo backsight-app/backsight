@@ -14,6 +14,7 @@
 
   type Check = {
     cards: { name: string; vendor: string }[];
+    encoders: { encoder_id: string; problem: unknown }[];
     pick: { encoder: string; automatic: boolean } | null;
     scan: Scan;
   };
@@ -41,6 +42,47 @@
     fixCompatibility(app.settings);
   }
 
+  // "Tune for this PC": a speed test of the chosen encoder once it's settled; lighter settings when
+  // it lacks room for a game. Applied by itself only on the first setup and while this page is
+  // open; when setup runs again, the user's own choices are only offered a change.
+  type Tuned = { video: typeof app.settings.video; speed: number; changes: string[]; enough: boolean };
+  const firstRun = !app.settings.setup.done;
+  let open = true;
+  let tuning = $state(false);
+  let tuned = $state<Tuned | null>(null);
+  let tunedAt = $state(""); // the settings the result is about, as tested or after applying it
+  let lighter = $state<Tuned | null>(null); // offered, not applied
+  const videoNow = () => JSON.stringify($state.snapshot(app.settings.video));
+  function tune() {
+    if (!open) return; // the test stops Instant Replay; never once the user has moved on (a game may run)
+    const asked = videoNow();
+    const working = check?.encoders.filter((r) => !r.problem).map((r) => r.encoder_id) ?? [];
+    tuning = true;
+    invoke<Tuned>("tune_check", { video: JSON.parse(asked), working }).then(
+      (t) => {
+        tuning = false;
+        // Only about the settings it tested: nobody changed them meanwhile, and the page is open.
+        if (!open || videoNow() !== asked) return;
+        tuned = t;
+        tunedAt = asked;
+        if (t.changes.length && firstRun) useLighter(t);
+        else if (t.changes.length) lighter = t;
+      },
+      () => (tuning = false), // keeps the settings; the log says why
+    );
+  }
+  function useLighter(t: Tuned) {
+    app.settings.video = t.video;
+    fixCompatibility(app.settings);
+    lighter = null;
+    tuned = t;
+    tunedAt = videoNow();
+  }
+  const share = (t: Tuned) => {
+    const pct = Math.min((t.video.fps / t.speed) * 100, 100);
+    return pct < 1 ? "under 1%" : `about ${Math.round(pct)}%`;
+  };
+
   onMount(() => {
     const timer = setTimeout(() => (slow = true), 5000);
     // Starting early closes this page but the check still finishes: a choice that can't work here is still replaced.
@@ -49,17 +91,21 @@
       (c) => {
         check = c;
         // Only a choice that doesn't work on this PC is replaced, and only if nobody changed it meanwhile.
-        if (!c.pick || app.settings.video.encoder !== asked) return;
+        if (!c.pick || app.settings.video.encoder !== asked) return tune();
         if (c.pick.automatic) {
           switchedFrom = asked;
           switchTo(c.pick.encoder);
+          tune();
         } else {
-          offer = { from: asked, to: c.pick.encoder };
+          offer = { from: asked, to: c.pick.encoder }; // tested once the user picks
         }
       },
       (e) => (failed = String(e)),
     );
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      open = false;
+    };
   });
 
   const hotkeys = $derived(app.settings.hotkeys as Record<string, string>);
@@ -138,8 +184,32 @@
               {@render enc(offer.from)} didn't start in the test. It may just be busy right now. If your clips don't save,
               switch:
             </span>
-            <button type="button" class="btn" onclick={() => switchTo(offer!.to)}>Use {encoderLabel(offer.to)}</button>
+            <button type="button" class="btn" onclick={() => (switchTo(offer!.to), tune())}>Use {encoderLabel(offer.to)}</button>
           </div>
+        {/if}
+        {#if tuning}
+          <p class="muted" role="status">Testing how fast your PC records. This takes a few seconds…</p>
+        {:else if tuned && videoNow() === tunedAt}
+          {#if lighter}
+            <div class="actions" role="status">
+              <span>Your PC may not keep up with these video settings. Lighter ones would help: {lighter.changes.join(" ")}</span>
+              <button type="button" class="btn" onclick={() => useLighter(lighter!)}>Use lighter settings</button>
+            </div>
+          {:else if tuned.changes.length}
+            <p role="status">
+              To keep clips smooth on this PC, Backsight lightened your video settings: {tuned.changes.join(" ")}
+            </p>
+          {:else if tuned.enough}
+            <p class="muted" role="status">
+              Recording at {tuned.video.fps} FPS uses {share(tuned)} of what your
+              {encoder?.hardware ? "graphics card" : "processor"} can record, so there's room left for games.
+            </p>
+          {/if}
+          {#if !tuned.enough}
+            <p class="note">
+              {tuned.changes.length && !lighter ? "Even so, your" : "Your"} PC may struggle to record demanding games smoothly.
+            </p>
+          {/if}
         {/if}
         {#if check.cards.length}
           <p class="muted">Found: {check.cards.map((c) => c.name).join(", ")}.</p>

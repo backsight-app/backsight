@@ -1,4 +1,4 @@
-//! Small Windows calls: installed memory, the local time, the clipboard, playing a sound and
+//! Small Windows calls: installed memory, disk space, the local time, the clipboard, playing a sound and
 //! background priority.
 
 use std::{os::windows::ffi::OsStrExt, path::Path, time::Duration};
@@ -6,6 +6,7 @@ use windows::{
     Win32::{
         Foundation::{GlobalFree, HANDLE},
         Media::Audio::{PlaySoundW, SND_ASYNC, SND_MEMORY, SND_NODEFAULT},
+        Storage::FileSystem::GetDiskFreeSpaceExW,
         System::{
             Com::{COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoInitializeEx, CoTaskMemFree, CoUninitialize},
             DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData},
@@ -23,7 +24,7 @@ use windows::{
             },
         },
     },
-    core::{PCWSTR, w},
+    core::{HSTRING, PCWSTR, w},
 };
 
 /// While alive, the calling thread runs in Windows' background mode: low CPU, disk and memory
@@ -60,6 +61,15 @@ pub fn physical_memory() -> Option<u64> {
     let mut m = MEMORYSTATUSEX { dwLength: size_of::<MEMORYSTATUSEX>() as u32, ..Default::default() };
     // SAFETY: `m` is a valid MEMORYSTATUSEX with `dwLength` set, as the call requires.
     unsafe { GlobalMemoryStatusEx(&mut m) }.ok().map(|()| m.ullTotalPhys)
+}
+
+/// Free and total bytes on the drive that holds `dir`, or `None` if Windows won't say. Can
+/// take seconds on a sleeping or network drive, so call it off the UI thread.
+pub fn disk_space(dir: &Path) -> Option<(u64, u64)> {
+    let (mut free, mut total) = (0u64, 0u64);
+    // SAFETY: the path is a valid wide string and both outputs live across the call.
+    unsafe { GetDiskFreeSpaceExW(&HSTRING::from(dir.as_os_str()), Some(&mut free), Some(&mut total), None) }.ok()?;
+    Some((free, total))
 }
 
 /// The local time as `2026-11-08 14.03.07`, for file names (they can't contain `:`).
@@ -224,5 +234,11 @@ mod tests {
         let stamp = super::local_time_stamp();
         assert_eq!(stamp.len(), 19, "{stamp}");
         assert!(!stamp.contains(':'), "{stamp}");
+    }
+
+    #[test]
+    fn reports_disk_space() {
+        let (free, total) = super::disk_space(&std::env::temp_dir()).unwrap();
+        assert!(total > 0 && free <= total, "{free} of {total}");
     }
 }

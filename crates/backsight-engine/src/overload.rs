@@ -83,6 +83,47 @@ impl OverloadWatch {
     }
 }
 
+/// When a lighter setting that is due may be applied: applying restarts the session, which
+/// empties Instant Replay, so never mid-recording and only once what it holds is safe on disk: a
+/// clip was saved or a recording stopped. (Not "the game closed": the game watched is the program
+/// in front, which a look at another window changes too.)
+#[derive(Debug, Default)]
+pub struct SafeMoment {
+    /// Clips saved and the video settings that fell behind, when it became due.
+    due: Option<(u64, Video)>,
+    recorded: bool,
+}
+
+impl SafeMoment {
+    /// For a `static`.
+    pub const fn new() -> Self {
+        Self { due: None, recorded: false }
+    }
+
+    /// A lighter setting than `video` is due; `clips` counts clips saved so far.
+    pub fn due(&mut self, clips: u64, video: Video) {
+        if self.due.is_none() {
+            (self.due, self.recorded) = (Some((clips, video)), false);
+        }
+    }
+
+    /// Nothing is due any more (the user picked a setting).
+    pub fn cancel(&mut self) {
+        self.due = None;
+    }
+
+    /// One reading a second: at the safe moment, once, the settings that fell behind (lighten
+    /// them only if they are still the ones in use).
+    pub fn tick(&mut self, recording: bool, clips: u64) -> Option<Video> {
+        let (at, _) = self.due.as_ref()?;
+        if recording {
+            self.recorded = true;
+            return None;
+        }
+        (clips > *at || self.recorded).then(|| self.due.take().expect("due").1)
+    }
+}
+
 /// The warning for an encoder that falls behind, in plain words.
 pub fn message(encoder_id: &str) -> String {
     let hardware = Catalog::get().video_encoder(encoder_id).is_some_and(|e| e.hardware);
@@ -160,6 +201,34 @@ pub fn lighter(video: &Video, working_hardware: &[String], source: (u32, u32)) -
 mod tests {
     use super::*;
     use backsight_config::Settings;
+
+    #[test]
+    fn a_lighter_setting_waits_for_a_safe_moment() {
+        let video = Settings::default().video;
+        let mut m = SafeMoment::new();
+        assert_eq!(m.tick(false, 0), None, "nothing due");
+        // Not while playing on, nor while recording; after the recording stops, yes, once.
+        m.due(3, video.clone());
+        assert_eq!(m.tick(false, 3), None);
+        assert_eq!(m.tick(true, 3), None, "never mid-recording");
+        assert_eq!(m.tick(false, 3), Some(video.clone()), "the recording stopped");
+        assert_eq!(m.tick(false, 3), None, "once");
+        // After the next clip; a clip saved while recording still waits for the stop.
+        m.due(3, video.clone());
+        assert!(m.tick(false, 4).is_some());
+        m.due(4, video.clone());
+        assert_eq!(m.tick(true, 5), None);
+        assert!(m.tick(false, 5).is_some());
+        // The first settings that fell behind are the ones asked about; a cancel clears it.
+        let mut other = video.clone();
+        other.fps = 30;
+        m.due(5, video.clone());
+        m.due(5, other);
+        assert_eq!(m.tick(false, 6), Some(video.clone()));
+        m.due(6, video);
+        m.cancel();
+        assert_eq!(m.tick(false, 9), None);
+    }
 
     fn feed(w: &mut OverloadWatch, late_per_second: u64, seconds: u32, at: &mut Sample) -> Vec<bool> {
         (0..seconds)

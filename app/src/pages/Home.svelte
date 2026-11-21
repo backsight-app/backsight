@@ -19,6 +19,19 @@
   let overload = $state<string | null>(null);
   let lighter = $state("");
   let lightening = $state(false);
+  // A setting Backsight lightened by itself, shown until dismissed (its pop-up may have been missed).
+  let autoChange = $state<{ at: number; text: string } | null>(null);
+  const changedOn = (at: number) => {
+    const d = new Date(at);
+    const year = d.getFullYear() === new Date().getFullYear() ? undefined : "numeric";
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year });
+  };
+  let dismissedAt = 0; // a poll answered before the file is gone doesn't bring it back
+  function dismissAutoChange() {
+    dismissedAt = autoChange?.at ?? 0;
+    autoChange = null;
+    invoke("auto_change_dismiss", { at: dismissedAt }).catch(() => {});
+  }
   let clearLighter: ReturnType<typeof setTimeout> | undefined;
   // One step per click. The engine then clears the warning and stays quiet until Backsight restarts
   // capture with the change, so a second click can't step down again before the first one counts.
@@ -46,6 +59,7 @@
     const poll = () => {
       invoke<ReplayStatus>("get_status").then((v) => (live = v), () => {});
       invoke<string | null>("overload_status").then((v) => (overload = v), () => {});
+      invoke<{ at: number; text: string } | null>("auto_change").then((v) => (autoChange = v && v.at > dismissedAt ? v : null), () => {});
     };
     poll();
     const id = setInterval(poll, 1000);
@@ -406,6 +420,15 @@
         {#if lighter}<br />{lighter}{/if}
       </span>
       {#if overload}<button type="button" class="btn" onclick={lighten} disabled={lightening}>Use a lighter setting</button>{/if}
+    </div>
+  {/if}
+  {#if autoChange}
+    <div class="notice" role="status">
+      <Icon name="alert" size={16} />
+      <span class="grow">
+        <strong>Changed on {changedOn(autoChange.at)}.</strong> {autoChange.text} You can undo this on the <a href="#video">Video</a> page.
+      </span>
+      <button type="button" class="btn" onclick={dismissAutoChange}>Got it</button>
     </div>
   {/if}
   {#if live?.hotkey_problem}

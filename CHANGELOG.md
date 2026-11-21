@@ -2,6 +2,18 @@
 
 Each release lists **Major** and **Minor** changes. Versions are `0.1.<build>`; the newest section is also the release's notes on the [Releases page](https://github.com/backsight-app/backsight/releases).
 
+## 0.1.21 - 2026-11-20
+
+### Major
+
+- Setup tests how fast your PC records and picks lighter video settings if it can't keep up.
+- When clips stutter, Backsight lightens a video setting by itself right after your next clip or recording, and tests again after a graphics driver update.
+
+### Minor
+
+- Home keeps a note of any setting Backsight changed by itself until you dismiss it.
+- A recording started on a full drive no longer leaves an empty unfinished file behind.
+
 ## 0.1.20 - 2026-11-20
 
 ### Major

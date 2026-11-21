@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-auto-change-dismiss"
+description = "Enables the auto_change_dismiss command without any pre-configured scope."
+commands.allow = ["auto_change_dismiss"]
+
+[[permission]]
+identifier = "deny-auto-change-dismiss"
+description = "Denies the auto_change_dismiss command without any pre-configured scope."
+commands.deny = ["auto_change_dismiss"]

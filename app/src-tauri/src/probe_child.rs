@@ -16,3 +16,13 @@ pub fn run() -> i32 {
         Err(_) => 1, // the app stopped listening
     }
 }
+
+/// `backsight.exe --tune-encoder <video json> <width> <height>`: one speed test (the engine's
+/// `tune` module), answered as one JSON line.
+pub fn tune() -> i32 {
+    let args: Vec<String> = std::env::args().skip(2).collect();
+    match backsight_engine::tune::child(&args, std::io::stdout().lock()) {
+        Ok(()) => 0,
+        Err(_) => 1,
+    }
+}

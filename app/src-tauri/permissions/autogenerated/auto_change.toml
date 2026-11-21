@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-auto-change"
+description = "Enables the auto_change command without any pre-configured scope."
+commands.allow = ["auto_change"]
+
+[[permission]]
+identifier = "deny-auto-change"
+description = "Denies the auto_change command without any pre-configured scope."
+commands.deny = ["auto_change"]

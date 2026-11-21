@@ -30,6 +30,7 @@ pub mod shutdown;
 pub mod sounds;
 pub mod stack;
 pub mod system;
+pub mod tune;
 pub mod vertical;
 pub mod watchdog;
 

@@ -31,6 +31,17 @@ fn ffprobe(path: &Path) -> Value {
     serde_json::from_slice(&out.stdout).unwrap()
 }
 
+/// When the audio starts after the video, in seconds. Re-encoding the video must keep it, or
+/// sound and picture drift apart (one frame at 30 fps is the limit).
+fn av_offset(clip: &Path) -> f64 {
+    let v = ffprobe(clip);
+    let start = |kind: &str| -> f64 {
+        let s = v["streams"].as_array().unwrap().iter().find(|s| s["codec_type"] == kind).unwrap();
+        s["start_time"].as_str().unwrap().parse().unwrap()
+    };
+    start("audio") - start("video")
+}
+
 /// The luma of the frame at `secs` of `clip`, as `ffmpeg` decodes it.
 fn luma_at(clip: &Path, secs: &str) -> Vec<u8> {
     let out = Command::new(tool("ffmpeg.exe"))
@@ -102,6 +113,8 @@ fn a_wide_clip_becomes_a_9_16_clip_with_its_audio() {
     assert!((1.8..2.2).contains(&audio_secs), "audio from the start, got {audio_secs} s");
     let secs: f64 = v["format"]["duration"].as_str().unwrap().parse().unwrap();
     assert!((1.8..2.2).contains(&secs), "about 2 s long, got {secs}");
+    let (was, now) = (av_offset(&src), av_offset(&out));
+    assert!((now - was).abs() < 1.0 / 30.0, "audio stays in sync: {was} s before, {now} s after");
 
     // A second one never replaces the first. This one has captions from 0.5 s on.
     let srt = d.join("clip.srt");
@@ -149,6 +162,8 @@ That was close!
     let values = resolve(&c.video_options(venc), None);
     make_vertical(&late, &d.join("late (vertical).mp4"), &container, venc, &values, Some(&mut captions)).unwrap();
     assert!(captions.burned(), "the caption at 0.5 s of the file shows");
+    let (was, now) = (av_offset(&late), av_offset(&d.join("late (vertical).mp4")));
+    assert!((now - was).abs() < 1.0 / 30.0, "audio stays in sync: {was} s before, {now} s after");
     let _ = fs::remove_dir_all(&d);
 }
 

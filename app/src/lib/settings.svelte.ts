@@ -43,6 +43,14 @@ async function useWorkingEncoder() {
 
 export async function loadSettings() {
   if (!isTauri()) return;
+  // The engine may change a setting by itself (a lighter one when clips stutter): its copy wins,
+  // so a save from here can't put the old one back.
+  const { listen } = await import("@tauri-apps/api/event");
+  listen<any>("settings-changed", (e) => {
+    // The engine changes only video. An edit still waiting for its save is newer and wins (its save
+    // restarts the session anyway); otherwise the auto-save writes the new video with any other edit.
+    if (timer === undefined) app.settings.video = e.payload.video;
+  });
   try {
     app.settings = await invoke("get_settings");
     app.loaded = true;

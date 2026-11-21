@@ -75,7 +75,7 @@ pub fn check_encoders(spawn: impl FnMut(&[&str]) -> io::Result<ProbeRun>) -> Vec
 
 /// A running test process: its answer lines, and the process, killed when this drops.
 pub struct ProbeRun {
-    lines: Receiver<String>,
+    pub(crate) lines: Receiver<String>,
     child: Option<Child>,
 }
 
@@ -95,6 +95,14 @@ impl ProbeRun {
             }
         });
         Ok(Self { lines, child: Some(child) })
+    }
+}
+
+#[cfg(test)]
+impl ProbeRun {
+    /// A run whose lines come from `lines`, with no process behind it.
+    pub(crate) fn fake(lines: Receiver<String>) -> Self {
+        Self { lines, child: None }
     }
 }
 
